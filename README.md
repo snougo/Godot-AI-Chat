@@ -1,6 +1,8 @@
 # Godot AI Chat
 [English](https://github.com/snougo/Godot-AI-Chat/blob/main/README.md)/[中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
 
+<img width="1624" height="983" alt="截屏2025-10-22 03 16 16" src="https://github.com/user-attachments/assets/498ffaf5-e02a-4f06-9929-583033877e4a" />
+
 ## About Godot AI Chat
 Godot AI Chat is a Godot plugin that enables direct conversation with LLMs within the Godot editor interface. It supports both local and remote LLMs. When combined with another Godot plugin, [Context Toolkit](https://github.com/snougo/Context-Toolkit), and appropriate system prompts, it allows the LLM to actively read relevant contextual information while solving problems, thereby providing more pertinent answers.
 
@@ -14,7 +16,9 @@ When you first enable the plugin, you'll see an error message in the plugin inte
 
 When you first enter the plugin's settings options, you'll see an interface where only "Base Url" and "API Key" (optional) need to be manually configured.
 
-Settings options screenshot (placeholder text for image)
+Settings options screenshot
+
+<img width="513" height="838" alt="截屏2025-10-22 03 14 50" src="https://github.com/user-attachments/assets/a3c102ac-aed0-4674-ae5c-d973ab89fce0" />
 
 If you only need the chat functionality, simply fill in the correct Base Url and API Key (optional). If you have also enabled the [Context Toolkit plugin](https://github.com/snougo/Context-Toolkit), you will need to modify the default system prompt. Don't worry, I have provided corresponding Chinese and English versions of the system prompt in the plugin folder. Of course, if you are a speaker of another language, you can have AI translate the provided system prompts into your language. For other settings, if you are unsure what they do, you can keep them at their defaults. Finally, click the "Save" button to apply your changes.
 
