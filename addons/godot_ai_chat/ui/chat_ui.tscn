@@ -1,0 +1,269 @@
+[gd_scene load_steps=14 format=3 uid="uid://u2oo4ymv2b8y"]
+
+[ext_resource type="Script" uid="uid://d4e8053oahxl0" path="res://addons/godot_ai_chat/scripts/core/chat_ui.gd" id="1_ktmbx"]
+[ext_resource type="Theme" uid="uid://bm6f43fgr7jjd" path="res://addons/godot_ai_chat/assets/big_yellow_scrollbar_theme.tres" id="2_p4tj1"]
+[ext_resource type="PackedScene" uid="uid://yhavhbc6hmeu" path="res://addons/godot_ai_chat/ui/settings_panel.tscn" id="2_ufwtx"]
+[ext_resource type="Texture2D" uid="uid://boc6f5o8bklo2" path="res://addons/godot_ai_chat/assets/streamline-ultimate-color--filter-text.svg" id="3_i3tmh"]
+[ext_resource type="Texture2D" uid="uid://vwlbuhvfugwf" path="res://addons/godot_ai_chat/assets/material-icon-theme--folder-markdown.svg" id="4_qoxj2"]
+[ext_resource type="Script" uid="uid://cb53othg76m5n" path="res://addons/godot_ai_chat/scripts/core/user_input.gd" id="5_p6hp2"]
+[ext_resource type="Texture2D" uid="uid://dh54j33ru0odc" path="res://addons/godot_ai_chat/assets/streamline-sharp-color--cloud-wifi-flat.svg" id="7_grk0l"]
+[ext_resource type="Texture2D" uid="uid://brk43jkprsfdw" path="res://addons/godot_ai_chat/assets/streamline-sharp-color--mail-send-email-message-flat.svg" id="9_ulynj"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a7m7s"]
+bg_color = Color(0, 0.2535977, 0.58258927, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_2kdn8"]
+font_size = 30
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cf2p2"]
+bg_color = Color(0.40740654, 0.15687086, 0.44705883, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_yewlv"]
+font_size = 30
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6j1bt"]
+bg_color = Color(0.11236896, 0.24705882, 0.18459842, 0.627451)
+
+[node name="ChatUI" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ktmbx")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TabContainer" type="TabContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+current_tab = 0
+
+[node name="Chat" type="MarginContainer" parent="TabContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+metadata/_tab_index = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/Chat"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StatusLabel" type="Label" parent="TabContainer/Chat/VBoxContainer"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_a7m7s")
+text = "Ready"
+label_settings = SubResource("LabelSettings_2kdn8")
+vertical_alignment = 1
+autowrap_mode = 3
+
+[node name="CurrentTokenCost" type="Label" parent="TabContainer/Chat/VBoxContainer"]
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_cf2p2")
+text = "Token Cost: 0"
+label_settings = SubResource("LabelSettings_yewlv")
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="ColorRect" type="ColorRect" parent="TabContainer/Chat/VBoxContainer"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.18039216, 0.18039216, 0.18039216, 1)
+
+[node name="ChatDisplayView" type="MarginContainer" parent="TabContainer/Chat/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 2.0
+
+[node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/Chat/VBoxContainer/ChatDisplayView"]
+layout_mode = 2
+theme = ExtResource("2_p4tj1")
+
+[node name="ChatListContainer" type="VBoxContainer" parent="TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="HBoxContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer"]
+layout_mode = 2
+
+[node name="ChatArchiveSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text_overrun_behavior = 1
+selected = 0
+fit_to_longest_item = false
+item_count = 18
+popup/item_0/text = "chat_2025-10-02_09-00-34.tres"
+popup/item_0/id = 0
+popup/item_1/text = "chat_2025-10-02_11-08-06.tres"
+popup/item_1/id = 1
+popup/item_2/text = "chat_2025-10-06_16-21-22.tres"
+popup/item_2/id = 2
+popup/item_3/text = "chat_2025-10-07_12-59-04.tres"
+popup/item_3/id = 3
+popup/item_4/text = "chat_2025-10-09_00-20-42.tres"
+popup/item_4/id = 4
+popup/item_5/text = "chat_2025-10-09_00-35-45.tres"
+popup/item_5/id = 5
+popup/item_6/text = "chat_2025-10-09_00-56-17.tres"
+popup/item_6/id = 6
+popup/item_7/text = "chat_2025-10-09_00-59-50.tres"
+popup/item_7/id = 7
+popup/item_8/text = "chat_2025-10-09_01-17-37.tres"
+popup/item_8/id = 8
+popup/item_9/text = "chat_2025-10-09_01-20-18.tres"
+popup/item_9/id = 9
+popup/item_10/text = "chat_2025-10-09_01-28-10.tres"
+popup/item_10/id = 10
+popup/item_11/text = "chat_2025-10-09_15-13-14.tres"
+popup/item_11/id = 11
+popup/item_12/text = "chat_2025-10-09_17-55-48.tres"
+popup/item_12/id = 12
+popup/item_13/text = "chat_2025-10-09_18-53-37.tres"
+popup/item_13/id = 13
+popup/item_14/text = "chat_2025-10-09_18-58-43.tres"
+popup/item_14/id = 14
+popup/item_15/text = "chat_2025-10-09_19-15-36.tres"
+popup/item_15/id = 15
+popup/item_16/text = "chat_2025-10-09_19-19-53.tres"
+popup/item_16/id = 16
+popup/item_17/text = "chat_2025-10-09_19-26-59.tres"
+popup/item_17/id = 17
+
+[node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Load Chat"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Load"
+text_overrun_behavior = 2
+autowrap_mode = 3
+expand_icon = true
+
+[node name="SaveChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Save Current Chat"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Save"
+text_overrun_behavior = 2
+autowrap_mode = 3
+expand_icon = true
+
+[node name="NewChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "New Chat"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "New"
+text_overrun_behavior = 2
+autowrap_mode = 3
+expand_icon = true
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer"]
+layout_mode = 2
+
+[node name="ModelSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer2"]
+custom_minimum_size = Vector2(0, 35)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+disabled = true
+text_overrun_behavior = 2
+selected = 0
+fit_to_longest_item = false
+item_count = 1
+popup/item_0/text = "Connecting..."
+popup/item_0/id = 0
+
+[node name="ModelNameFilterInput" type="LineEdit" parent="TabContainer/Chat/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Filter Model Name"
+clear_button_enabled = true
+right_icon = ExtResource("3_i3tmh")
+caret_blink = true
+
+[node name="ReconnectButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Reconnect"
+icon = ExtResource("7_grk0l")
+text_overrun_behavior = 1
+expand_icon = true
+
+[node name="UserInput" type="TextEdit" parent="TabContainer/Chat/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.6
+theme_override_styles/focus = SubResource("StyleBoxFlat_6j1bt")
+placeholder_text = "Input Here"
+wrap_mode = 1
+indent_wrapped_lines = true
+scroll_smooth = true
+script = ExtResource("5_p6hp2")
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer"]
+layout_mode = 2
+
+[node name="SaveAsMarkdownButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Save Current Chat as Markdown"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Save as Markdown"
+icon = ExtResource("4_qoxj2")
+text_overrun_behavior = 1
+expand_icon = true
+
+[node name="SendButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_hover_color = Color(0.3490821, 0.9490196, 0.412919, 1)
+text = "Send"
+icon = ExtResource("9_ulynj")
+text_overrun_behavior = 2
+expand_icon = true
+
+[node name="Settings" type="MarginContainer" parent="TabContainer"]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 1
+
+[node name="SettingsPanel" parent="TabContainer/Settings" instance=ExtResource("2_ufwtx")]
+layout_mode = 2
+
+[node name="FileDialog" type="FileDialog" parent="."]
+oversampling_override = 1.0
+title = "Open a Directory"
+size = Vector2i(1600, 1400)
+min_size = Vector2i(1600, 1400)
+file_mode = 2
+display_mode = 1
+
+[node name="AcceptDialog" type="AcceptDialog" parent="."]
+initial_position = 1
+size = Vector2i(600, 400)
+min_size = Vector2i(600, 400)
+dialog_text = "Connection failed. Is the API URL correct and the server running?"
+dialog_autowrap = true

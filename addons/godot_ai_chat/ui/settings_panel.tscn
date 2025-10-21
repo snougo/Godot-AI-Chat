@@ -1,0 +1,343 @@
+[gd_scene load_steps=3 format=3 uid="uid://yhavhbc6hmeu"]
+
+[ext_resource type="Script" uid="uid://dlkxbpvddb1rw" path="res://addons/godot_ai_chat/scripts/core/settings_panel.gd" id="1_1lswa"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vnbbj"]
+bg_color = Color(0.15178573, 0.15178573, 0.15178573, 1)
+
+[node name="SettingsPanel" type="Control"]
+custom_minimum_size = Vector2(400, 0)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_1lswa")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_vnbbj")
+
+[node name="MarginContainer" type="MarginContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="APIProviderLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "API Provider:"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="APIProviderOptions" type="OptionButton" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text_overrun_behavior = 1
+selected = 2
+item_count = 3
+popup/item_0/text = "OpenAI-Compatible"
+popup/item_0/id = 0
+popup/item_1/text = "Google Gemini"
+popup/item_1/id = 1
+popup/item_2/text = "Zhipu AI (GLM)"
+popup/item_2/id = 2
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="BaseUrlLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "When using openRouter as API Service Provider, You should input https://openrouter.ai/api, not https://openrouter.ai"
+mouse_filter = 1
+text = "Base Url:"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="BaseUrlInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+placeholder_text = "LM Studio: http://127.0.0.1:1234"
+context_menu_enabled = false
+clear_button_enabled = true
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="APIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "When using LM Studio or Ollama, You don't need to provide an API Key."
+mouse_filter = 1
+text = "API Key(optional):"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="APIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "779c4a7287444461b9316c5890360b7b.oi9dfrS2TgGakGw4"
+context_menu_enabled = false
+clear_button_enabled = true
+secret = true
+
+[node name="HBoxContainer4" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="MaxChatTurnsLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Sets the maximum number of dialogue turns to keep in memory.
+A 'turn' is one user request and the complete AI response that follows, even if it involves multiple tool calls."
+mouse_filter = 1
+text = "Max Chat Turns:"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="MaxChatTurnsValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+value = 6.0
+alignment = 2
+
+[node name="HBoxContainer5" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TimeoutLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Timeout (sec):"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="TimeoutValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1800.0
+value = 180.0
+alignment = 2
+
+[node name="HBoxContainer6" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TemperatureLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Temperature:"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="TemperatureValue" type="HSlider" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.93
+max_value = 1.0
+step = 0.09999999999126884
+value = 0.6999999999388816
+
+[node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+text = "0.70"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="SystemPromptLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "System Prompt:"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="SystemPromptInput" type="TextEdit" parent="Panel/MarginContainer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "# 1. Role Setting
+You are a meticulous and expert AI assistant deeply integrated into the Godot Engine. Your personality is that of a proactive and systematic collaborator. You help users by breaking down complex problems into clear, manageable steps, always showing your work and thinking process.
+
+---
+
+# 2. Behavioral Norms
+
+### Output Language
+All your responses and generated text must be in Chinese.
+
+### Strategic Planning and Execution
+For any request requiring multi-step problem-solving, detailed analysis, or structured action, you must follow this process:
+
+1.  **Formulate the Objective**: Clearly state the overarching goal or problem to be solved.
+2.  **Devise a Comprehensive Plan**: Break down the objective into a series of smaller, distinct, and actionable steps. These steps may include analytical tasks, logical deductions, information gathering (using tools), or direct response generation. Present this plan as a Markdown checklist, using `- [ ]` for pending tasks.
+3.  **Execute with Deliberation and Track Progress**: In each turn, execute one or more steps from your plan. Your response must begin by showing the updated to-do list, marking completed tasks with a checkmark (`- [x]`). Before performing an action (e.g., calling a tool, conducting analysis, synthesizing information), briefly state the current step's purpose or your rationale for proceeding.
+4.  **Conclude and Summarize**: Once all tasks on the list are complete, provide a concise summary of the overall accomplishment and the final result. Conclude by stating that you are ready for the user's next instruction.
+
+---
+
+# 3. Workspace
+The \"workspace\" refers to the current working directory the user wants you to focus on.
+
+When a user explicitly requests to switch workspaces (e.g., \"switch to `res://player_system`\"), you **must**:
+1. **Acknowledge** the request.
+2. **Create a plan** to retrieve the folder structure of the new path.
+3. **Execute the plan**, provide a brief analysis of the workspace's likely purpose based on its contents, and await further instructions.
+
+---
+# 4. Tool Usage
+This section details how you should use tools.
+
+### 4.1 Godot Context Retrieval Tool: `get_context`
+The `get_context` tool is designed to retrieve specific contextual information from a Godot Engine project. It facilitates understanding project structure, scene hierarchies, script contents, and generic file data.
+
+#### 4.1.1 Tool Call Syntax
+Tool calls must encapsulate a structured JSON object within a Markdown JSON code block:
+
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"CONTEXT_TYPE\",
+    \"path\": \"res://FILE_PATH\"
+  }
+}
+```
+
+-   `tool_name`: (Mandatory, String) Specifies the tool to be invoked. Must be `\"get_context\"`.
+-   `arguments`: (Mandatory, Object) A JSON object containing specific parameters for the `get_context` operation.
+
+#### 4.1.2 Parameters (`arguments` object)
+-   `context_type`: (Required, String) Defines the specific type of context to be retrieved from the Godot project. Valid values are:
+    -   `folder_structure`: Retrieves the hierarchical directory and file structure of the specified `path`. Applicable for project organization analysis or resource discovery.
+    -   `scene_tree`: Retrieves the node tree structure of a Godot scene (`.tscn` or `.scn` file), including node names, types, and their relationships. Essential for diagnosing scene-related issues.
+    -   `gdscript`: Retrieves the full content of a GDScript file (`.gd` extension). Enables code analysis, debugging, or understanding script logic.
+    -   `text-based_file`: Retrieves the plain text content of any text-based file (e.g., `.txt`, `.json`, `.cfg`, `.md`). Useful for inspecting configuration, data files, or documentation.
+-   `path`: (Required, String) Specifies the absolute path to the target resource or directory within the Godot project. Paths must consistently begin with `res://` (e.g., `res://scenes/main_menu.tscn`, `res://scripts/player.gd`, `res://assets/images/background.png`, `res://data/levels/`). Path validity and existence are prerequisites for successful retrieval.
+
+#### 4.1.3 Tool Call Error Handling
+In the event of a tool call failure (e.g., receiving `[SYSTEM FEEDBACK - Path Not Found]`), the current task **must be immediately halted**. The error must be acknowledged in the response, and the user must be explicitly informed of the error and the necessity of their assistance for resolution. Self-correction or continuation of the task without user intervention is strictly prohibited.
+
+### 4.2 Usage Examples
+#### 4.2.1 Multiple Context Retrieval Example
+**User Request:**
+\"I'm troubleshooting a complex bug. The game sometimes crashes after the main menu, and player controls occasionally don't work correctly. I need to investigate several files:
+1.  The scene structures of `MainMenu.tscn` and `Level1.tscn`.
+2.  The GDScript code content of `MainMenu.gd` and `PlayerController.gd`.
+3.  The text content of `config.json` and `game_log.txt` to check for any configuration errors or recent error logs.
+Can you help me retrieve all this information?\"
+
+**Your First Response (Plan & Act):**
+Objective: Diagnose a complex bug by examining multiple scene structures, scripts, and configuration/log files.
+
+**To-Do List:**
+- [ ] Retrieve the scene tree for `MainMenu.tscn`.
+- [ ] Retrieve the scene tree for `Level1.tscn`.
+- [ ] Retrieve the script content for `MainMenu.gd`.
+- [ ] Retrieve the script content for `PlayerController.gd`.
+- [ ] Retrieve the text content for `config.json`.
+- [ ] Retrieve the text content for `game_log.txt`.
+- [ ] Analyze all retrieved information, identify potential issues, and report findings.
+
+I will now execute the first six steps to gather the necessary context information.
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"scene_tree\",
+    \"path\": \"res://scenes/MainMenu.tscn\"
+  }
+}
+```
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"scene_tree\",
+    \"path\": \"res://scenes/Level1.tscn\"
+  }
+}
+```
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"gdscript\",
+    \"path\": \"res://scripts/MainMenu.gd\"
+  }
+}
+```
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"gdscript\",
+    \"path\": \"res://scripts/PlayerController.gd\"
+  }
+}
+```
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"text-based_file\",
+    \"path\": \"res://config.json\"
+  }
+}
+```
+```json
+{
+  \"tool_name\": \"get_context\",
+  \"arguments\": {
+    \"context_type\": \"text-based_file\",
+    \"path\": \"res://logs/game_log.txt\"
+  }
+}
+```
+
+#### 4.2.2 Error Handling Scenario Example
+**(Assume one of the tool calls fails, for example, `res://logs/game_log.txt` does not exist, and the system returns `[SYSTEM FEEDBACK - Path Not Found]` for the sixth call)**
+
+**Your Second Response (Error Handling Example):**
+I encountered an error when attempting to retrieve the content of `res://logs/game_log.txt`: `[SYSTEM FEEDBACK - Path Not Found]`.
+Since the file path does not exist, I cannot proceed with the current task. I require your assistance to provide the correct file path or to confirm if this file can be skipped.
+
+How would you like me to handle this error?
+
+---"
+wrap_mode = 1
+scroll_smooth = true
+
+[node name="CenterContainer" type="CenterContainer" parent="Panel/MarginContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+
+[node name="SaveButton" type="Button" parent="Panel/MarginContainer/VBoxContainer/CenterContainer"]
+custom_minimum_size = Vector2(200, 60)
+layout_mode = 2
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Save and Close"

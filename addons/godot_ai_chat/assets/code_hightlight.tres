@@ -1,0 +1,16 @@
+[gd_resource type="CodeHighlighter" format=3 uid="uid://y4ttoisb3itk"]
+
+[resource]
+number_color = Color(1, 0.95717114, 0.7078706, 1)
+symbol_color = Color(0.6356749, 0.67227364, 1, 1)
+function_color = Color(0.38824624, 0.85792184, 1, 1)
+member_variable_color = Color(0.713972, 1, 0.7339278, 1)
+keyword_colors = {
+"CharacterBody3D": Color(0.48087442, 1, 0.49506193, 1),
+"const": Color(1, 0.7137255, 0.36862746, 1),
+"export": Color(1, 0.7117678, 0.36964983, 1),
+"extends": Color(1, 0.7137255, 0.36862746, 1),
+"func": Color(1, 0.7137255, 0.36862746, 1),
+"var": Color(0.6004816, 0.5924032, 1, 1),
+"void": Color(0.48235294, 1, 0.49411765, 1)
+}

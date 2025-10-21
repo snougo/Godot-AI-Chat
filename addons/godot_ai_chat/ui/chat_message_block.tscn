@@ -1,0 +1,23 @@
+[gd_scene load_steps=2 format=3 uid="uid://cus8b6v8lp2pt"]
+
+[ext_resource type="Script" uid="uid://0cnf6uj0s5kn" path="res://addons/godot_ai_chat/scripts/core/chat_message_block.gd" id="1_vihku"]
+
+[node name="ChatMessageBlock" type="FoldableContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+title = "Message"
+script = ExtResource("1_vihku")
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2

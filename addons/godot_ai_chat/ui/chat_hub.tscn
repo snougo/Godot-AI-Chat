@@ -1,0 +1,27 @@
+[gd_scene load_steps=6 format=3 uid="uid://blqsdh6wqee1q"]
+
+[ext_resource type="PackedScene" uid="uid://u2oo4ymv2b8y" path="res://addons/godot_ai_chat/ui/chat_ui.tscn" id="1_hc0y8"]
+[ext_resource type="Script" uid="uid://kyrmkryttqbf" path="res://addons/godot_ai_chat/scripts/core/chat_hub.gd" id="1_ue3k2"]
+[ext_resource type="Script" uid="uid://cs0em03l0v705" path="res://addons/godot_ai_chat/scripts/core/chat_backend.gd" id="4_4w31b"]
+[ext_resource type="PackedScene" uid="uid://25giq62fx0to" path="res://addons/godot_ai_chat/ui/network_manager.tscn" id="4_62xqn"]
+[ext_resource type="Script" uid="uid://dr3rrump555v0" path="res://addons/godot_ai_chat/scripts/core/current_chat_window.gd" id="5_rbecq"]
+
+[node name="ChatHub" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ue3k2")
+
+[node name="ChatUI" parent="." instance=ExtResource("1_hc0y8")]
+layout_mode = 1
+
+[node name="NetworkManager" parent="." instance=ExtResource("4_62xqn")]
+
+[node name="ChatBackend" type="Node" parent="."]
+script = ExtResource("4_4w31b")
+
+[node name="CurrentChatWindow" type="Node" parent="."]
+script = ExtResource("5_rbecq")
