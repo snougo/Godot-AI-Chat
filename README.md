@@ -1,5 +1,5 @@
 # Godot AI Chat
-English/中文
+[English](https://github.com/snougo/Godot-AI-Chat/blob/main/README.md)/[中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
 
 ## About Godot AI Chat
 Godot AI Chat is a Godot plugin that enables direct conversation with LLMs within the Godot editor interface. It supports both local and remote LLMs. When combined with another Godot plugin, Context Toolkit, and appropriate system prompts, it allows the LLM to actively read relevant contextual information while solving problems, thereby providing more pertinent answers.
