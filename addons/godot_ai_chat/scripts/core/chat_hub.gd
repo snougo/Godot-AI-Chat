@@ -14,6 +14,8 @@ var _is_canceling: bool = false
 
 
 func _ready() -> void:
+	# 在执行任何操作之前，先确保存档目录存在。
+	ChatArchive.initialize_archive_directory()
 	# 等待一帧，确保所有子节点都已经准备就绪
 	await get_tree().process_frame
 	
@@ -113,6 +115,9 @@ func _on_load_chat_archive(_archive_name: String) -> void:
 
 # 当UI请求将当前聊天保存为 .tres 文件时触发
 func _save_chat_messages_to_tres(_save_path: String) -> void:
+	# 在执行任何操作之前，先确保存档目录存在。
+	ChatArchive.initialize_archive_directory()
+	
 	var messages: Array = current_chat_window.get_current_chat_messages()
 	if messages.is_empty():
 		chat_ui.show_confirmation("Cannot save an empty chat.")
@@ -133,6 +138,9 @@ func _save_chat_messages_to_tres(_save_path: String) -> void:
 
 # 当UI请求将当前聊天导出为 Markdown 文件时触发
 func _save_chat_messages_to_markdown(_save_path: String) -> void:
+	# 在执行任何操作之前，先确保存档目录存在。
+	ChatArchive.initialize_archive_directory()
+	
 	var messages: Array = current_chat_window.get_current_chat_messages()
 	if messages.is_empty():
 		chat_ui.show_confirmation("Cannot save an empty chat.")

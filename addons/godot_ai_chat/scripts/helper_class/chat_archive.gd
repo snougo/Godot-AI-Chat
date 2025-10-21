@@ -12,6 +12,23 @@ const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
 # ## 静态函数 ##
 #==============================================================================
 
+# 在插件启动时调用，以确保存档目录存在。
+static func initialize_archive_directory() -> void:
+	var global_path: String = ProjectSettings.globalize_path(ARCHIVE_DIR)
+	# 如果目录已存在，则什么都不做。
+	if DirAccess.dir_exists_absolute(global_path):
+		return
+	
+	# 如果不存在，则创建它并扫描文件系统。
+	var err: Error = DirAccess.make_dir_recursive_absolute(global_path)
+	if err == OK:
+		print("Godot AI Chat: Created archive directory at '%s'." % ARCHIVE_DIR)
+		if Engine.is_editor_hint():
+			EditorInterface.get_resource_filesystem().scan()
+	else:
+		push_error("Godot AI Chat: Failed to create archive directory at '%s'. Error: %s" % [ARCHIVE_DIR, error_string(err)])
+
+
 # 获取存档目录中所有聊天存档（.tres 文件）的文件名列表。
 static func get_archive_list() -> Array:
 	var archives: Array = []
