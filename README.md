@@ -5,7 +5,7 @@
 Godot AI Chat is a Godot plugin that enables direct conversation with LLMs within the Godot editor interface. It supports both local and remote LLMs. When combined with another Godot plugin, [Context Toolkit](https://github.com/snougo/Context-Toolkit), and appropriate system prompts, it allows the LLM to actively read relevant contextual information while solving problems, thereby providing more pertinent answers.
 
 ## How to Install and Enable
-1.  Download the Godot AI Chat and Context Toolkit (optional) plugins.
+1.  Download the Godot AI Chat and [Context Toolkit](https://github.com/snougo/Context-Toolkit) plugins.
 2.  Drag the downloaded plugin folders into the `addons` folder in your editor's file system.
 3.  Open Project Settings, switch to the Plugins tab, find and enable Godot AI Chat and Context Toolkit (optional).
 

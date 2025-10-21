@@ -4,7 +4,7 @@
 Godot AI Chat是一款支持在Godot编辑器界面中直接和LLM聊天的Godot插件，支持和本地LLM或者远程LLM聊天，配合另一款Godot插件[Context Toolkit](https://github.com/snougo/Context-Toolkit)以及相应的系统提示词，还能让LLM在解决问题的过程中主动读取相关上下文信息，以便提供更加相关的回答。
 
 ## 如何安装和启用
-1. 下载插件Godot AI Chat和Context Toolki（可选）
+1. 下载插件Godot AI Chat和[Context Toolki](https://github.com/snougo/Context-Toolkit)
 2. 将下载后的插件文件夹拖入到编辑器文件系统中的addon文件夹中
 3. 打开Project Settings，切换到Plugins标签，找到并启用Godot AI Chat和Context Toolki（可选）
 
