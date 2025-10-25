@@ -27,7 +27,7 @@ func _init(_network_manager: NetworkManager, _tool_executor: ToolExecutor, _full
 #==============================================================================
 
 func tool_workflow_start(_response_data: Dictionary) -> void:
-	var normalized_response: Dictionary = ToolCallUtils.normalize_response_for_tool_workflow(_response_data)
+	var normalized_response: Dictionary = ToolCallUtils.tool_call_converter(_response_data)
 	# 工作流的第一条消息就是AI的工具调用请求
 	tool_workflow_messages.append(normalized_response)
 	_process_ai_response(normalized_response)
@@ -38,7 +38,7 @@ func tool_workflow_start(_response_data: Dictionary) -> void:
 #==============================================================================
 
 func _process_ai_response(_response_data: Dictionary) -> void:
-	if ToolCallUtils.has_tool_call_response(_response_data):
+	if ToolCallUtils.has_tool_call(_response_data):
 		var tool_calls: Array = _response_data.get("tool_calls", [])
 		_execute_tools(tool_calls)
 	elif _response_data.has("content"):
@@ -53,38 +53,39 @@ func _execute_tools(_tool_calls: Array) -> void:
 	var aggregated_content_for_ui: String = ""
 	
 	for call in _tool_calls:
-		# 从助手的请求中获取独一无二的 ID
-		var tool_call_id = call.get("id") 
+		var tool_call_id = call.get("id")
 		if not tool_call_id:
 			push_error("Tool call from assistant was missing an 'id'. Skipping.")
 			continue
 		
 		var function = call.get("function", {})
+		# --- 修复点 1: 从 'function' 字典中正确获取工具名称 ---
+		var function_name = function.get("name", "unknown_tool")
 		var args_str = function.get("arguments", "{}")
 		var parsed_args = JSON.parse_string(args_str)
 		var result_content: String
 		
 		if parsed_args is Dictionary:
-			result_content = tool_executor.tool_call_execute_parsed(parsed_args)
+			# --- 修复点 2: 创建一个包含名称和参数的完整字典传递给执行器 ---
+			var execution_data = {
+				"tool_name": function_name,
+				"arguments": parsed_args
+			}
+			result_content = tool_executor.tool_call_execute_parsed(execution_data)
 		else:
-			# 明确处理解析失败的情况
 			result_content = "[SYSTEM FEEDBACK - Tool Call Failed]\nFailed to parse the 'arguments' field for tool call ID '%s'. The provided JSON string was: '%s'" % [tool_call_id, args_str]
 		
-		# 为 API 创建一个结构正确的、独立的 tool 消息
 		var tool_message_for_api = {
 			"role": "tool",
-			"tool_call_id": tool_call_id, # 关键！使用 tool_call_id 键
+			"tool_call_id": tool_call_id,
 			"content": result_content
 		}
 		tool_messages_for_api.append(tool_message_for_api)
 		
-		# 同时，为 UI 的显示聚合内容
-		var tool_name_for_ui = parsed_args.get("tool_name", "unknown") if parsed_args is Dictionary else "unknown"
-		aggregated_content_for_ui += "[Tool `%s` result for call `%s`]:\n%s\n\n" % [tool_name_for_ui, tool_call_id, result_content]
+		# --- 修复点 3: 在生成UI消息时使用正确的 function_name 变量 ---
+		aggregated_content_for_ui += "[Tool `%s` result for call `%s`]:\n%s\n\n" % [function_name, tool_call_id, result_content]
 	
-	# 将所有独立的、结构正确的 tool 消息添加到工作流历史中，用于下一次 API 调用
 	tool_workflow_messages.append_array(tool_messages_for_api)
-	# 创建一个合并后的消息，专门用于在 UI 上显示
 	var tool_message_for_ui: Dictionary = {"role": "tool", "content": aggregated_content_for_ui.strip_edges()}
 	emit_signal("tool_message_generated", tool_message_for_ui)
 	

@@ -27,7 +27,7 @@ var is_in_tool_workflow: bool = false
 # 对模型的回复进行解析判断是否需要开启工具工作流
 func process_new_assistant_response(_response_data: Dictionary) -> void:
 	# 使用工具类判断是否需要启动工具工作流
-	if ToolCallUtils.has_tool_call_response(_response_data):
+	if ToolCallUtils.has_tool_call(_response_data):
 		print("[ChatBackend] Tool call detected. Starting workflow...")
 		_start_tool_workflow(_response_data)
 	else:
