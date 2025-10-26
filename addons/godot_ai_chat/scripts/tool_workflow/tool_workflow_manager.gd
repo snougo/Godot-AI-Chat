@@ -7,6 +7,8 @@ signal tool_workflow_completed(assistant_response: Dictionary)
 signal tool_workflow_failed(error_message: String)
 # 当有工具的中间结果产生时发出，用于UI显示
 signal tool_message_generated(tool_message: Dictionary)
+# 当工具调用结果成功返回时发出
+signal tool_call_resulet_received(context_type: String, path: String, content: String)
 
 var network_manager: NetworkManager
 var tool_executor: ToolExecutor
@@ -72,6 +74,13 @@ func _execute_tools(_tool_calls: Array) -> void:
 				"arguments": parsed_args
 			}
 			result_content = tool_executor.tool_call_execute_parsed(execution_data)
+			
+			# 修改点: 发出包含 context_type 的更详细信号
+			if function_name == "get_context" and not result_content.begins_with("[SYSTEM FEEDBACK"):
+				var path = parsed_args.get("path", "")
+				var context_type = parsed_args.get("context_type", "")
+				if not path.is_empty() and not context_type.is_empty():
+					emit_signal("tool_call_resulet_received", context_type, path, result_content)
 		else:
 			result_content = "[SYSTEM FEEDBACK - Tool Call Failed]\nFailed to parse the 'arguments' field for tool call ID '%s'. The provided JSON string was: '%s'" % [tool_call_id, args_str]
 		
@@ -109,11 +118,25 @@ func _request_next_ai_step() -> void:
 func _build_optimized_context() -> Array:
 	var optimized_history: Array = []
 	
-	# 1. 添加系统提示词 (全局上下文)
+	# 1. 准备合并后的最终系统提示词
+	var final_system_prompt: String = ""
 	if not full_chat_history.is_empty() and full_chat_history[0].role == "system":
-		optimized_history.append(full_chat_history[0])
+		final_system_prompt = full_chat_history[0].content
 	
-	# 2. 添加触发本次工作流的用户消息 (任务起点)
+	var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
+	if not remembered_folder_context.is_empty():
+		var memory_string: String = "\n\n## Long-Term Memory: Folder Context\nThis is folder structure information you have already retrieved. Do not request it again.\n"
+		for path in remembered_folder_context:
+			var folder_tree = ToolBox.extract_folder_tree_from_context(remembered_folder_context[path])
+			memory_string += "\n--- Context for folder: %s ---\n```\n%s\n```" % [path, folder_tree]
+		
+		final_system_prompt += memory_string
+	
+	# 2. 将合并后的系统提示词作为第一条消息
+	if not final_system_prompt.is_empty():
+		optimized_history.append({"role": "system", "content": final_system_prompt})
+	
+	# 3. 添加触发本次工作流的用户消息 (任务起点)
 	var initiating_user_message = full_chat_history.filter(func(m): return m.role == "user").back()
 	if initiating_user_message:
 		optimized_history.append(initiating_user_message)
@@ -122,32 +145,10 @@ func _build_optimized_context() -> Array:
 		emit_signal("tool_workflow_failed", "Could not find the initiating user message.")
 		return []
 	
-	# 3. 添加当前工作流的完整消息序列 (核心逻辑)
-	# tool_workflow_messages 已经包含了正确的 assistant -> tool 消息顺序
+	# 4. 添加当前工作流的完整消息序列
 	optimized_history.append_array(tool_workflow_messages)
 	
 	return optimized_history
-
-#func _build_optimized_context() -> Array:
-	#var optimized_history: Array = []
-	# 添加系统提示词
-	#if not full_chat_history.is_empty() and full_chat_history[0].role == "system":
-		#optimized_history.append(full_chat_history[0])
-	# 添加触发本次工作流的用户消息
-	#var initiating_user_message = full_chat_history.filter(func(m): return m.role == "user").back()
-	#if initiating_user_message:
-		#optimized_history.append(initiating_user_message)
-	#else:
-		#push_error("ToolWorkflowManager: Could not find the initiating user message.")
-		#emit_signal("tool_workflow_failed", "Could not find the initiating user message.")
-		#return []
-	# 添加历史上所有角色为 "tool" 的消息
-	#var previous_tool_messages = full_chat_history.filter(func(m): return m.role == "tool")
-	#optimized_history.append_array(previous_tool_messages)
-	# 添加当前工作流中产生的所有消息
-	#optimized_history.append_array(tool_workflow_messages)
-	#
-	#return optimized_history
 
 
 #==============================================================================

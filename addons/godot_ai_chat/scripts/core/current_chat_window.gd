@@ -187,6 +187,18 @@ func _get_truncated_chat_history() -> Array:
 	var max_turns: int = settings.max_chat_turns
 	var current_system_prompt: String = settings.system_prompt
 	
+	# --- 步骤 0: 准备合并后的最终系统提示词 ---
+	var final_system_prompt: String = settings.system_prompt
+	
+	var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
+	if not remembered_folder_context.is_empty():
+		var memory_string: String = "\n\n## Long-Term Memory: Folder Context\nThis is folder structure information you have already retrieved. Do not request it again.\n"
+		for path in remembered_folder_context:
+			var folder_tree = ToolBox.extract_folder_tree_from_context(remembered_folder_context[path])
+			memory_string += "\n--- Context for folder: %s ---\n```\n%s\n```" % [path, folder_tree]
+		
+		final_system_prompt += memory_string
+	
 	# --- 步骤 1: 将扁平的消息历史按“对话轮次”分组 ---
 	# 一轮对话从一个 "user" 消息开始，到下一个 "user" 消息之前结束。
 	var conversation_turns: Array = []
@@ -231,11 +243,12 @@ func _get_truncated_chat_history() -> Array:
 	
 	# --- 步骤 4: 组装最终要发送给模型的历史记录 ---
 	var chat_messages_for_AI: Array = []
-	# 4.1: 在最前面添加最新的系统提示词。
-	if not current_system_prompt.is_empty():
-		chat_messages_for_AI.append({"role": "system", "content": current_system_prompt})
 	
-	# 4.2: 添加经过分组和截断后的对话消息。
+	# 4.1: 将合并后的、单一的系统提示词放在最前面
+	if not final_system_prompt.is_empty():
+		chat_messages_for_AI.append({"role": "system", "content": final_system_prompt})
+	
+	# 4.2: 添加对话消息
 	chat_messages_for_AI.append_array(final_messages)
 	
 	return chat_messages_for_AI

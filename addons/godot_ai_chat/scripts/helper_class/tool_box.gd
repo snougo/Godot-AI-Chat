@@ -82,3 +82,26 @@ static func print_structured_context(title: String, messages: Array, context_inf
 			print("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [i, role, snippet])
 	
 	print("--- 报告结束 ---\n")
+
+
+# 新增函数: 从 get_context (folder_structure) 的原始输出中提取纯净的树状结构
+static func extract_folder_tree_from_context(raw_content: String) -> String:
+	# 定义分隔标记，树状结构总是在这个标记之后
+	const MARKER = "Folder File Structure:"
+	var start_pos = raw_content.find(MARKER)
+	
+	# 如果找不到标记，作为安全回退，返回原始内容
+	if start_pos == -1:
+		return raw_content
+	
+	# 提取标记之后的所有内容
+	var content_after_marker = raw_content.substr(start_pos + MARKER.length())
+	
+	# 清理字符串：
+	# 1. 移除前后的空白字符（包括换行符）
+	# 2. 移除Markdown的代码块标记 (```)
+	var cleaned_content = content_after_marker.strip_edges()
+	cleaned_content = cleaned_content.trim_prefix("```").strip_edges()
+	cleaned_content = cleaned_content.trim_suffix("```").strip_edges()
+	
+	return cleaned_content
