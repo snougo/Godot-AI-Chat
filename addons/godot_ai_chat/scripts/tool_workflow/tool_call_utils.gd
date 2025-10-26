@@ -14,6 +14,40 @@ const _GPT_OSS_REGEX = "(?s)<\\|channel\\|>\\s*commentary\\s+to=([a-zA-Z0-9_.]+)
 # ## 内部辅助函数 ##
 #==============================================================================
 
+# 将包含多个串联 JSON 对象的字符串，拆分为单个 JSON 字符串的数组。
+static func _split_concatenated_json(text: String) -> Array[String]:
+	var json_objects: Array[String] = []
+	var search_offset: int = 0
+	
+	while true:
+		var object_start: int = text.find("{", search_offset)
+		if object_start == -1:
+			break # 当没有更多对象可以查找时退出循环。
+		
+		var brace_level: int = 1
+		var object_end: int = -1
+		
+		for i in range(object_start + 1, text.length()):
+			var char = text[i]
+			if char == '{':
+				brace_level += 1
+			elif char == '}':
+				brace_level -= 1
+			
+			if brace_level == 0:
+				object_end = i
+				break
+		
+		if object_end != -1:
+			var json_str: String = text.substr(object_start, object_end - object_start + 1)
+			json_objects.append(json_str)
+			search_offset = object_end + 1
+		else:
+			break # 括号不匹配，停止处理以避免无限循环
+	
+	return json_objects
+
+
 # 步骤1: 从原始文本中提取所有可能是工具调用的 JSON 字符串
 static func _extract_raw_json_strings(content: String) -> Array[String]:
 	var raw_strings: Array[String] = []
@@ -34,8 +68,8 @@ static func _extract_raw_json_strings(content: String) -> Array[String]:
 	for match in matches:
 		var json_content = match.get_string(1).strip_edges()
 		if not json_content.is_empty():
-			raw_strings.append(json_content)
-			
+			raw_strings.append_array(_split_concatenated_json(json_content))
+	
 	return raw_strings
 
 
@@ -112,7 +146,7 @@ static func tool_call_converter(response_dict: Dictionary) -> Dictionary:
 	
 	if extracted_calls.is_empty():
 		return new_response # 如果没有工具调用，返回原始字典的拷贝
-
+	
 	var structured_calls: Array = []
 	for i in range(extracted_calls.size()):
 		var tool_call = extracted_calls[i]
