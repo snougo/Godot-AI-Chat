@@ -24,15 +24,30 @@ var is_in_tool_workflow: bool = false
 # ## 公共函数 ##
 #==============================================================================
 
+# 用于从外部取消当前正在进行的工作流
+func cancel_current_workflow() -> void:
+	if is_instance_valid(current_tool_workflow):
+		current_tool_workflow.cleanup_connections()
+		current_tool_workflow = null
+		is_in_tool_workflow = false
+		print("[ChatBackend] Current tool workflow canceled and cleaned up.")
+
+
 # 对模型的回复进行解析判断是否需要开启工具工作流
 func process_new_assistant_response(_response_data: Dictionary) -> void:
-	# 使用工具类判断是否需要启动工具工作流
-	if ToolCallUtils.has_tool_call(_response_data):
-		print("[ChatBackend] Tool call detected. Starting workflow...")
-		_start_tool_workflow(_response_data)
+	# 关键逻辑：只在没有工作流正在进行时，才检查是否要启动一个新的工作流。
+	if not is_in_tool_workflow:
+		if ToolCallUtils.has_tool_call(_response_data):
+			print("[ChatBackend] Tool call detected. Starting workflow...")
+			_start_tool_workflow(_response_data)
+		else:
+			print("[ChatBackend] Plain text response. Finalizing...")
+			emit_signal("assistant_message_processing_completed", _response_data)
+	# 如果已有工作流正在进行，则忽略此调用，因为工作流会自我管理。
+	# 这是一个安全保障，理论上 ChatHub 的检查会阻止代码执行到这里。
 	else:
-		print("[ChatBackend] Plain text response. Finalizing...")
-		emit_signal("assistant_message_processing_completed", _response_data)
+		print("[ChatBackend] WARN: process_new_assistant_response called while a workflow is active. Ignoring.")
+
 
 
 #==============================================================================
@@ -46,6 +61,7 @@ func _start_tool_workflow(_response_data: Dictionary) -> void:
 	emit_signal("tool_workflow_started")
 	# 获取完整的聊天历史以提供给工作流
 	var full_chat_history: Array = current_chat_window.get_current_chat_messages()
+	
 	ToolBox.print_structured_context("To Tool Workflow", full_chat_history)
 	# 创建并启动工作流管理器
 	current_tool_workflow = ToolWorkflowManager.new(network_manager, tool_executor, full_chat_history)
@@ -54,11 +70,9 @@ func _start_tool_workflow(_response_data: Dictionary) -> void:
 	current_tool_workflow.tool_workflow_failed.connect(self._on_workflow_failed)
 	# 将工作流的 tool_message_generated 信号直接转发出去
 	current_tool_workflow.tool_message_generated.connect(func(tool_msg): emit_signal("tool_message_received", tool_msg))
-	#current_tool_workflow.tool_workflow_start(_response_data)
-	
 	current_tool_workflow.tool_call_resulet_received.connect(self._on_tool_call_resulet_received)
+	# 使用触发消息来启动工作流
 	current_tool_workflow.tool_workflow_start(_response_data)
-
 
 
 #==============================================================================
@@ -75,7 +89,11 @@ func _on_tool_call_resulet_received(_context_type: String, _path: String, _conte
 func _on_workflow_completed(_final_messages: Dictionary) -> void:
 	print("[ChatBackend] Workflow completed successfully.")
 	emit_signal("assistant_message_processing_completed", _final_messages)
-	current_tool_workflow = null # 清理
+	#current_tool_workflow = null
+	# 关键修复：在释放引用之前，先调用清理函数
+	if is_instance_valid(current_tool_workflow):
+		current_tool_workflow.cleanup_connections()
+		current_tool_workflow = null
 	is_in_tool_workflow = false
 
 
@@ -83,5 +101,9 @@ func _on_workflow_completed(_final_messages: Dictionary) -> void:
 func _on_workflow_failed(_error_message: String) -> void:
 	push_error("[ChatBackend] Workflow failed: %s" % _error_message)
 	emit_signal("tool_workflow_failed", _error_message)
-	current_tool_workflow = null # 清理
+	#current_tool_workflow = null
+	# 关键修复：在释放引用之前，先调用清理函数
+	if is_instance_valid(current_tool_workflow):
+		current_tool_workflow.cleanup_connections()
+		current_tool_workflow = null
 	is_in_tool_workflow = false

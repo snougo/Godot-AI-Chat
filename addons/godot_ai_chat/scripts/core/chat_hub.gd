@@ -16,7 +16,7 @@ var _is_canceling: bool = false
 func _ready() -> void:
 	# 在执行任何操作之前，先确保存档目录存在。
 	ChatArchive.initialize_archive_directory()
-	# get_all_folder_context 会内部调用 _get_memory_as_dict，从而确保文件存在。
+	# 初始化磁盘上的长期记忆，如果文件不存在会创建一个新的空长期记忆文件。
 	LongTermMemoryManager.get_all_folder_context()
 	# 等待一帧，确保所有子节点都已经准备就绪
 	await get_tree().process_frame
@@ -153,12 +153,17 @@ func _save_chat_messages_to_markdown(_save_path: String) -> void:
 	if success:
 		await get_tree().process_frame
 		chat_ui.show_confirmation("Chat successfully exported to Markdown:\n" + _save_path)
+	
+	# 独立地通知编辑器
+	ToolBox.update_editor_filesystem(_save_path)
 
 
 # 统一的停止按钮处理函数
 func _on_stop_button_pressed() -> void:
 	# 无论当前状态如何，立即升起“门卫”旗帜，阻止任何后续的工具流启动
 	_is_canceling = true
+	# 新增：在清理主连接之前，先命令后端取消任何活动的工具工作流
+	chat_backend.cancel_current_workflow()
 	# 使用新的、健壮的清理函数
 	_cleanup_stream_connections()
 	# 尝试取消任何可能正在进行的网络请求
@@ -215,6 +220,13 @@ func _on_new_assistant_message_appended(message_data: Dictionary) -> void:
 	if _is_canceling:
 		print("[ChatHub] Assistant message appended, but process is canceling. Ignoring.")
 		return
+	
+	# 关键修复：如果后端正处于一个工具工作流中，则不通过此路径处理新消息。
+	# 工作流会通过其自身的网络信号监听来管理流程，避免双重处理和状态冲突。
+	if chat_backend.is_in_tool_workflow:
+		print("[ChatHub] Assistant message appended, but a tool workflow is active. Workflow will self-manage.")
+		return
+	
 	# 在将控制权交给后端之前，清理当前流的信号连接。
 	# 这可以防止在工具流启动新请求时发生“信号已连接”的错误。
 	_cleanup_stream_connections()

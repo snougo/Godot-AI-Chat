@@ -62,7 +62,7 @@ static func save_current_chat_to_file(_history_resource: PluginChatHistory, _fil
 	if not is_instance_valid(_history_resource):
 		push_error("Godot AI Chat: Cannot save, provided history resource is invalid.")
 		return false
-
+	
 	var file_name: String = _file_path.get_file()
 	if not file_name.ends_with(".tres"):
 		file_name += ".tres"
@@ -100,7 +100,7 @@ static func save_to_markdown(_chat_history: Array, _file_path: String) -> bool:
 		elif chat_message.role == "tool": full_chat_text += "### ⚙️ Tool Output\n" 
 		
 		full_chat_text += chat_message.content + "\n\n>------------\n\n"
-		
+	
 	var file: FileAccess = FileAccess.open(_file_path, FileAccess.WRITE)
 	if file:
 		file.store_string(full_chat_text)
