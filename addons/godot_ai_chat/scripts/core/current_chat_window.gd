@@ -183,73 +183,61 @@ func update_model_name(_model_name: String) -> void:
 # 根据设置获取并截断聊天历史，用于发送给AI模型。
 # 新逻辑：以“对话轮次”为单位进行截断。
 func _get_truncated_chat_history() -> Array:
+	# 1. 总是从ToolBox获取最新的设置
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	var max_turns: int = settings.max_chat_turns
-	var current_system_prompt: String = settings.system_prompt
+	var system_prompt: String = settings.system_prompt
 	
-	# --- 步骤 0: 准备合并后的最终系统提示词 ---
-	var final_system_prompt: String = settings.system_prompt
-	
+	# 2. 准备长期记忆的用户消息
+	var long_term_memory_message: Dictionary = {}
 	var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
-	if not remembered_folder_context.is_empty():
-		var memory_string: String = "\n\n## Long-Term Memory: Folder Context\nThis is folder structure information you have already retrieved. Do not request it again.\n"
-		for path in remembered_folder_context:
-			var folder_tree = ToolBox.extract_folder_tree_from_context(remembered_folder_context[path])
-			memory_string += "\n--- Context for folder: %s ---\n```\n%s\n```" % [path, folder_tree]
-		
-		final_system_prompt += memory_string
 	
-	# --- 步骤 1: 将扁平的消息历史按“对话轮次”分组 ---
-	# 一轮对话从一个 "user" 消息开始，到下一个 "user" 消息之前结束。
+	if not remembered_folder_context.is_empty():
+		var memory_string: String = "The following is folder context information that has already been retrieved. Use it directly and do not request it again:\n\n---\n"
+		for path in remembered_folder_context:
+			var folder_tree = remembered_folder_context[path] # 直接使用字典中的纯净内容
+			memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
+		
+		long_term_memory_message = {"role": "user", "content": memory_string.strip_edges(), "is_memory": true}
+	
+	# 3. (原始逻辑) 处理和截断对话历史
 	var conversation_turns: Array = []
 	var current_turn: Array = []
-	
 	for message in chat_messages:
-		# 系统消息不参与分组，最后会单独添加
-		if message.get("role") == "system":
-			continue
-		
+		if message.get("role") == "system": continue
 		if message.get("role") == "user":
-			# 当遇到新的 "user" 消息时，意味着上一轮对话结束。
-			# 如果 current_turn 不为空，则将其作为一个完整的轮次存入。
-			if not current_turn.is_empty():
-				conversation_turns.append(current_turn)
-			
-			# 开始新的一轮对话，并将当前 "user" 消息作为起点。
+			if not current_turn.is_empty(): conversation_turns.append(current_turn)
 			current_turn = [message]
 		else:
-			# 如果是 "assistant" 或 "tool" 消息，将其追加到当前轮次中。
-			# 健壮性检查：确保只有在 "user" 消息开启一个轮次后才追加。
-			if not current_turn.is_empty():
-				current_turn.append(message)
+			if not current_turn.is_empty(): current_turn.append(message)
+	if not current_turn.is_empty(): conversation_turns.append(current_turn)
 	
-	# 循环结束后，将最后一轮未提交的对话添加到数组中。
-	if not current_turn.is_empty():
-		conversation_turns.append(current_turn)
+	var truncated_turns: Array = conversation_turns.slice(-max_turns) if conversation_turns.size() > max_turns else conversation_turns
 	
-	# --- 步骤 2: 根据 max_turns 对“对话轮次”进行截断 ---
-	var truncated_turns: Array
-	if conversation_turns.size() > max_turns:
-		# 使用 slice 获取从后往前数的最后 `max_turns` 个轮次。
-		truncated_turns = conversation_turns.slice(-max_turns)
-	else:
-		# 如果轮次总数未超过限制，则全部保留。
-		truncated_turns = conversation_turns
-	
-	# --- 步骤 3: 将截断后的轮次重新“扁平化”为消息数组 ---
 	var final_messages: Array = []
-	for turn in truncated_turns:
-		final_messages.append_array(turn)
+	for turn in truncated_turns: final_messages.append_array(turn)
 	
-	# --- 步骤 4: 组装最终要发送给模型的历史记录 ---
+	# 4. 组装最终要发送给模型的历史记录
 	var chat_messages_for_AI: Array = []
 	
-	# 4.1: 将合并后的、单一的系统提示词放在最前面
-	if not final_system_prompt.is_empty():
-		chat_messages_for_AI.append({"role": "system", "content": final_system_prompt})
+	# 4.1 放置主系统提示词
+	if not system_prompt.is_empty():
+		chat_messages_for_AI.append({"role": "system", "content": system_prompt})
 	
-	# 4.2: 添加对话消息
+	# 4.2 放置截断后的对话消息
 	chat_messages_for_AI.append_array(final_messages)
+	
+	# 4.3 在用户最新消息前，插入长期记忆作为上下文
+	if not long_term_memory_message.is_empty():
+		var last_user_msg_index = -1
+		for i in range(chat_messages_for_AI.size() - 1, -1, -1):
+			if chat_messages_for_AI[i].role == "user":
+				last_user_msg_index = i
+				break
+		if last_user_msg_index != -1:
+			chat_messages_for_AI.insert(last_user_msg_index, long_term_memory_message)
+		else:
+			chat_messages_for_AI.append(long_term_memory_message)
 	
 	return chat_messages_for_AI
 

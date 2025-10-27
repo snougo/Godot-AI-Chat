@@ -1,62 +1,97 @@
 extends RefCounted
 class_name LongTermMemoryManager
 
-const MEMORY_PATH: String = "res://addons/godot_ai_chat/plugin_long_term_memory.tres"
+const MEMORY_PATH: String = "res://addons/godot_ai_chat/plugin_long_term_memory.md"
+const PARSE_REGEX: String = "(?s)### Path: (.*?)\\s*```(.*?)```"
 
 
-#==============================================================================
-# ## 内部辅助函数 ##
-#==============================================================================
-
-# 负责按需加载或创建资源实例，并确保总是从磁盘读取最新版本。
-static func _get_memory_instance() -> PluginLongTermMemory:
-	var memory_instance: PluginLongTermMemory
-	
-	if ResourceLoader.exists(MEMORY_PATH):
-		# 使用 CACHE_MODE_IGNORE 强制从磁盘重新加载，忽略Godot的内部缓存。
-		memory_instance = ResourceLoader.load(MEMORY_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
-	else:
-		# 如果文件不存在，则创建一个新的实例并立即保存它。
-		memory_instance = PluginLongTermMemory.new()
-		var err: Error = ResourceSaver.save(memory_instance, MEMORY_PATH)
-		if err != OK:
+# 确保文件存在。如果不存在，则独立地创建一个最小化的空文件。
+static func _ensure_file_exists() -> void:
+	if not FileAccess.file_exists(MEMORY_PATH):
+		var file = FileAccess.open(MEMORY_PATH, FileAccess.WRITE)
+		if not is_instance_valid(file):
 			push_error("[LongTermMemoryManager] Failed to create new memory file at %s." % MEMORY_PATH)
-			
-	return memory_instance
+			return
+		
+		# 只写入最基本的内容
+		file.store_string("# Godot AI Chat - Long-Term Memory\n\n")
+		
+		# 独立地通知编辑器
+		if Engine.is_editor_hint():
+			var editor_filesystem = EditorInterface.get_resource_filesystem()
+			if editor_filesystem:
+				editor_filesystem.update_file(MEMORY_PATH)
 
 
-#==============================================================================
-# ## 公共静态函数 ##
-#==============================================================================
-
-# 添加一条新的文件夹上下文记忆并立即保存
-static func add_folder_context(path: String, content: String) -> void:
-	# 1. 获取最新的资源实例
-	var memory = _get_memory_instance()
-	if not is_instance_valid(memory): return
+# 将一个字典的完整内容序列化并覆盖写入到文件中。
+static func _save_memory_from_dict(memory_dict: Dictionary) -> void:
+	var content_string: String = "# Godot AI Chat - Long-Term Memory\n\n"
 	
-	# 2. 安全地修改内容（复制-修改-替换模式）
-	var memory_dict_copy = memory.folder_context_memory.duplicate()
-	memory_dict_copy[path] = content
-	memory.folder_context_memory = memory_dict_copy
+	var sorted_paths = memory_dict.keys()
+	sorted_paths.sort()
 	
-	# 3. 将修改后的资源保存回磁盘
-	var error = ResourceSaver.save(memory, MEMORY_PATH)
+	for path in sorted_paths:
+		var folder_structure = memory_dict[path]
+		content_string += "### Path: %s\n```\n%s\n```\n\n---\n\n" % [path, folder_structure]
+		
+	var file = FileAccess.open(MEMORY_PATH, FileAccess.WRITE)
+	if not is_instance_valid(file):
+		push_error("[LongTermMemoryManager] Failed to open memory file for writing.")
+		return
 	
-	# 4. 通知编辑器文件系统更新 (新增修复)
-	if error == OK and Engine.is_editor_hint():
+	file.store_string(content_string)
+	
+	if Engine.is_editor_hint():
 		var editor_filesystem = EditorInterface.get_resource_filesystem()
 		if editor_filesystem:
-			# 这个调用会告诉编辑器立即从磁盘重新加载该文件
 			editor_filesystem.update_file(MEMORY_PATH)
+
+
+# 从文件中读取内容并解析为字典。
+static func _get_memory_as_dict() -> Dictionary:
+	# 在执行任何读取操作前，先确保文件存在。
+	_ensure_file_exists()
+	
+	var memory_dict: Dictionary = {}
+	var file = FileAccess.open(MEMORY_PATH, FileAccess.READ)
+	if not is_instance_valid(file):
+		push_error("[LongTermMemoryManager] Failed to open memory file for reading.")
+		return memory_dict
+	
+	var content: String = file.get_as_text()
+	var regex = RegEx.create_from_string(PARSE_REGEX)
+	var matches = regex.search_all(content)
+	
+	for match in matches:
+		var path = match.get_string(1).strip_edges()
+		var stored_content = match.get_string(2).strip_edges()
+		if not path.is_empty():
+			memory_dict[path] = stored_content
+	
+	return memory_dict
+
+
+# 添加一条新的文件夹上下文记忆
+static func add_folder_context(path: String, raw_tool_result: String) -> void:
+	# 遵循健壮的“读取-修改-写入”模式
+	var current_memory: Dictionary = _get_memory_as_dict()
+	
+	if current_memory.has(path):
+		return
+	
+	var content_to_store = ToolBox.extract_folder_tree_from_context(raw_tool_result)
+	current_memory[path] = content_to_store
+	
+	_save_memory_from_dict(current_memory)
 
 
 # 获取所有已记忆的文件夹上下文
 static func get_all_folder_context() -> Dictionary:
-	# 每次调用都从磁盘获取最新的资源实例
-	var memory = _get_memory_instance()
-	if is_instance_valid(memory):
-		# 返回一个副本以防止外部修改影响原始数据
-		return memory.folder_context_memory.duplicate(true)
+	var long_term_memory_dict: Dictionary = _get_memory_as_dict()
 	
-	return {}
+	if Engine.is_editor_hint():
+		var editor_filesystem = EditorInterface.get_resource_filesystem()
+		if editor_filesystem:
+			editor_filesystem.update_file(MEMORY_PATH)
+	
+	return long_term_memory_dict

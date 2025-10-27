@@ -53,6 +53,8 @@ func _process_ai_response(_response_data: Dictionary) -> void:
 func _execute_tools(_tool_calls: Array) -> void:
 	var tool_messages_for_api: Array = []
 	var aggregated_content_for_ui: String = ""
+	# 新增: 创建一个临时的、仅用于此函数作用域的字典，以跟踪本批次中已处理的路径
+	var check_context_paths_in_batch: Dictionary = {}
 	
 	for call in _tool_calls:
 		var tool_call_id = call.get("id")
@@ -80,7 +82,15 @@ func _execute_tools(_tool_calls: Array) -> void:
 				var path = parsed_args.get("path", "")
 				var context_type = parsed_args.get("context_type", "")
 				if not path.is_empty() and not context_type.is_empty():
-					emit_signal("tool_call_resulet_received", context_type, path, result_content)
+					# 关键修复: 只有在需要记忆，并且该路径在本批次中尚未出现时，才发出信号
+					if context_type == "folder_structure":
+						if not check_context_paths_in_batch.has(path):
+							emit_signal("tool_call_resulet_received", context_type, path, result_content)
+							# 将此路径标记为在本批次中已处理
+							check_context_paths_in_batch[path] = true
+					else:
+						# 对于非文件夹类型的上下文，总是发出信号（如果未来需要处理）
+						emit_signal("tool_call_resulet_received", context_type, path, result_content)
 		else:
 			result_content = "[SYSTEM FEEDBACK - Tool Call Failed]\nFailed to parse the 'arguments' field for tool call ID '%s'. The provided JSON string was: '%s'" % [tool_call_id, args_str]
 		
@@ -118,25 +128,24 @@ func _request_next_ai_step() -> void:
 func _build_optimized_context() -> Array:
 	var optimized_history: Array = []
 	
-	# 1. 准备合并后的最终系统提示词
-	var final_system_prompt: String = ""
-	if not full_chat_history.is_empty() and full_chat_history[0].role == "system":
-		final_system_prompt = full_chat_history[0].content
+	# 1. 准备主系统提示词，总是从磁盘实时获取
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
+	var system_prompt: String = settings.system_prompt
+	if not system_prompt.is_empty():
+		optimized_history.append({"role": "system", "content": system_prompt})
 	
+	# 2. 准备并插入长期记忆的用户消息
 	var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
 	if not remembered_folder_context.is_empty():
-		var memory_string: String = "\n\n## Long-Term Memory: Folder Context\nThis is folder structure information you have already retrieved. Do not request it again.\n"
+		var memory_string: String = "The following is folder context information that has already been retrieved. Use it directly and do not request it again:\n\n---\n"
 		for path in remembered_folder_context:
-			var folder_tree = ToolBox.extract_folder_tree_from_context(remembered_folder_context[path])
-			memory_string += "\n--- Context for folder: %s ---\n```\n%s\n```" % [path, folder_tree]
+			var folder_tree = remembered_folder_context[path] # 直接使用字典中的纯净内容
+			memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
 		
-		final_system_prompt += memory_string
+		var long_term_memory_message = {"role": "user", "content": memory_string.strip_edges(), "is_memory": true}
+		optimized_history.append(long_term_memory_message)
 	
-	# 2. 将合并后的系统提示词作为第一条消息
-	if not final_system_prompt.is_empty():
-		optimized_history.append({"role": "system", "content": final_system_prompt})
-	
-	# 3. 添加触发本次工作流的用户消息 (任务起点)
+	# 3. 添加触发本次工作流的用户消息
 	var initiating_user_message = full_chat_history.filter(func(m): return m.role == "user").back()
 	if initiating_user_message:
 		optimized_history.append(initiating_user_message)
