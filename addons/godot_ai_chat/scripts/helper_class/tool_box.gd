@@ -106,3 +106,4 @@ static func update_editor_filesystem(_path) -> void:
 		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
 		if editor_filesystem:
 			editor_filesystem.update_file(_path)
+			print(editor_filesystem.get_file_type(_path))

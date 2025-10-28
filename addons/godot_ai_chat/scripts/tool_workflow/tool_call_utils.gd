@@ -52,6 +52,11 @@ static func _split_concatenated_json(text: String) -> Array[String]:
 static func _extract_raw_json_strings(content: String) -> Array[String]:
 	var raw_strings: Array[String] = []
 	
+	# 新增：用于匹配和移除<think>标签块的正则表达式
+	var think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
+	# 新增：在解析前，先从内容中移除所有<think>...</think>块
+	var cleaned_content: String = think_regex.sub(content, "", true)
+	
 	# 策略 1: 优先尝试解析 gpt-oss 格式
 	var gpt_oss_regex = RegEx.new()
 	gpt_oss_regex.compile(_GPT_OSS_REGEX)
@@ -64,7 +69,7 @@ static func _extract_raw_json_strings(content: String) -> Array[String]:
 	# 策略 2: 回退到标准的 ```json 代码块格式
 	var json_block_regex = RegEx.new()
 	json_block_regex.compile(_JSON_BLOCK_REGEX)
-	var matches = json_block_regex.search_all(content)
+	var matches = json_block_regex.search_all(cleaned_content)
 	for match in matches:
 		var json_content = match.get_string(1).strip_edges()
 		if not json_content.is_empty():
