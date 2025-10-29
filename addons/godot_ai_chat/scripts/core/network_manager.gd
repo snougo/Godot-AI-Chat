@@ -22,12 +22,16 @@ signal chat_stream_request_canceled
 signal connection_check_request_succeeded
 # 当模型列表成功获取并更新后发出
 signal get_model_list_request_succeeded(model_list: Array)
+# 当模型的总结成功完成之后发出
+signal summary_request_succeeded(summary_text: String)
 
 # --- 请求失败信号 ---
 # 当连线检查请求失败时发出
 signal connection_check_request_failed(error: String)
 # 当向API服务器上拉取模型请求失败时发出
 signal get_model_list_request_failed(error: String)
+# 当模型总结失败时发出
+signal summary_request_failed(error: String)
 # 当聊天请求失败时发出
 signal chat_request_failed(error: String)
 
@@ -41,6 +45,8 @@ const CONNECTION_CHECK_TIMEOUT: float = 10.0 # API服务连线检查的超时时
 @onready var connection_check_httprequest: HTTPRequest = $ConnectionCheckHTTPRequest
 # 用于非流式的从API服务器上获取模型列表的请求节点
 @onready var get_model_list_httprequest: HTTPRequest = $GetModelListHTTPRequest
+# 用于非流式的向模型发出和接收总结
+@onready var summary_httprequest: HTTPRequest = $SummaryHTTPRequest
 # 用于处理流式聊天响应的自定义HTTP请求节点
 @onready var chat_streamed_httprequest: ChatStreamedHTTPRequest = $ChatStreamedHTTPRequest
 
@@ -59,9 +65,11 @@ var _usage_data_was_received: bool = false
 func _ready() -> void:
 	# 设置并连接用于连接检查的传统HTTPRequest
 	connection_check_httprequest.timeout = CONNECTION_CHECK_TIMEOUT
-	get_model_list_httprequest.timeout = CONNECTION_CHECK_TIMEOUT
 	connection_check_httprequest.request_completed.connect(self._on_connection_check_request_completed)
+	get_model_list_httprequest.timeout = CONNECTION_CHECK_TIMEOUT
 	get_model_list_httprequest.request_completed.connect(self._on_get_model_list_request_completed)
+	summary_httprequest.timeout = ToolBox.get_plugin_settings().network_timeout
+	summary_httprequest.request_completed.connect(self._on_summary_request_completed)
 	
 	# 连接流式请求节点的信号
 	if is_instance_valid(chat_streamed_httprequest):
@@ -157,6 +165,44 @@ func cancel_stream_request() -> void:
 # 更新当前选择的模型名称。
 func update_model_name(new_model_name: String) -> void:
 	current_model_name = new_model_name
+
+
+# 发起一个非流式的总结请求
+func request_summary(chat_history: Array) -> void:
+	if current_model_name.is_empty():
+		emit_signal("summary_request_failed", "No AI model selected for summarization.")
+		return
+	
+	if not _set_http_request_base_parameters():
+		return
+	
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
+	var summarization_prompt: String = settings.summarization_prompt
+	
+	# 格式化历史记录为Markdown文本
+	var history_text: String = ""
+	for message in chat_history:
+		if message.role == "system": continue
+		
+		match message.role:
+			"user": history_text += "### 🧑‍💻 User\n"
+			"assistant": history_text += "### 🤖 AI Response\n"
+			"tool": history_text += "### ⚙️ Tool Output\n"
+		
+		history_text += message.content + "\n\n>------------\n\n"
+	
+	# 构建请求的上下文
+	var context_for_summary: Array = [
+		{"role": "system", "content": summarization_prompt},
+		{"role": "user", "content": history_text.strip_edges()}
+	]
+	
+	var stream: bool = false # 明确指定为非流式
+	var headers: PackedStringArray = AiServiceAdapter.get_request_headers(api_provider, api_key, stream)
+	var body_dict: Dictionary = AiServiceAdapter.build_chat_request_body(api_provider, current_model_name, context_for_summary, temperature, stream)
+	var url: String = AiServiceAdapter.get_chat_url(api_provider, api_base_url, current_model_name, api_key, stream)
+	
+	summary_httprequest.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(body_dict))
 
 
 #==============================================================================
@@ -265,6 +311,19 @@ func _on_get_model_list_request_completed(_result: HTTPRequest.Result, _response
 	else:
 		var err_msg: String = _handle_request_failure(_result, _response_code, _body)
 		emit_signal("get_model_list_request_failed", err_msg)
+
+
+# 新增：处理总结请求完成的事件
+func _on_summary_request_completed(_result: HTTPRequest.Result, _response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	if _result == HTTPRequest.RESULT_SUCCESS and _response_code == 200:
+		var summary_text: String = AiServiceAdapter.parse_non_stream_chat_response(api_provider, _body)
+		if summary_text.begins_with("[ERROR]"):
+			emit_signal("summary_request_failed", summary_text)
+		else:
+			emit_signal("summary_request_succeeded", summary_text)
+	else:
+		var err_msg: String = _handle_request_failure(_result, _response_code, _body)
+		emit_signal("summary_request_failed", err_msg)
 
 
 # 收到流式数据块时，直接转发信号

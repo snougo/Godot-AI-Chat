@@ -107,3 +107,14 @@ static func update_editor_filesystem(_path) -> void:
 		if editor_filesystem:
 			editor_filesystem.update_file(_path)
 			print(editor_filesystem.get_file_type(_path))
+
+
+# 新增：一个用于从AI响应中移除<think>...</think>标签块的通用函数
+static func remove_think_tags(text: String) -> String:
+	if text.is_empty():
+		return ""
+	# 使用 RegEx 移除 <think> 标签及其内部的所有内容（包括换行符）
+	var think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
+	var cleaned_text: String = think_regex.sub(text, "", true)
+	# 移除可能留下的前后多余的空白
+	return cleaned_text.strip_edges()

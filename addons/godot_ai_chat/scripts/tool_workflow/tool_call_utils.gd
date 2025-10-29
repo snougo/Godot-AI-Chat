@@ -52,12 +52,7 @@ static func _split_concatenated_json(text: String) -> Array[String]:
 static func _extract_raw_json_strings(content: String) -> Array[String]:
 	var raw_strings: Array[String] = []
 	
-	# 新增：用于匹配和移除<think>标签块的正则表达式
-	var think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
-	# 新增：在解析前，先从内容中移除所有<think>...</think>块
-	var cleaned_content: String = think_regex.sub(content, "", true)
-	
-	# 策略 1: 优先尝试解析 gpt-oss 格式
+	# 策略 1: 优先尝试在原始文本中解析 gpt-oss 格式
 	var gpt_oss_regex = RegEx.new()
 	gpt_oss_regex.compile(_GPT_OSS_REGEX)
 	var gpt_oss_match = gpt_oss_regex.search(content)
@@ -66,7 +61,10 @@ static func _extract_raw_json_strings(content: String) -> Array[String]:
 		# 假设 gpt-oss 格式的调用只有一个，直接返回
 		return raw_strings
 	
-	# 策略 2: 回退到标准的 ```json 代码块格式
+	# 策略 2: 如果未找到 gpt-oss 格式，则清理文本并回退到标准的 ```json 代码块格式
+	# 重构：调用 ToolBox 中的通用函数来移除 <think> 标签
+	var cleaned_content: String = ToolBox.remove_think_tags(content)
+	
 	var json_block_regex = RegEx.new()
 	json_block_regex.compile(_JSON_BLOCK_REGEX)
 	var matches = json_block_regex.search_all(cleaned_content)

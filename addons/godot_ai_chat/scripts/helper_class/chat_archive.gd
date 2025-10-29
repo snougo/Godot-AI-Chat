@@ -6,6 +6,8 @@ class_name ChatArchive
 signal chat_load_finished(chat_history)
 # 聊天存档文件存储的固定目录路径。
 const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
+# 新增：聊天总结文件存储的目录路径
+const SUMMARY_DIR: String = "res://addons/godot_ai_chat/chat_summaries/"
 
 
 #==============================================================================
@@ -14,19 +16,9 @@ const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
 
 # 在插件启动时调用，以确保存档目录存在。
 static func initialize_archive_directory() -> void:
-	var global_path: String = ProjectSettings.globalize_path(ARCHIVE_DIR)
-	# 如果目录已存在，则什么都不做。
-	if DirAccess.dir_exists_absolute(global_path):
-		return
-	
-	# 如果不存在，则创建它并扫描文件系统。
-	var err: Error = DirAccess.make_dir_recursive_absolute(global_path)
-	if err == OK:
-		print("Godot AI Chat: Created archive directory at '%s'." % ARCHIVE_DIR)
-		if Engine.is_editor_hint():
-			EditorInterface.get_resource_filesystem().scan()
-	else:
-		push_error("Godot AI Chat: Failed to create archive directory at '%s'. Error: %s" % [ARCHIVE_DIR, error_string(err)])
+	# 重命名为更通用的名称
+	_ensure_directory_exists(ARCHIVE_DIR)
+	_ensure_directory_exists(SUMMARY_DIR)
 
 
 # 获取存档目录中所有聊天存档（.tres 文件）的文件名列表。
@@ -108,3 +100,38 @@ static func save_to_markdown(_chat_history: Array, _file_path: String) -> bool:
 	else:
 		push_error("Godot AI Chat: Failed to save markdown. Error: %s" % FileAccess.get_open_error())
 		return false
+
+
+# 新增：将总结文本保存为 Markdown 文件
+static func save_summary_to_markdown(summary_text: String) -> String:
+	var now: Dictionary = Time.get_datetime_dict_from_system(false)
+	var timestamp_str: String = "summary_%d-%02d-%02d_%02d-%02d-%02d.md" % [now.year, now.month, now.day, now.hour, now.minute, now.second]
+	var file_path: String = SUMMARY_DIR.path_join(timestamp_str)
+	
+	var file: FileAccess = FileAccess.open(file_path, FileAccess.WRITE)
+	if file:
+		file.store_string("# Chat Summary\n\n" + summary_text)
+		print("Godot AI Chat: Summary saved to '%s'" % file_path)
+		return file_path
+	else:
+		push_error("Godot AI Chat: Failed to save summary. Error: %s" % FileAccess.get_open_error())
+		return ""
+
+
+#==============================================================================
+# ## 内部静态辅助函数 ##
+#==============================================================================
+
+# 新增：用于检查并创建目录
+static func _ensure_directory_exists(dir_path: String) -> void:
+	var global_path: String = ProjectSettings.globalize_path(dir_path)
+	if DirAccess.dir_exists_absolute(global_path):
+		return
+	
+	var err: Error = DirAccess.make_dir_recursive_absolute(global_path)
+	if err == OK:
+		print("Godot AI Chat: Created directory at '%s'." % dir_path)
+		if Engine.is_editor_hint():
+			EditorInterface.get_resource_filesystem().scan()
+	else:
+		push_error("Godot AI Chat: Failed to create directory at '%s'. Error: %s" % [dir_path, error_string(err)])

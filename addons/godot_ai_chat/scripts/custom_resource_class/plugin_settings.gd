@@ -20,3 +20,5 @@ class_name PluginSettings
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.7
 # 系统提示词（System Prompt），用于设定AI的角色和行为准则。
 @export_multiline var system_prompt: String = "You are a helpful Godot Engine Assistant."
+# 用于请求内容总结的系统提示词
+@export_multiline var summarization_prompt: String = "Please summarize the following conversation concisely. Identify the key points, decisions made, and any unresolved questions. The summary should be clear and easy to understand for someone who has not read the full conversation."

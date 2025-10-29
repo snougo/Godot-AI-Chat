@@ -108,46 +108,9 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+disabled = true
 text_overrun_behavior = 1
-selected = 0
 fit_to_longest_item = false
-item_count = 18
-popup/item_0/text = "chat_2025-10-02_09-00-34.tres"
-popup/item_0/id = 0
-popup/item_1/text = "chat_2025-10-02_11-08-06.tres"
-popup/item_1/id = 1
-popup/item_2/text = "chat_2025-10-06_16-21-22.tres"
-popup/item_2/id = 2
-popup/item_3/text = "chat_2025-10-07_12-59-04.tres"
-popup/item_3/id = 3
-popup/item_4/text = "chat_2025-10-09_00-20-42.tres"
-popup/item_4/id = 4
-popup/item_5/text = "chat_2025-10-09_00-35-45.tres"
-popup/item_5/id = 5
-popup/item_6/text = "chat_2025-10-09_00-56-17.tres"
-popup/item_6/id = 6
-popup/item_7/text = "chat_2025-10-09_00-59-50.tres"
-popup/item_7/id = 7
-popup/item_8/text = "chat_2025-10-09_01-17-37.tres"
-popup/item_8/id = 8
-popup/item_9/text = "chat_2025-10-09_01-20-18.tres"
-popup/item_9/id = 9
-popup/item_10/text = "chat_2025-10-09_01-28-10.tres"
-popup/item_10/id = 10
-popup/item_11/text = "chat_2025-10-09_15-13-14.tres"
-popup/item_11/id = 11
-popup/item_12/text = "chat_2025-10-09_17-55-48.tres"
-popup/item_12/id = 12
-popup/item_13/text = "chat_2025-10-09_18-53-37.tres"
-popup/item_13/id = 13
-popup/item_14/text = "chat_2025-10-09_18-58-43.tres"
-popup/item_14/id = 14
-popup/item_15/text = "chat_2025-10-09_19-15-36.tres"
-popup/item_15/id = 15
-popup/item_16/text = "chat_2025-10-09_19-19-53.tres"
-popup/item_16/id = 16
-popup/item_17/text = "chat_2025-10-09_19-26-59.tres"
-popup/item_17/id = 17
 
 [node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
 layout_mode = 2
@@ -157,7 +120,6 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text = "Load"
 text_overrun_behavior = 2
 autowrap_mode = 3
-expand_icon = true
 
 [node name="SaveChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
 layout_mode = 2
@@ -167,7 +129,15 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text = "Save"
 text_overrun_behavior = 2
 autowrap_mode = 3
-expand_icon = true
+
+[node name="SummarizeButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Summarize Current Chat Context"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Summarize"
+text_overrun_behavior = 2
+autowrap_mode = 3
 
 [node name="NewChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer"]
 layout_mode = 2
@@ -177,7 +147,6 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text = "New"
 text_overrun_behavior = 2
 autowrap_mode = 3
-expand_icon = true
 
 [node name="HBoxContainer2" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer"]
 layout_mode = 2

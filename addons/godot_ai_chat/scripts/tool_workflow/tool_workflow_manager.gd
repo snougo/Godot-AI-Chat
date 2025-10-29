@@ -171,14 +171,14 @@ func _build_optimized_context() -> Array:
 	var combined_history: Array = full_chat_history + tool_workflow_messages
 	
 	# 步骤 2: 准备长期记忆的用户消息 (逻辑与 CurrentChatWindow 保持一致)
-	var long_term_memory_message: Dictionary = {}
-	var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
-	if not remembered_folder_context.is_empty():
-		var memory_string: String = "The following is Long-Term Memory:\n\n---\n"
-		for path in remembered_folder_context:
-			var folder_tree = remembered_folder_context[path]
-			memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
-		long_term_memory_message = {"role": "user", "content": memory_string.strip_edges(), "is_memory": true}
+	#var long_term_memory_message: Dictionary = {}
+	#var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
+	#if not remembered_folder_context.is_empty():
+		#var memory_string: String = "The following is Long-Term Memory:\n\n---\n"
+		#for path in remembered_folder_context:
+			#var folder_tree = remembered_folder_context[path]
+			#memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
+		#long_term_memory_message = {"role": "tool", "content": memory_string.strip_edges(), "is_memory": true}
 	
 	# 步骤 3: 组装最终要发送给模型的历史记录
 	var chat_messages_for_AI: Array = []
@@ -191,20 +191,20 @@ func _build_optimized_context() -> Array:
 	var conversation_messages = combined_history.filter(func(m): return m.get("role") != "system")
 	
 	# 3.3 在最新用户消息前插入长期记忆
-	if not long_term_memory_message.is_empty():
+	#if not long_term_memory_message.is_empty():
 		# 从后往前找最后一个非记忆的用户消息
-		var last_user_msg_index = -1
-		for i in range(conversation_messages.size() - 1, -1, -1):
-			var msg = conversation_messages[i]
-			if msg.role == "user" and not msg.has("is_memory"):
-				last_user_msg_index = i
-				break
-		
-		if last_user_msg_index != -1:
-			conversation_messages.insert(last_user_msg_index, long_term_memory_message)
-		else:
+		#var last_user_msg_index = -1
+		#for i in range(conversation_messages.size() - 1, -1, -1):
+			#var msg = conversation_messages[i]
+			#if msg.role == "user" and not msg.has("is_memory"):
+				#last_user_msg_index = i
+				#break
+		#
+		#if last_user_msg_index != -1:
+			#conversation_messages.insert(last_user_msg_index, long_term_memory_message)
+		#else:
 			# 如果找不到，就放在最前面
-			conversation_messages.insert(0, long_term_memory_message)
+			#conversation_messages.insert(0, long_term_memory_message)
 	
 	chat_messages_for_AI.append_array(conversation_messages)
 	

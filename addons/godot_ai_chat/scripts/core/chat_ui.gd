@@ -21,6 +21,8 @@ signal save_chat_button_pressed(file_path: String)
 signal save_as_markdown_button_pressed(file_path: String)
 # 当用户选择一个聊天存档并点击加载按钮时发出
 signal load_chat_button_pressed(archive_name: String)
+# 新增：当用户点击总结按钮时发出
+signal summarize_button_pressed
 
 # 定义聊天UI的状态
 enum UIState {
@@ -30,6 +32,7 @@ enum UIState {
 	WAITING_RESPONSE,
 	RESPONSE_GENERATING,
 	TOOLCALLING, 
+	SUMMARIZING, 
 	ERROR
 }
 
@@ -46,6 +49,7 @@ enum ChatMessagesSaveMode {TRES, MARKDOWN}
 @onready var save_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/SaveChatButton
 @onready var save_as_markdown_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SaveAsMarkdownButton
 @onready var load_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/LoadChatButton
+@onready var summarize_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/SummarizeButton
 @onready var model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelSelector
 @onready var model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelNameFilterInput
 @onready var chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
@@ -64,6 +68,7 @@ func _ready() -> void:
 	# 连接UI控件的信号到对应的处理函数
 	send_button.pressed.connect(_on_send_button_pressed)
 	new_chat_button.pressed.connect(_on_new_chat_button_pressed)
+	summarize_button.pressed.connect(_on_summarize_button_pressed)
 	model_selector.item_selected.connect(_on_model_selected)
 	model_name_filter_input.text_changed.connect(_on_model_name_filter_text_changed)
 	settings_panel.settings_saved.connect(_on_settings_save_button_pressed)
@@ -107,6 +112,8 @@ func update_ui_state(_new_state: UIState, _payload: String = "") -> void:
 			_state_response_generating(_payload)
 		UIState.TOOLCALLING:
 			_state_tool_calling(_payload)
+		UIState.SUMMARIZING:
+			_state_summarizing(_payload)
 		UIState.ERROR:
 			_state_error(_payload)
 
@@ -170,6 +177,8 @@ func _state_idle(_payload: String) -> void:
 	user_input.caret_blink = true
 	user_input.caret_type = TextEdit.CARET_TYPE_LINE
 	new_chat_button.disabled = false
+	summarize_button.disabled = false
+	reconnect_button.disabled = false
 
 
 func _state_loading(_payload: String) -> void:
@@ -181,6 +190,8 @@ func _state_loading(_payload: String) -> void:
 	user_input.caret_blink = false
 	user_input.caret_type = TextEdit.CARET_TYPE_LINE
 	new_chat_button.disabled = true
+	summarize_button.disabled = true
+	reconnect_button.disabled = true
 
 
 func _state_connecting(_payload: String) -> void:
@@ -191,6 +202,8 @@ func _state_connecting(_payload: String) -> void:
 	user_input.editable = false
 	user_input.caret_blink = false
 	new_chat_button.disabled = true
+	summarize_button.disabled = true
+	reconnect_button.disabled = true
 
 
 func _state_waiting_response(_payload: String) -> void:
@@ -201,6 +214,9 @@ func _state_waiting_response(_payload: String) -> void:
 	user_input.editable = false
 	user_input.caret_blink = false
 	new_chat_button.disabled = true
+	summarize_button.disabled = true
+	reconnect_button.disabled = true
+	reconnect_button.disabled = true
 
 
 func _state_response_generating(_payload) -> void:
@@ -211,6 +227,8 @@ func _state_response_generating(_payload) -> void:
 	user_input.editable = false
 	user_input.caret_blink = false
 	new_chat_button.disabled = true
+	summarize_button.disabled = true
+	reconnect_button.disabled = true
 
 
 func _state_tool_calling(_payload: String) -> void:
@@ -221,6 +239,17 @@ func _state_tool_calling(_payload: String) -> void:
 	user_input.editable = false
 	user_input.caret_blink = false
 	new_chat_button.disabled = true
+	reconnect_button.disabled = true
+
+
+func _state_summarizing(_payload: String) -> void:
+	status_label.text = _payload if not _payload.is_empty() else "Summarizing..."
+	status_label.modulate = Color.GOLD
+	send_button.disabled = true
+	user_input.editable = false
+	new_chat_button.disabled = true
+	summarize_button.disabled = true
+	reconnect_button.disabled = true
 
 
 func _state_error(_payload: String) -> void:
@@ -231,6 +260,8 @@ func _state_error(_payload: String) -> void:
 	user_input.caret_blink = true
 	user_input.caret_type = TextEdit.CARET_TYPE_LINE
 	new_chat_button.disabled = false
+	summarize_button.disabled = false
+	reconnect_button.disabled = false
 	
 	# 防止从项目设置中启用插件时因API错误弹窗导致和项目设置窗口起冲突报错
 	if init_count == 1:
@@ -308,6 +339,10 @@ func _on_load_chat_button_pressed() -> void:
 	
 	var archive_name = chat_archive_selector.get_item_text(selected_index)
 	emit_signal("load_chat_button_pressed", archive_name)
+
+
+func _on_summarize_button_pressed() -> void:
+	emit_signal("summarize_button_pressed")
 
 
 func _on_file_selected(_path: String) -> void:

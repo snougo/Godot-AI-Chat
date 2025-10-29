@@ -176,6 +176,15 @@ func update_model_name(_model_name: String) -> void:
 	current_model_name = _model_name
 
 
+# 新增：用一条预设总结消息初始化一个新的聊天窗口，但不触发AI请求
+func initialize_chat_with_summarization_message(role: String, content: String) -> void:
+	creat_new_chat_window()
+	var initial_message: Dictionary = {"role": role, "content": content}
+	chat_messages.append(initial_message)
+	# 直接调用UI添加，但不发出 new_user_message_append_completed 信号
+	_add_new_message_block_to_display(initial_message)
+
+
 #==============================================================================
 # ## 内部函数 ##
 #==============================================================================
@@ -189,16 +198,16 @@ func _get_truncated_chat_history() -> Array:
 	var system_prompt: String = settings.system_prompt
 	
 	# 2. 准备长期记忆的用户消息
-	var long_term_memory_message: Dictionary = {}
-	var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
-	
-	if not remembered_folder_context.is_empty():
-		var memory_string: String = "The following is Long-Term Memory:\n\n---\n"
-		for path in remembered_folder_context:
-			var folder_tree = remembered_folder_context[path] # 直接使用字典中的纯净内容
-			memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
-		
-		long_term_memory_message = {"role": "user", "content": memory_string.strip_edges(), "is_memory": true}
+	#var long_term_memory_message: Dictionary = {}
+	#var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
+	#
+	#if not remembered_folder_context.is_empty():
+		#var memory_string: String = "The following is Long-Term Memory:\n\n---\n"
+		#for path in remembered_folder_context:
+			#var folder_tree = remembered_folder_context[path] # 直接使用字典中的纯净内容
+			#memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
+		#
+		#long_term_memory_message = {"role": "tool", "content": memory_string.strip_edges(), "is_memory": true}
 	
 	# 3. (原始逻辑) 处理和截断对话历史
 	var conversation_turns: Array = []
@@ -225,8 +234,8 @@ func _get_truncated_chat_history() -> Array:
 		chat_messages_for_AI.append({"role": "system", "content": system_prompt})
 	
 	# 关键修复：将长期记忆放在对话历史的最前面，紧跟在系统提示词之后
-	if not long_term_memory_message.is_empty():
-		chat_messages_for_AI.append(long_term_memory_message)
+	#if not long_term_memory_message.is_empty():
+		#chat_messages_for_AI.append(long_term_memory_message)
 	
 	# 4.2 放置截断后的对话消息
 	chat_messages_for_AI.append_array(final_messages)
