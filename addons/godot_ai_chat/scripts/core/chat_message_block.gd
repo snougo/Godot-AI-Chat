@@ -49,11 +49,6 @@ var typewriter_accumulator: float = 0.0
 @export var max_typewriter_speed: float = 3000.0
 
 
-#func _ready() -> void:
-	# 启用 _process 函数以驱动打字机效果。
-	#set_process(true)
-
-
 func _process(_delta: float) -> void:
 	# 如果最后一个节点不是一个有效的RichTextLabel实例，则不执行打字机逻辑。
 	if not is_instance_valid(last_ui_node) or not last_ui_node is RichTextLabel:
@@ -61,17 +56,6 @@ func _process(_delta: float) -> void:
 	
 	var rtf: RichTextLabel = last_ui_node
 	var total_chars: int = rtf.get_total_character_count()
-	
-	# 如果可见字符数小于总字符数，则继续逐字显示动画。
-	#if rtf.visible_characters < total_chars:
-		#typewriter_accumulator += _delta
-		#var chars_to_add: int = floor(typewriter_accumulator * typewriter_speed)
-		#if chars_to_add > 0:
-			#rtf.visible_characters = min(rtf.visible_characters + chars_to_add, total_chars)
-			#typewriter_accumulator -= chars_to_add / typewriter_speed
-	#else:
-		# 如果已经全部显示，重置累加器，避免不必要的计算。
-		#typewriter_accumulator = 0.0
 	
 	# 如果可见字符数小于总字符数，则继续逐字显示动画。
 	if rtf.visible_characters < total_chars:
@@ -325,11 +309,6 @@ func _parse_line_in_text_state(_line: String) -> void:
 		var fence_str: String = m_open.get_string(1)
 		code_fence_char = fence_str # 记录围栏字符和长度，用于精确匹配结束标记。
 		code_fence_len = fence_str.length()
-		
-		# 提取代码语言提示（例如 ```python 中的 "python"）。
-		#var code_language_hint: String = _line.substr(m_open.get_end(0))
-		# 将语言提示作为代码块的第一行内容添加。
-		#_append_to_code_block(code_language_hint + "\n")
 		
 		# 不提取语言提示，而是用一个换行符代替，以避免代码块开头出现语言标记。
 		_append_to_code_block("\n")

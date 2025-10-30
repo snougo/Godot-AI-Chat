@@ -197,29 +197,22 @@ func _get_truncated_chat_history() -> Array:
 	var max_turns: int = settings.max_chat_turns
 	var system_prompt: String = settings.system_prompt
 	
-	# 2. 准备长期记忆的用户消息
-	#var long_term_memory_message: Dictionary = {}
-	#var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
-	#
-	#if not remembered_folder_context.is_empty():
-		#var memory_string: String = "The following is Long-Term Memory:\n\n---\n"
-		#for path in remembered_folder_context:
-			#var folder_tree = remembered_folder_context[path] # 直接使用字典中的纯净内容
-			#memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
-		#
-		#long_term_memory_message = {"role": "tool", "content": memory_string.strip_edges(), "is_memory": true}
-	
 	# 3. (原始逻辑) 处理和截断对话历史
 	var conversation_turns: Array = []
 	var current_turn: Array = []
 	for message in chat_messages:
-		if message.get("role") == "system": continue
+		if message.get("role") == "system":
+			continue
 		if message.get("role") == "user":
-			if not current_turn.is_empty(): conversation_turns.append(current_turn)
+			if not current_turn.is_empty():
+				conversation_turns.append(current_turn)
 			current_turn = [message]
 		else:
-			if not current_turn.is_empty(): current_turn.append(message)
-	if not current_turn.is_empty(): conversation_turns.append(current_turn)
+			if not current_turn.is_empty():
+				current_turn.append(message)
+	
+	if not current_turn.is_empty():
+		conversation_turns.append(current_turn)
 	
 	var truncated_turns: Array = conversation_turns.slice(-max_turns) if conversation_turns.size() > max_turns else conversation_turns
 	
@@ -233,24 +226,8 @@ func _get_truncated_chat_history() -> Array:
 	if not system_prompt.is_empty():
 		chat_messages_for_AI.append({"role": "system", "content": system_prompt})
 	
-	# 关键修复：将长期记忆放在对话历史的最前面，紧跟在系统提示词之后
-	#if not long_term_memory_message.is_empty():
-		#chat_messages_for_AI.append(long_term_memory_message)
-	
 	# 4.2 放置截断后的对话消息
 	chat_messages_for_AI.append_array(final_messages)
-	
-	# 4.3 在用户最新消息前，插入长期记忆作为上下文
-	#if not long_term_memory_message.is_empty():
-		#var last_user_msg_index = -1
-		#for i in range(chat_messages_for_AI.size() - 1, -1, -1):
-			#if chat_messages_for_AI[i].role == "user":
-				#last_user_msg_index = i
-				#break
-		#if last_user_msg_index != -1:
-			#chat_messages_for_AI.insert(last_user_msg_index, long_term_memory_message)
-		#else:
-			#chat_messages_for_AI.append(long_term_memory_message)
 	
 	return chat_messages_for_AI
 

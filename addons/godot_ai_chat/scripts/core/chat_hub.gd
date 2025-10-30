@@ -191,7 +191,7 @@ func _on_summary_request_succeeded(summary_text: String) -> void:
 	var initial_message_content: String = "This is a summary of the previous conversation. Please remember it for our new chat:\n\n---\n\n" + cleaned_summary
 	
 	# 4. 使用新函数初始化聊天窗口
-	current_chat_window.initialize_chat_with_summarization_message("tool", initial_message_content)
+	current_chat_window.initialize_chat_with_summarization_message("user", initial_message_content)
 	
 	# 5. 恢复UI状态并显示成功信息
 	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Summary complete. New chat started.")
@@ -217,10 +217,6 @@ func _on_stop_button_pressed() -> void:
 	# 放下“门卫”旗帜，为下一次对话做准备
 	_is_canceling = false
 
-
-#==============================================================================
-# ## 内部函数 ##
-#==============================================================================
 
 # 当一个新的聊天请求即将发送时调用
 func _on_chat_request_sending() -> void:
@@ -298,6 +294,10 @@ func _on_tool_workflow_failed(_error_message: String) -> void:
 	# 命令 ChatUI 恢复空闲状态
 	chat_ui.on_assistant_message_appending_complete()
 
+
+#==============================================================================
+# ## 内部函数 ##
+#==============================================================================
 
 # 集中处理所有与流式请求相关的信号连接的清理工作
 func _cleanup_stream_connections() -> void:

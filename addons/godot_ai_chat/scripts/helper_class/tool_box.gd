@@ -7,7 +7,7 @@ const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 
 #==============================================================================
-# ## 静态函数 ##
+# ## 公共函数 ##
 #==============================================================================
 
 static func get_plugin_settings() -> PluginSettings:
@@ -109,7 +109,7 @@ static func update_editor_filesystem(_path) -> void:
 			print(editor_filesystem.get_file_type(_path))
 
 
-# 新增：一个用于从AI响应中移除<think>...</think>标签块的通用函数
+# 用于从AI响应中移除<think>...</think>标签块的通用函数
 static func remove_think_tags(text: String) -> String:
 	if text.is_empty():
 		return ""

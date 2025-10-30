@@ -45,26 +45,7 @@ func cleanup_connections() -> void:
 
 
 func tool_workflow_start(_response_data: Dictionary) -> void:
-	#var normalized_response: Dictionary = ToolCallUtils.tool_call_converter(_response_data)
-	# 工作流的第一条消息就是AI的工具调用请求
-	#tool_workflow_messages.append(normalized_response)
-	#_process_ai_response(normalized_response)
 	_process_ai_response(_response_data)
-
-
-# 用于从外部安全地断开所有信号连接
-#func cleanup_connections() -> void:
-	#var next_chunk_callable = Callable(self, "_on_next_chunk")
-	#if network_manager.is_connected("new_stream_chunk_received", next_chunk_callable):
-		#network_manager.new_stream_chunk_received.disconnect(next_chunk_callable)
-	#
-	#var stream_ended_callable = Callable(self, "_on_next_stream_ended")
-	#if network_manager.is_connected("chat_stream_request_completed", stream_ended_callable):
-		#network_manager.chat_stream_request_completed.disconnect(stream_ended_callable)
-	#
-	#var request_failed_callable = Callable(self, "_on_next_request_failed")
-	#if network_manager.is_connected("chat_request_failed", request_failed_callable):
-		#network_manager.chat_request_failed.disconnect(request_failed_callable)
 
 
 #==============================================================================
@@ -170,16 +151,6 @@ func _build_optimized_context() -> Array:
 	# 这确保了所有中间步骤都被保留。
 	var combined_history: Array = full_chat_history + tool_workflow_messages
 	
-	# 步骤 2: 准备长期记忆的用户消息 (逻辑与 CurrentChatWindow 保持一致)
-	#var long_term_memory_message: Dictionary = {}
-	#var remembered_folder_context: Dictionary = LongTermMemoryManager.get_all_folder_context()
-	#if not remembered_folder_context.is_empty():
-		#var memory_string: String = "The following is Long-Term Memory:\n\n---\n"
-		#for path in remembered_folder_context:
-			#var folder_tree = remembered_folder_context[path]
-			#memory_string += "路径 `%s` 的文件夹结构:\n```\n%s\n```\n\n" % [path, folder_tree]
-		#long_term_memory_message = {"role": "tool", "content": memory_string.strip_edges(), "is_memory": true}
-	
 	# 步骤 3: 组装最终要发送给模型的历史记录
 	var chat_messages_for_AI: Array = []
 	
@@ -189,22 +160,6 @@ func _build_optimized_context() -> Array:
 	
 	# 3.2 放置合并后的完整对话消息
 	var conversation_messages = combined_history.filter(func(m): return m.get("role") != "system")
-	
-	# 3.3 在最新用户消息前插入长期记忆
-	#if not long_term_memory_message.is_empty():
-		# 从后往前找最后一个非记忆的用户消息
-		#var last_user_msg_index = -1
-		#for i in range(conversation_messages.size() - 1, -1, -1):
-			#var msg = conversation_messages[i]
-			#if msg.role == "user" and not msg.has("is_memory"):
-				#last_user_msg_index = i
-				#break
-		#
-		#if last_user_msg_index != -1:
-			#conversation_messages.insert(last_user_msg_index, long_term_memory_message)
-		#else:
-			# 如果找不到，就放在最前面
-			#conversation_messages.insert(0, long_term_memory_message)
 	
 	chat_messages_for_AI.append_array(conversation_messages)
 	
@@ -220,9 +175,6 @@ func _on_next_chunk(_chunk: String) -> void:
 
 
 func _on_next_stream_ended() -> void:
-	# 关键修复：在处理逻辑前，立即断开所有相关连接
-	#network_manager.new_stream_chunk_received.disconnect(self._on_next_chunk)
-	
 	# 这是工作流的后续步骤。一个新的助手消息已经从网络流接收完毕。
 	# 这个新消息不存在于初始的 full_chat_history 中，
 	# 所以我们必须在这里将它的一个拷贝添加到工作流的内部历史中。
@@ -230,12 +182,7 @@ func _on_next_stream_ended() -> void:
 	tool_workflow_messages.append(new_assistant_message)
 	# 然后再将这个新消息交给处理引擎。
 	_process_ai_response(new_assistant_message)
-	# 将新收到的AI响应添加到工作流历史
-	#tool_workflow_messages.append(temp_assistant_response.duplicate(true))
-	#_process_ai_response(temp_assistant_response.duplicate(true))
 
 
 func _on_next_request_failed(_error_message: String) -> void:
-	# 关键修复：在处理逻辑前，立即断开所有相关连接
-	#network_manager.new_stream_chunk_received.disconnect(self._on_next_chunk)
 	emit_signal("tool_workflow_failed", _error_message)

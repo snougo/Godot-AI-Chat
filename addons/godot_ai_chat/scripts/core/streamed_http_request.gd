@@ -422,6 +422,10 @@ func _process_stream_line(_line_content: String, _json_parser: JSON, _api_provid
 	return result
 
 
+#==============================================================================
+# ## 信号回调函数 ##
+#==============================================================================
+
 func _on_chunk_received_from_thread(_chunk_text: String, _received_thread_id: int) -> void:
 	#print("[NETWORK CHUNK RECEIVED] Length: ", chunk_text.length(), " | Content: '", chunk_text.replace("\n", "\\n"), "'")
 	# 只有当回调来自当前活动的线程时，才发出信号
@@ -471,9 +475,3 @@ func _on_stream_request_failed_from_thread(_error_message: String, _finished_thr
 			_thread.wait_to_finish()
 			_thread = null
 			print("[MAIN_THREAD] Thread object cleaned up after failure.")
-
-
-#func _on_usage_data_received_from_thread(_usage_data: Dictionary, _received_thread_id: int) -> void:
-	#print("[DEBUG 1] StreamedHTTPRequest: Received usage data from thread: ", _usage_data)
-	#if not is_queued_for_deletion() and _received_thread_id == _current_thread_id:
-		#emit_signal("stream_usage_data_received", _usage_data)
