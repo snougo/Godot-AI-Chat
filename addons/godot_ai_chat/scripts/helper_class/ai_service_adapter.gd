@@ -133,11 +133,14 @@ static func parse_stream_usage_chunk(_api_provider: String, _json_data: Dictiona
 
 # [优化] 统一的工具定义函数
 # for_gemini: 如果为 true，则使用大写类型 (OBJECT, STRING)，否则使用标准小写 (object, string)
-static func _get_tool_definition(for_gemini: bool = false) -> Dictionary:
+static func _get_all_tool_definitions(for_gemini: bool = false) -> Array:
 	var type_object = "OBJECT" if for_gemini else "object"
 	var type_string = "STRING" if for_gemini else "string"
 	
-	return {
+	var tools: Array = []
+	
+	# --- 工具 1: get_context (获取文件内容) ---
+	tools.append({
 		"name": "get_context",
 		"description": "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, or documentation files.",
 		"parameters": {
@@ -155,7 +158,9 @@ static func _get_tool_definition(for_gemini: bool = false) -> Dictionary:
 			},
 			"required": ["context_type", "path"]
 		}
-	}
+	})
+	
+	return tools
 
 
 #==============================================================================
@@ -193,11 +198,17 @@ class OpenAICompatibleAPI:
 			"stream": _stream
 		}
 		
-		# [新增] 正式向 OpenAI 声明工具
-		body["tools"] = [{
-			"type": "function",
-			"function": AiServiceAdapter._get_tool_definition(false)
-		}]
+		# [修改] 遍历定义列表，构建 OpenAI 格式的 tools 数组
+		var tools_list: Array = []
+		var definitions = AiServiceAdapter._get_all_tool_definitions(false) # false = 小写类型
+		
+		for tool_def in definitions:
+			tools_list.append({
+				"type": "function",
+				"function": tool_def
+			})
+			
+		body["tools"] = tools_list
 		body["tool_choice"] = "auto"
 		
 		if _stream:
@@ -236,32 +247,29 @@ class OpenAICompatibleAPI:
 			# 2. 处理工具调用 (Native Tool Call) -> 桥接到 Markdown JSON
 			if delta.has("tool_calls") and not delta.tool_calls.is_empty():
 				var tool_call = delta.tool_calls[0]
+				var index = tool_call.get("index", 0) # [新增] 获取当前工具的索引
 				var function = tool_call.get("function", {})
 				
 				# A. 检测到工具调用的开始 (通常包含 name)
 				if function.has("name") and not function.name.is_empty():
-					# 开始伪造 JSON 代码块
-					# 注意：这里我们手动构造 JSON 的前半部分
+					# [修复] 如果这不是第一个工具 (index > 0)，说明上一个工具刚刚结束
+					# 我们需要先闭合上一个 JSON 代码块，再开始新的
+					if index > 0:
+						output_text += "\n}\n```\n"
+					
+					# 开始伪造新的 JSON 代码块
 					output_text += "\n```json\n{\n  \"tool_name\": \"%s\",\n  \"arguments\": " % function.name
 				
 				# B. 检测到参数流 (arguments)
 				if function.has("arguments") and not function.arguments.is_empty():
-					# 直接将参数片段流式输出。
-					# 因为 OpenAI 的 arguments 本身就是 JSON 对象的字符串表示，
-					# 所以直接拼接进去，最终会形成 { "tool_name": "...", "arguments": { ... } } 的结构
 					output_text += function.arguments
 			
 			# 3. 检测结束信号
-			# 如果是因为 tool_calls 结束，或者是 stop，我们需要闭合 JSON 代码块
+			# 当整个流结束时，闭合最后一个工具调用的代码块
 			if finish_reason == "tool_calls" or finish_reason == "stop":
-				# 只有当我们之前可能在输出工具调用时才闭合。
-				# 由于这是无状态函数，我们无法确切知道上一帧是否是工具调用。
-				# 但通常 finish_reason 出现时，delta 是空的。
-				# 为了保险，我们依赖 ChatBackend 的容错性，或者这里做一个简单的假设：
-				# 如果这个 chunk 没有任何 content，但有 finish_reason，且之前有过 tool_calls 逻辑...
-				# 实际上，最稳妥的方式是：如果这一帧有 tool_calls 或者是 tool_calls 结束，我们尝试闭合。
-				
-				# 简化策略：在 OpenAI 中，finish_reason="tool_calls" 意味着工具参数传输完毕。
+				# 只有当之前有工具调用时才闭合 (简单的判断逻辑)
+				# 为了防止在普通文本对话结束时多输出一个闭合符，我们可以依赖 ChatBackend 的正则容错性，
+				# 或者更严谨一点：finish_reason="tool_calls" 明确表示是工具调用结束。
 				if finish_reason == "tool_calls":
 					output_text += "\n}\n```\n"
 		
@@ -357,9 +365,9 @@ class GeminiAPI:
 			]
 		}
 		
-		# [新增] 发送工具定义
+		# [修改] Gemini 格式：tools 是一个包含 function_declarations 列表的对象
 		body["tools"] = [{
-			"function_declarations": [AiServiceAdapter._get_tool_definition(true)]
+			"function_declarations": AiServiceAdapter._get_all_tool_definitions(true) # true = 大写类型
 		}]
 		
 		if not system_instruction.is_empty():
