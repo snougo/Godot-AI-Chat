@@ -80,18 +80,27 @@ static func tool_call_converter(response_dict: Dictionary) -> Dictionary:
 		# API 接口的 arguments 字段应该是一个 JSON 字符串
 		var arguments_string: String = JSON.stringify(tool_args)
 		
-		structured_calls.append({
-			"id": "call_id_%d" % i, # 使用一个更通用的 id
+		# [修复开始] -------------------------------------------------
+		# 构建基础结构
+		var call_data = {
+			"id": "call_id_%d" % i,
 			"type": "function",
 			"function": {
 				"name": tool_name,
 				"arguments": arguments_string
 			}
-		})
+		}
+		
+		# 如果存在 gemini_thought_signature，则透传它
+		if tool_call.has("gemini_thought_signature"):
+			call_data["gemini_thought_signature"] = tool_call["gemini_thought_signature"]
+			
+		structured_calls.append(call_data)
+		# [修复结束] -------------------------------------------------
 	
 	# 将格式化后的工具调用数组添加到新字典中
 	new_response["tool_calls"] = structured_calls
-	
+	print("[ToolCallUtils] Generated tool_calls: ", structured_calls) # 添加这行
 	return new_response
 
 

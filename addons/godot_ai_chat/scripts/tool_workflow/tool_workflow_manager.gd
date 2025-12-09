@@ -58,9 +58,20 @@ func _process_ai_response(_response_data: Dictionary) -> void:
 		# 关键修复：不再在这里 append(_response_data)。
 		# 助手消息只在它们被最终确定时（即从网络流接收完毕后）才被添加。
 		var normalized_response: Dictionary = ToolCallUtils.tool_call_converter(_response_data)
+		
+		# [关键修复] 更新 full_chat_history 中的助手消息
+		# 必须确保 API 看到的助手消息包含 tool_calls 字段
+		if not full_chat_history.is_empty():
+			# 从后往前查找最后一条助手消息
+			for i in range(full_chat_history.size() - 1, -1, -1):
+				if full_chat_history[i].get("role") == "assistant":
+					full_chat_history[i] = normalized_response
+					print("[ToolWorkflowManager] Updated assistant message at index %d with tool_calls." % i)
+					break
+		
 		var tool_calls: Array = normalized_response.get("tool_calls", [])
 		_execute_tools(tool_calls)
-		
+	
 	# 如果没有工具调用，说明工作流结束
 	elif _response_data.has("content"):
 		# 这是工作流的最终答案，它不是历史的一部分，而是工作流的“返回值”。
@@ -115,6 +126,7 @@ func _execute_tools(_tool_calls: Array) -> void:
 		
 		var tool_message_for_api = {
 			"role": "tool",
+			"name": function_name,
 			"tool_call_id": tool_call_id,
 			"content": result_content
 		}

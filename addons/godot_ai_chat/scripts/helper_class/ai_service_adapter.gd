@@ -16,7 +16,8 @@ static func get_request_headers(_api_provider: String, _api_key: String, _stream
 				headers.append("Accept: text/event-stream")
 			headers.append_array(OpenAICompatibleAPI._get_additional_headers(_api_key))
 		"Google Gemini":
-			pass # Gemini 不需要额外的认证头，API Key 在 URL 中
+			# [修复] 将 API Key 放入 Header 中，而不是 URL
+			headers.append("x-goog-api-key: %s" % _api_key)
 	return headers
 
 
@@ -127,6 +128,37 @@ static func parse_stream_usage_chunk(_api_provider: String, _json_data: Dictiona
 
 
 #==============================================================================
+# ## 内部私有函数 ##
+#==============================================================================
+
+# [优化] 统一的工具定义函数
+# for_gemini: 如果为 true，则使用大写类型 (OBJECT, STRING)，否则使用标准小写 (object, string)
+static func _get_tool_definition(for_gemini: bool = false) -> Dictionary:
+	var type_object = "OBJECT" if for_gemini else "object"
+	var type_string = "STRING" if for_gemini else "string"
+	
+	return {
+		"name": "get_context",
+		"description": "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, or documentation files.",
+		"parameters": {
+			"type": type_object,
+			"properties": {
+				"context_type": {
+					"type": type_string,
+					"enum": ["folder_structure", "scene_tree", "gdscript", "text-based_file"],
+					"description": "The type of context to retrieve."
+				},
+				"path": {
+					"type": type_string,
+					"description": "The relative path to the file or directory, starting with res://"
+				}
+			},
+			"required": ["context_type", "path"]
+		}
+	}
+
+
+#==============================================================================
 # ## 内部私有实现 ##
 #==============================================================================
 
@@ -144,13 +176,30 @@ class OpenAICompatibleAPI:
 
 
 	static func _build_chat_request_body(_model_name: String, _messages: Array, _temperature: float, _stream: bool) -> Dictionary:
+		# 1. 清洗逻辑：OpenAI 的 tool 消息不需要 'name' 字段，只需 'tool_call_id'
+		var clean_messages: Array = []
+		for msg in _messages:
+			if msg.get("role") == "tool" and msg.has("name"):
+				var clean_msg = msg.duplicate()
+				clean_msg.erase("name")
+				clean_messages.append(clean_msg)
+			else:
+				clean_messages.append(msg)
+		
 		var body: Dictionary = {
 			"model": _model_name,
-			"messages": _messages,
+			"messages": clean_messages,
 			"temperature": _temperature,
 			"stream": _stream
 		}
-		# 如果是流式请求，向这个 `body` 字典中添加新的键
+		
+		# [新增] 正式向 OpenAI 声明工具
+		body["tools"] = [{
+			"type": "function",
+			"function": AiServiceAdapter._get_tool_definition(false)
+		}]
+		body["tool_choice"] = "auto"
+		
 		if _stream:
 			body["stream_options"] = {"include_usage": true}
 		
@@ -173,13 +222,50 @@ class OpenAICompatibleAPI:
 
 
 	static func _parse_stream_chunk(_json: Dictionary) -> String:
+		var output_text: String = ""
+		
 		if _json.has("choices") and not _json.choices.is_empty():
 			var choice = _json.choices[0]
-			if choice.has("delta") and choice.delta.has("content"):
-				var content = choice.delta.get("content")
-				if content is String:
-					return content
-		return ""
+			var delta = choice.get("delta", {})
+			var finish_reason = choice.get("finish_reason")
+			
+			# 1. 处理普通文本内容
+			if delta.has("content") and delta.content is String:
+				output_text += delta.content
+			
+			# 2. 处理工具调用 (Native Tool Call) -> 桥接到 Markdown JSON
+			if delta.has("tool_calls") and not delta.tool_calls.is_empty():
+				var tool_call = delta.tool_calls[0]
+				var function = tool_call.get("function", {})
+				
+				# A. 检测到工具调用的开始 (通常包含 name)
+				if function.has("name") and not function.name.is_empty():
+					# 开始伪造 JSON 代码块
+					# 注意：这里我们手动构造 JSON 的前半部分
+					output_text += "\n```json\n{\n  \"tool_name\": \"%s\",\n  \"arguments\": " % function.name
+				
+				# B. 检测到参数流 (arguments)
+				if function.has("arguments") and not function.arguments.is_empty():
+					# 直接将参数片段流式输出。
+					# 因为 OpenAI 的 arguments 本身就是 JSON 对象的字符串表示，
+					# 所以直接拼接进去，最终会形成 { "tool_name": "...", "arguments": { ... } } 的结构
+					output_text += function.arguments
+			
+			# 3. 检测结束信号
+			# 如果是因为 tool_calls 结束，或者是 stop，我们需要闭合 JSON 代码块
+			if finish_reason == "tool_calls" or finish_reason == "stop":
+				# 只有当我们之前可能在输出工具调用时才闭合。
+				# 由于这是无状态函数，我们无法确切知道上一帧是否是工具调用。
+				# 但通常 finish_reason 出现时，delta 是空的。
+				# 为了保险，我们依赖 ChatBackend 的容错性，或者这里做一个简单的假设：
+				# 如果这个 chunk 没有任何 content，但有 finish_reason，且之前有过 tool_calls 逻辑...
+				# 实际上，最稳妥的方式是：如果这一帧有 tool_calls 或者是 tool_calls 结束，我们尝试闭合。
+				
+				# 简化策略：在 OpenAI 中，finish_reason="tool_calls" 意味着工具参数传输完毕。
+				if finish_reason == "tool_calls":
+					output_text += "\n}\n```\n"
+		
+		return output_text
 
 
 	static func _parse_non_stream_response(_body: PackedByteArray) -> String:
@@ -199,7 +285,7 @@ class GeminiAPI:
 		var system_instruction: Dictionary = {}
 		var conversation_messages: Array = []
 		
-		# 分离系统提示和对话消息
+		# 分离系统提示
 		if not _messages.is_empty() and _messages[0]["role"] == "system":
 			system_instruction = {"parts": [{"text": _messages[0]["content"]}]}
 			conversation_messages = _messages.slice(1)
@@ -208,14 +294,74 @@ class GeminiAPI:
 		
 		# 转换消息格式
 		for msg in conversation_messages:
-			var role: String = "model" if msg["role"] == "assistant" else "user"
-			var content_part: Dictionary = {"parts": [{"text": msg["content"]}]}
-			gemini_contents.append({"role": role, "parts": content_part.parts})
+			var role: String = "user"
+			var parts: Array = []
+			
+			if msg["role"] == "assistant":
+				role = "model"
+				# 处理模型发起的工具调用
+				if msg.has("tool_calls") and not msg["tool_calls"].is_empty():
+					for tool_call in msg["tool_calls"]:
+						var function_data = tool_call.get("function", {})
+						var args_str = function_data.get("arguments", "{}")
+						var args_obj = JSON.parse_string(args_str)
+						if args_obj == null: args_obj = {}
+						
+						# 构建 Part 对象
+						var part_obj = {
+							"functionCall": {
+								"name": function_data.get("name", ""),
+								"args": args_obj
+							}
+						}
+						
+						# [修复] 将 thoughtSignature 放在 Part 对象中，与 functionCall 平级
+						if tool_call.has("gemini_thought_signature"):
+							# 注意：发送给 API 时必须使用 "thoughtSignature" 这个键名
+							part_obj["thoughtSignature"] = tool_call["gemini_thought_signature"]
+						
+						parts.append(part_obj)
+				else:
+					parts.append({"text": msg.get("content", "")})
+			
+			elif msg["role"] == "tool":
+				role = "user"
+				# 处理工具执行结果
+				parts.append({
+					"functionResponse": {
+						"name": msg.get("name", "unknown_tool"),
+						"response": {
+							"name": msg.get("name", "unknown_tool"),
+							"content": msg.get("content", "")
+						}
+					}
+				})
+			
+			else:
+				# 普通用户消息
+				role = "user"
+				parts.append({"text": msg.get("content", "")})
+			
+			if not parts.is_empty():
+				gemini_contents.append({"role": role, "parts": parts})
 		
 		var body: Dictionary = {
 			"contents": gemini_contents,
-			"generationConfig": {"temperature": _temperature}
+			"generationConfig": {"temperature": _temperature},
+			# [新增] 放宽安全设置
+			"safetySettings": [
+				{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+				{"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+				{"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+				{"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+			]
 		}
+		
+		# [新增] 发送工具定义
+		body["tools"] = [{
+			"function_declarations": [AiServiceAdapter._get_tool_definition(true)]
+		}]
+		
 		if not system_instruction.is_empty():
 			body["system_instruction"] = system_instruction
 		
@@ -227,12 +373,12 @@ class GeminiAPI:
 		var action: String = "streamGenerateContent" if _stream else "generateContent"
 		var url_with_version: String = _base_url.path_join("v1beta/models")
 		var final_url: String = url_with_version.path_join(_model_name)
-		return "{url}:{action}?key={key}".format({"url": final_url, "action": action, "key": _api_key})
+		return "{url}:{action}".format({"url": final_url, "action": action})
 
 
 	static func _get_models_url(_base_url: String, _api_key: String) -> String:
 		var url_with_version: String = _base_url.path_join("v1beta/models")
-		return "{url}?key={key}".format({"url": url_with_version, "key": _api_key})
+		return url_with_version
 
 
 	static func _parse_models_response(_body: PackedByteArray) -> Array:
@@ -248,8 +394,37 @@ class GeminiAPI:
 			var candidate = _json.candidates[0]
 			if candidate.has("content") and candidate.content.has("parts"):
 				for part in candidate.content.parts:
+					# 情况 1: 普通文本
 					if part.has("text"):
 						text_chunk += part.text
+					
+					# 情况 2: 原生工具调用
+					if part.has("functionCall"):
+						var func_call = part.functionCall
+						var func_name = func_call.get("name", "")
+						var func_args = func_call.get("args", {})
+						
+						# [修复] 从 Part 层级获取 thoughtSignature
+						# 注意：API 返回时可能是 thoughtSignature (驼峰)
+						var signature = null
+						if part.has("thoughtSignature"):
+							signature = part["thoughtSignature"]
+						# 防御性编程：也检查一下 functionCall 内部，虽然报错说不在那里，但万一 API 变动
+						elif func_call.has("thoughtSignature"):
+							signature = func_call["thoughtSignature"]
+						
+						# 构造伪装的 JSON 字符串
+						var tool_payload = {
+							"tool_name": func_name,
+							"arguments": func_args
+						}
+						
+						# 将签名藏在 payload 中
+						if signature != null:
+							tool_payload["gemini_thought_signature"] = signature
+						
+						text_chunk += "\n```json\n" + JSON.stringify(tool_payload) + "\n```\n"
+		
 		return text_chunk
 
 
