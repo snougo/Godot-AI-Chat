@@ -166,6 +166,21 @@ static func _extract_raw_json_strings(content: String) -> Array[String]:
 	# 重构：调用 ToolBox 中的通用函数来移除 <think> 标签
 	var cleaned_content: String = ToolBox.remove_think_tags(content)
 	
+	# 针对 OpenAI 兼容 API 流式传输中 finish_reason="stop" 导致 JSON 块未闭合的容错处理。
+	# AiServiceAdapter 生成的块以 ```json 开头。
+	# 如果我们发现最后一个 ```json 后面没有对应的闭合标记，我们手动补全它。
+	# 补全内容包括 JSON 对象的闭合大括号 '}' 和 Markdown 代码块的闭合 '```'。
+	var last_open_fence = cleaned_content.rfind("```json")
+	if last_open_fence != -1:
+		# 从最后一个开头向后找闭合标记
+		var close_fence = cleaned_content.find("```", last_open_fence + 7) # +7 是 "```json".length()
+		
+		# 如果找不到闭合标记，说明被截断了
+		if close_fence == -1:
+			print("[ToolCallUtils] Detected unclosed tool call block (likely due to 'stop' finish_reason). Auto-closing.")
+			# 补全：换行 + 包装对象的闭合括号 + 换行 + 代码块闭合
+			cleaned_content += "\n}\n```"
+	
 	var json_block_regex = RegEx.new()
 	json_block_regex.compile(_JSON_BLOCK_REGEX)
 	var matches = json_block_regex.search_all(cleaned_content)

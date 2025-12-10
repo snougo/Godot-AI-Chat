@@ -55,7 +55,7 @@ func _execute_tool_call(_tool_name: String, _arguments: Dictionary) -> Dictionar
 				"scene_tree": return context_provider.get_scene_tree_as_markdown(path)
 				"gdscript": return context_provider.get_script_content_as_markdown(path)
 				"text-based_file": return context_provider.get_text_content_as_markdown(path)
-				"image": return context_provider.get_image_metadata_as_markdown(path)
+				"image-meta": return context_provider.get_image_metadata_as_markdown(path)
 				_:
 					var feedback = ToolCallUtils.handle_tool_call_error("unknown_context_type", {"context_type": context_type})
 					return {"success": false, "data": feedback}
