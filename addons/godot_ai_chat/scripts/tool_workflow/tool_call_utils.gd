@@ -6,9 +6,6 @@ class_name ToolCallUtils
 # (?si) flags: s (dotall) allows . to match newlines, i makes it case-insensitive.
 const _JSON_BLOCK_REGEX = "(?si)```json\\s*(.*?)\\s*```"
 
-# Regex to find a specific gpt-oss tool call format.
-const _GPT_OSS_REGEX = "(?s)<\\|channel\\|>\\s*commentary\\s+to=([a-zA-Z0-9_.]+)\\s*<\\|constrain\\|>\\s*json\\s*<\\|message\\|>\\s*(\\{.*\\})"
-
 
 #==============================================================================
 # ## 公共静态函数 ##
@@ -166,16 +163,6 @@ static func _split_concatenated_json(text: String) -> Array[String]:
 static func _extract_raw_json_strings(content: String) -> Array[String]:
 	var raw_strings: Array[String] = []
 	
-	# 策略 1: 优先尝试在原始文本中解析 gpt-oss 格式
-	var gpt_oss_regex = RegEx.new()
-	gpt_oss_regex.compile(_GPT_OSS_REGEX)
-	var gpt_oss_match = gpt_oss_regex.search(content)
-	if gpt_oss_match:
-		raw_strings.append(gpt_oss_match.get_string(2).strip_edges())
-		# 假设 gpt-oss 格式的调用只有一个，直接返回
-		return raw_strings
-	
-	# 策略 2: 如果未找到 gpt-oss 格式，则清理文本并回退到标准的 ```json 代码块格式
 	# 重构：调用 ToolBox 中的通用函数来移除 <think> 标签
 	var cleaned_content: String = ToolBox.remove_think_tags(content)
 	

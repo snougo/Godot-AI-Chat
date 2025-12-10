@@ -22,16 +22,7 @@ var _mutex: Mutex = Mutex.new()
 # 用于区分不同的线程任务，防止旧线程的回调影响新线程的状态。
 var _current_thread_id: int = 0
 
-var _gpt_oss_tool_call_regex: RegEx
-var _gpt_oss_commentary_regex: RegEx
-
 var _last_usage_data_in_stream: Dictionary = {}
-
-
-func _ready() -> void:
-	# 初始化 RegEx 对象，避免在流式解析中反复编译，提高性能
-	_gpt_oss_tool_call_regex = RegEx.create_from_string("(?s)<\\|channel\\|>\\s*commentary\\s+to=[a-zA-Z0-9_.]+\\s*<\\|constrain\\|>\\s*json\\s*<\\|message\\|>\\s*(\\{.*?\\})")
-	_gpt_oss_commentary_regex = RegEx.create_from_string("(?s)<\\|channel\\|>commentary<\\|message\\|>(.*?)<\\|end\\|>")
 
 
 # 当此节点从场景树中移除时，Godot会自动调用此函数进行清理，确保后台线程被安全停止的关键。
