@@ -187,8 +187,7 @@ func set_message_from_archive_async(_role: String, _content: String, _model_name
 	await _render_content_by_line_async(_content)
 	
 	# 确保所有内容都立即显示，而不是等待打字机效果
-	# (注意: _render_content_by_line_async 内部的 flush_assistant_stream_output
-	# 已经处理了大部分情况，这里是双重保险)
+	# 注意: _render_content_by_line_async 内部的 flush_assistant_stream_output已经处理了大部分情况，这里是双重保险
 	await get_tree().process_frame
 	for child in content_container.get_children():
 		if child is RichTextLabel:

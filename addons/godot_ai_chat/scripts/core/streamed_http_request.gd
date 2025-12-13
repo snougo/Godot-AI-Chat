@@ -402,14 +402,9 @@ func _process_stream_line(_line_content: String, _json_parser: JSON, _api_provid
 		
 		var usage: Dictionary = AiServiceAdapter.parse_stream_usage_chunk(_api_provider, json_data)
 		if not usage.is_empty():
-			#Callable(self, "_on_usage_data_received_from_thread").call_deferred(usage, _thread_id)
 			# 修改: 不再发送信号，而是更新缓存变量
 			_last_usage_data_in_stream = usage
-		
-		if json_data.has("choices") and not json_data.choices.is_empty():
-			if json_data.choices[0].get("finish_reason") == "stop":
-				print("[THREAD] Finish reason 'stop' detected.")
-				result.finished = true
+	
 	return result
 
 
