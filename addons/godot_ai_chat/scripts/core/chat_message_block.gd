@@ -3,6 +3,8 @@ extends FoldableContainer
 class_name ChatMessageBlock
 
 
+@onready var content_container: VBoxContainer = $MarginContainer/VBoxContainer
+
 # 预加载代码高亮主题资源，用于CodeEdit节点。
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload("res://addons/godot_ai_chat/assets/code_hightlight.tres")
 
@@ -11,8 +13,6 @@ enum _ParseState {
 	IN_TEXT, # 正在解析普通文本内容
 	IN_CODE  # 正在解析代码块内容
 }
-
-@onready var content_container: VBoxContainer = $MarginContainer/VBoxContainer
 
 # --- 状态机与解析 ---
 # 当前的解析状态。
@@ -39,8 +39,6 @@ var is_buffering_potential_code_line: bool = false
 # --- 打字机效果 ---
 # 打字机效果的时间累加器。
 var typewriter_accumulator: float = 0.0
-# 打字机效果的速度（每秒显示的字符数）。
-#var typewriter_speed: float = 200.0
 # 基础打字速度（每秒字符数），这是在没有文本积压时的正常速度。
 @export var base_typewriter_speed: float = 50.0
 # 加速因子。积压的每个字符会使速度增加这个值。例如，0.5表示每积压10个字符，速度会增加5。
@@ -92,6 +90,7 @@ func set_message_block_context_async(_role: String, _content: String, _model_nam
 	await _render_content_by_line_async(_content, true)
 	# 确保处理完所有缓冲内容
 	flush_assistant_stream_output()
+
 
 # 用于初始化一个全新的消息块，例如用户消息或加载历史记录时。
 func set_message_block(_role: String, _content: String, _model_name: String = "") -> void:
@@ -236,7 +235,7 @@ func _render_content_by_line_async(_full_content: String, _instant_display: bool
 				var fence_str: String = m_open.get_string(1)
 				code_fence_char = fence_str
 				code_fence_len = fence_str.length()
-				_append_to_code_block("\n")
+				_append_to_code_block("")
 			else:
 				_flush_text_to_ui(line + "\n", _instant_display)
 		else: # _ParseState.IN_CODE
@@ -247,7 +246,7 @@ func _render_content_by_line_async(_full_content: String, _instant_display: bool
 				code_fence_len = 0
 			else:
 				_append_to_code_block(line + "\n")
-
+		
 		if i % 5 == 0: # 每处理5行，等待一帧，避免单行过长或过多导致卡顿
 			await get_tree().process_frame
 	
@@ -310,9 +309,9 @@ func _parse_line_in_text_state(_line: String) -> void:
 		code_fence_char = fence_str # 记录围栏字符和长度，用于精确匹配结束标记。
 		code_fence_len = fence_str.length()
 		
-		# 不提取语言提示，而是用一个换行符代替，以避免代码块开头出现语言标记。
-		_append_to_code_block("\n")
-
+		# 不提取语言提示，而是用空内容代替，以避免代码块开头出现语言标记。
+		_append_to_code_block("")
+	
 	else:
 		# 如果不是代码块标记，就当作普通文本行处理，并加上换行符。
 		_flush_text_to_ui(_line + "\n")

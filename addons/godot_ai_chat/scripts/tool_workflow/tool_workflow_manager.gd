@@ -55,19 +55,27 @@ func tool_workflow_start(_response_data: Dictionary) -> void:
 func _process_ai_response(_response_data: Dictionary) -> void:
 	# 检查是否包含工具调用
 	if ToolCallUtils.has_tool_call(_response_data):
-		# 关键修复：不再在这里 append(_response_data)。
 		# 助手消息只在它们被最终确定时（即从网络流接收完毕后）才被添加。
 		var normalized_response: Dictionary = ToolCallUtils.tool_call_converter(_response_data)
 		
-		# [关键修复] 更新 full_chat_history 中的助手消息
-		# 必须确保 API 看到的助手消息包含 tool_calls 字段
-		if not full_chat_history.is_empty():
-			# 从后往前查找最后一条助手消息
-			for i in range(full_chat_history.size() - 1, -1, -1):
-				if full_chat_history[i].get("role") == "assistant":
-					full_chat_history[i] = normalized_response
-					print("[ToolWorkflowManager] Updated assistant message at index %d with tool_calls." % i)
-					break
+		# [修复逻辑] 区分初始消息和后续消息的更新目标
+		if tool_workflow_messages.is_empty():
+			# 情况 A: tool_workflow_messages 为空，说明这是工作流的第一步（初始触发消息）
+			# 这条消息位于 full_chat_history 的末尾，我们需要更新它
+			if not full_chat_history.is_empty():
+				for i in range(full_chat_history.size() - 1, -1, -1):
+					if full_chat_history[i].get("role") == "assistant":
+						full_chat_history[i] = normalized_response
+						print("[ToolWorkflowManager] Updated initial assistant message in history with tool_calls.")
+						break
+		else:
+			# 情况 B: tool_workflow_messages 不为空，说明这是工作流的后续步骤（多步工具调用）
+			# 这条新的助手消息刚刚在 _on_next_stream_ended 中被添加到了 tool_workflow_messages 的末尾
+			# 我们需要更新 tool_workflow_messages 里的这条消息，而不是去改历史记录
+			var last_idx = tool_workflow_messages.size() - 1
+			if last_idx >= 0 and tool_workflow_messages[last_idx].get("role") == "assistant":
+				tool_workflow_messages[last_idx] = normalized_response
+				print("[ToolWorkflowManager] Updated intermediate assistant message in workflow with tool_calls.")
 		
 		var tool_calls: Array = normalized_response.get("tool_calls", [])
 		_execute_tools(tool_calls)
