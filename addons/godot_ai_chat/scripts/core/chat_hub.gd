@@ -28,7 +28,7 @@ func _ready() -> void:
 	current_chat_window.chat_list_container = self.chat_list_container
 	current_chat_window.chat_scroll_container = self.chat_scroll_container
 	
-	# --- 非流程相关的信号连接 ---
+	# --- 单步操作相关的信号连接，不涉及复杂的插件工作流程 ---
 	chat_ui.new_chat_button_pressed.connect(current_chat_window.creat_new_chat_window)
 	chat_ui.model_selection_changed.connect(network_manager.update_model_name)
 	chat_ui.model_selection_changed.connect(current_chat_window.update_model_name)
@@ -59,7 +59,7 @@ func _ready() -> void:
 	network_manager.connection_check_request_failed.connect(chat_ui.on_connection_check_request_failed)
 	# 当用户信息在聊天对话界面中添加完毕后通知NetworkManager向模型API服务发起新会话请求并等待模型的流式回应
 	current_chat_window.new_user_message_append_completed.connect(network_manager.new_chat_stream_request)
-	# 为发起的新会话时执行设定的逻辑
+	# 为发起的新会话请求执行设定的逻辑
 	network_manager.new_chat_request_sending.connect(self._on_chat_request_sending)
 	# 当模型的流式输出完毕之后通知CurrentChatWindow完成模型回应消息的流式接收
 	network_manager.chat_stream_request_completed.connect(current_chat_window.complete_assistant_stream_output)
@@ -166,7 +166,7 @@ func _save_chat_messages_to_markdown(_save_path: String) -> void:
 func _on_summarize_button_pressed() -> void:
 	var messages: Array = current_chat_window.get_current_chat_messages()
 	# 过滤掉系统消息，只检查实际对话是否存在
-	var conversation_messages = messages.filter(func(m): return m.role != "system")
+	var conversation_messages: Array = messages.filter(func(m): return m.role != "system")
 	
 	if conversation_messages.is_empty():
 		chat_ui.show_confirmation("Cannot summarize an empty chat.")
@@ -179,7 +179,7 @@ func _on_summarize_button_pressed() -> void:
 
 # 新增：当总结请求成功返回时
 func _on_summary_request_succeeded(summary_text: String) -> void:
-	# 1. 在使用之前，先清理总结内容
+	# 1. 在使用之前，先清理总结内容可能包含的<think>内容
 	var cleaned_summary: String = ToolBox.remove_think_tags(summary_text)
 	
 	# 2. 保存清理后的总结到文件
@@ -223,7 +223,7 @@ func _on_chat_request_sending() -> void:
 	# 关键修复：在建立新的流式连接之前，清理所有旧的流式连接。
 	_cleanup_stream_connections()
 	# 更新UI状态到“等待响应”
-	chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE, "AI is processing context...")
+	chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE, "Waiting for AI response...")
 	# 在UI上创建新的空消息块
 	current_chat_window.creat_new_assistant_message_block()
 	# 建立一个一次性的连接，用于在收到第一个数据块时切换UI状态
