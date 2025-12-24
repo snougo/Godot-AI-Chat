@@ -90,6 +90,11 @@ func _ready() -> void:
 func connection_check(_user_prompt: String) -> bool:
 	print("[NetworkManager] API Connection Checking...")
 	
+	if api_provider == "ZhipuAI":
+		# 智谱直接跳过连线检查，直接进入发送逻辑
+		emit_signal("connection_check_request_succeeded", _user_prompt)
+		return true
+	
 	# 检查设置是否有效，如果无效则直接失败，不发送请求
 	if not _set_http_request_base_parameters():
 		return false
@@ -115,6 +120,14 @@ func get_model_list_from_api_service() -> void:
 	# 检查设置是否有效，如果无效则直接失败，不发送请求
 	if not _set_http_request_base_parameters():
 		return
+	
+	# --- 特殊处理智谱 AI ---
+	if api_provider == "ZhipuAI":
+		var zhipu_models = AiServiceAdapter.ZhipuAPI.get_preset_models()
+		# 延迟一帧发出信号，模拟网络返回，确保 UI 逻辑一致
+		get_tree().process_frame.connect(func(): emit_signal("get_model_list_request_succeeded", zhipu_models), CONNECT_ONE_SHOT)
+		return
+	# -----------------------
 	
 	var stream: bool = false
 	var headers: PackedStringArray = AiServiceAdapter.get_request_headers(api_provider, api_key, stream)
@@ -230,6 +243,12 @@ func _set_http_request_base_parameters() -> bool:
 	if api_key.is_empty() and api_base_url != "http://127.0.0.1:1234":
 		emit_signal("connection_check_request_failed", "API Key is not set in Settings.")
 		return false
+	if api_provider == "ZhipuAI":
+		if api_key.is_empty():
+			emit_signal("connection_check_request_failed", "ZhipuAI requires an API Key.")
+			return false
+		# 如果用户没填地址，我们在 Adapter 里处理了默认值，这里可以放宽
+		return true
 	
 	return true
 

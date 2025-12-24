@@ -7,7 +7,7 @@ class_name PluginSettings
 
 
 # API服务提供商类型。使用 `@export_enum` 可以在编辑器中提供一个下拉选择菜单。
-@export_enum("OpenAI-Compatible", "Google Gemini") var api_provider: String = "OpenAI-Compatible"
+@export_enum("OpenAI-Compatible", "Google Gemini", "ZhipuAI") var api_provider: String = "OpenAI-Compatible"
 # API服务的基地址 (例如 "https://api.openai.com" 或本地模型的地址)。
 @export var api_base_url: String = ""
 # API密钥（可选，取决于服务提供商）。

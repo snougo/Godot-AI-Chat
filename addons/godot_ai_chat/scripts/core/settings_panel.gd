@@ -62,6 +62,7 @@ func _ready() -> void:
 	api_provider_options.clear()
 	api_provider_options.add_item("OpenAI-Compatible")
 	api_provider_options.add_item("Google Gemini")
+	api_provider_options.add_item("ZhipuAI")
 	
 	# 加载现有设置并显示在UI上
 	_load_and_display_settings()

@@ -297,7 +297,7 @@ func _process_response_stream(_http_client: HTTPClient, _api_provider: String, _
 func _parse_buffer_and_get_remainder(_buffer: PackedByteArray, _json_parser: JSON, _is_streaming: bool, _api_provider: String, _thread_id: int) -> Dictionary:
 	if _api_provider == "Google Gemini":
 		return _parse_gemini_json_stream(_buffer, _json_parser, _api_provider, _thread_id)
-	elif _api_provider == "OpenAI-Compatible":
+	elif _api_provider == "OpenAI-Compatible" or _api_provider == "ZhipuAI":
 		return _parse_sse_stream(_buffer, _json_parser, _is_streaming, _api_provider, _thread_id)
 	else:
 		return {}

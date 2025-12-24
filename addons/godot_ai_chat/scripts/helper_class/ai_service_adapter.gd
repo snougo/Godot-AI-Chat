@@ -18,6 +18,8 @@ static func get_request_headers(_api_provider: String, _api_key: String, _stream
 		"Google Gemini":
 			# [修复] 将 API Key 放入 Header 中，而不是 URL
 			headers.append("x-goog-api-key: %s" % _api_key)
+		"ZhipuAI":
+			headers.append("Authorization: Bearer %s" % _api_key)
 	return headers
 
 
@@ -42,6 +44,8 @@ static func build_chat_request_body(_api_provider: String, _model_name: String, 
 			return OpenAICompatibleAPI._build_chat_request_body(_model_name, final_messages_for_api, _temperature, _stream)
 		"Google Gemini":
 			return GeminiAPI._build_chat_request_body(_model_name, final_messages_for_api, _temperature, _stream)
+		"ZhipuAI":
+			return ZhipuAPI._build_chat_request_body(_model_name, final_messages_for_api, _temperature, _stream)
 		_:
 			push_error("Unsupported API provider in build_chat_request_body: %s" % _api_provider)
 			return {}
@@ -54,6 +58,8 @@ static func get_chat_url(_api_provider: String, _base_url: String, _model_name: 
 			return OpenAICompatibleAPI._get_chat_url(_base_url)
 		"Google Gemini":
 			return GeminiAPI._get_chat_url(_base_url, _model_name, _api_key, _stream)
+		"ZhipuAI":
+			return ZhipuAPI._get_chat_url(_base_url)
 		_:
 			return ""
 
@@ -65,6 +71,10 @@ static func get_models_url(_api_provider: String, _base_url: String, _api_key: S
 			return OpenAICompatibleAPI._get_models_url(_base_url)
 		"Google Gemini":
 			return GeminiAPI._get_models_url(_base_url, _api_key)
+		"ZhipuAI":
+			# 智谱没有模型列表接口，连接检查时我们可以尝试请求一个简单的 endpoint 
+			# 或者干脆让 NetworkManager 的 connection_check 对智谱直接放行
+			return _base_url.path_join("v4/chat/completions")
 		_:
 			return ""
 
@@ -87,6 +97,8 @@ static func parse_stream_chunk(_api_provider: String, _json_data: Dictionary) ->
 			return OpenAICompatibleAPI._parse_stream_chunk(_json_data)
 		"Google Gemini":
 			return GeminiAPI._parse_stream_chunk(_json_data)
+		"ZhipuAI":
+			return ZhipuAPI._parse_stream_chunk(_json_data)
 		_:
 			return ""
 
@@ -142,7 +154,7 @@ static func _get_all_tool_definitions(for_gemini: bool = false) -> Array:
 	# --- 工具 1: get_context (获取文件内容) ---
 	tools.append({
 		"name": "get_context",
-		"description": "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, or documentation files.",
+		"description": "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, or text-based files.",
 		"parameters": {
 			"type": type_object,
 			"properties": {
@@ -448,3 +460,76 @@ class GeminiAPI:
 		if not text_chunk.is_empty():
 			return text_chunk
 		return "[ERROR] Could not parse summary from Gemini response."
+
+
+# --- ZhipuAI API 的具体实现 ---
+class ZhipuAPI:
+	# 新增：手动维护的智谱模型列表
+	# 免费用户的API目前不能使用4.6以及最新的4.7
+	static func get_preset_models() -> Array[String]:
+		return [
+			"glm-4.5",
+			"glm-4.5-air"
+		]
+
+
+	static func _build_chat_request_body(_model_name: String, _messages: Array, _temperature: float, _stream: bool) -> Dictionary:
+		# 智谱 V4 完美兼容 OpenAI 格式
+		var body: Dictionary = {
+			"model": _model_name,
+			"messages": _messages,
+			"temperature": _temperature,
+			"stream": _stream
+		}
+		
+		# 注入工具定义 (复用插件已有的工具系统)
+		var tools_list: Array = []
+		var definitions = AiServiceAdapter._get_all_tool_definitions(false)
+		for tool_def in definitions:
+			tools_list.append({"type": "function", "function": tool_def})
+		
+		body["tools"] = tools_list
+		return body
+
+
+	static func _get_chat_url(_base_url: String) -> String:
+		# 逻辑：如果用户没填，用默认全称；如果填了，确保包含 /api/paas/
+		var url = _base_url.strip_edges()
+		
+		if url.is_empty():
+			return "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+		
+		# 智谱的 API 必须包含 api/paas
+		if not url.contains("api/paas"):
+			# 如果用户只填了 https://open.bigmodel.cn
+			if not url.ends_with("/"): url += "/"
+			url += "api/paas/"
+		
+		# 确保最终拼接 v4/chat/completions
+		if not url.contains("v4/chat/completions"):
+			if not url.ends_with("/"): url += "/"
+			url += "v4/chat/completions"
+		
+		return url
+
+
+	static func _get_models_url(_base_url: String, _api_key: String) -> String:
+		# 同样修正模型列表的 URL（虽然我们现在是硬编码列表，但为了 connection_check 正常）
+		var url = _base_url.strip_edges()
+		if url.is_empty():
+			return "https://open.bigmodel.cn/api/paas/v4/models"
+		
+		if not url.contains("api/paas"):
+			if not url.ends_with("/"): url += "/"
+			url += "api/paas/"
+		
+		return url.path_join("v4/models")
+
+
+	static func _parse_stream_chunk(_json: Dictionary) -> String:
+		# 智谱的流式结构与 OpenAI 完全一致
+		return AiServiceAdapter.OpenAICompatibleAPI._parse_stream_chunk(_json)
+
+
+	static func _parse_non_stream_response(_body: PackedByteArray) -> String:
+		return AiServiceAdapter.OpenAICompatibleAPI._parse_non_stream_response(_body)
