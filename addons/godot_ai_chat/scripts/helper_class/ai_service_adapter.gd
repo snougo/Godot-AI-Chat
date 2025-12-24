@@ -118,7 +118,7 @@ static func parse_stream_usage_chunk(_api_provider: String, _json_data: Dictiona
 	var usage_data: Dictionary = {}
 	
 	match _api_provider:
-		"OpenAI-Compatible":
+		"OpenAI-Compatible", "ZhipuAI":
 			if _json_data.has("usage") and _json_data.usage is Dictionary:
 				var usage = _json_data.usage
 				if usage.has("prompt_tokens") and usage.has("completion_tokens"):
@@ -481,6 +481,10 @@ class ZhipuAPI:
 			"temperature": _temperature,
 			"stream": _stream
 		}
+		
+		# [新增] 显式要求返回 usage 信息（智谱 V4 支持此 OpenAI 兼容参数）
+		if _stream:
+			body["stream_options"] = {"include_usage": true}
 		
 		# 注入工具定义 (复用插件已有的工具系统)
 		var tools_list: Array = []
