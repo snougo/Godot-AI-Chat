@@ -172,6 +172,26 @@ static func _get_all_tool_definitions(for_gemini: bool = false) -> Array:
 		}
 	})
 	
+	# --- 工具 2: search_documents (搜索文档) ---
+	tools.append({
+		"name": "search_documents",
+		"description": "Search for documentation files (markdown) by filename keywords. Use this to locate relevant documentation in the 'res://godot_doc' folder or other specified paths.",
+		"parameters": {
+			"type": type_object,
+			"properties": {
+				"keywords": {
+					"type": type_string,
+					"description": "The keyword(s) to search for in filenames."
+				},
+				"path": {
+					"type": type_string,
+					"description": "The folder path to search in. Defaults to 'res://godot_doc' if not specified."
+				}
+			},
+			"required": ["keywords"]
+		}
+	})
+	
 	return tools
 
 

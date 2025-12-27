@@ -59,6 +59,20 @@ func _execute_tool_call(_tool_name: String, _arguments: Dictionary) -> Dictionar
 				_:
 					var feedback = ToolCallUtils.handle_tool_call_error("unknown_context_type", {"context_type": context_type})
 					return {"success": false, "data": feedback}
+		
+		# [新增] 文档搜索工具分支
+		"search_documents":
+			var keywords = _arguments.get("keywords", "")
+			var path = _arguments.get("path", "res://godot_doc") # 默认为 res://godot_doc
+			
+			if keywords.is_empty():
+				var feedback = ToolCallUtils.handle_tool_call_error("missing_parameters", {"tool_name": "search_documents"})
+				# 注意：ToolCallUtils.handle_tool_call_error 返回的是 String
+				return feedback
+			
+			# 目前默认搜索 .md 文件，如果未来需要支持更多类型，可以在参数中添加 extension 字段
+			return context_provider.search_files_as_markdown(path, keywords, ".md")
+		
 		_:
 			var feedback = ToolCallUtils.handle_tool_call_error("unknown_tool", {"tool_name": _tool_name})
 			return {"success": false, "data": feedback}
