@@ -2,9 +2,8 @@ extends RefCounted
 class_name ToolCallUtils
 
 
-# Regex to find ```json ... ``` code blocks.
-# (?si) flags: s (dotall) allows . to match newlines, i makes it case-insensitive.
-const _JSON_BLOCK_REGEX = "(?si)```json\\s*(.*?)\\s*```"
+# 允许工具调用语句代码块为 ```json 或 纯 ```
+const _JSON_BLOCK_REGEX = "(?si)```(?:json)?\\s*(.*?)\\s*```"
 
 
 #==============================================================================

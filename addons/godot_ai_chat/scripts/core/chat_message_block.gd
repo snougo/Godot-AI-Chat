@@ -113,56 +113,63 @@ func set_tool_message_block(_content: String) -> void:
 # 这是实现打字机效果和实时解析的核心函数。
 # 它采用混合模式：默认情况下，它会快速地将文本刷新到UI。
 # 但当检测到可能的代码块标记时，它会切换到行缓冲模式进行精确解析。
-func append_chunk(_chunk: String) -> void:
+#func append_chunk(_chunk: String) -> void:
 	# 如果当前已在代码块内部，或者正在为潜在的代码块标记进行行缓冲，
 	# 必须采用标准的行缓冲处理，以确保代码和标记的完整性。
-	if current_parse_state == _ParseState.IN_CODE or is_buffering_potential_code_line:
-		line_buffer += _chunk
-		_process_buffered_lines()
-		return
-	
+	#if current_parse_state == _ParseState.IN_CODE or is_buffering_potential_code_line:
+		#line_buffer += _chunk
+		#_process_buffered_lines()
+		#return
+	#
 	# --- 核心优化：处理普通文本流的“快速路径” ---
-	var current_pos: int = 0
-	while current_pos < _chunk.length():
+	#var current_pos: int = 0
+	#while current_pos < _chunk.length():
 		# 如果当前指针位于数据块的开头，且我们知道这是新一行的开始。
-		if is_start_of_line:
+		#if is_start_of_line:
 			# 寻找第一个非空白字符的位置。
-			var first_char_pos: int = -1
-			for i in range(current_pos, _chunk.length()):
+			#var first_char_pos: int = -1
+			#for i in range(current_pos, _chunk.length()):
 				# 这里直接检查字符是否为空格或制表符。
-				if _chunk[i] != ' ' and _chunk[i] != '\t':
-					first_char_pos = i
-					break
-			
+				#if _chunk[i] != ' ' and _chunk[i] != '\t':
+					#first_char_pos = i
+					#break
+			#
 			# 如果找到了非空白字符，并且它是 '`' 或 '~'，则切换到行缓冲模式。
-			if first_char_pos != -1 and (_chunk[first_char_pos] == '`' or _chunk[first_char_pos] == '~'):
-				is_buffering_potential_code_line = true
+			#if first_char_pos != -1 and (_chunk[first_char_pos] == '`' or _chunk[first_char_pos] == '~'):
+				#is_buffering_potential_code_line = true
 				# 将本数据块剩余的部分全部放入行缓冲，然后等待更多数据形成完整的一行。
-				line_buffer = _chunk.substr(current_pos)
-				_process_buffered_lines() # 尝试处理，也许这一块数据本身就包含了换行符。
-				return # 退出循环，等待下一次append_chunk调用。
-			else:
+				#line_buffer = _chunk.substr(current_pos)
+				#_process_buffered_lines() # 尝试处理，也许这一块数据本身就包含了换行符。
+				#return # 退出循环，等待下一次append_chunk调用。
+			#else:
 				# 如果不是潜在的代码块标记，则确认本行是普通文本，关闭新行标记。
 				# 只有在 chunk 中确实存在非空白字符时才关闭标记，
 				# 否则一个只包含空白的 chunk 可能会错误地将下一块数据视为同一行。
-				if first_char_pos != -1:
-					is_start_of_line = false
-		
+				#if first_char_pos != -1:
+					#is_start_of_line = false
+		#
 		# 在当前数据块中查找下一个换行符。
-		var newline_pos: int = _chunk.find("\n", current_pos)
-		
+		#var newline_pos: int = _chunk.find("\n", current_pos)
+		#
 		# 如果没找到换行符，说明从 current_pos 到末尾都是同一行的文本。
-		if newline_pos == -1:
-			var segment: String = _chunk.substr(current_pos)
-			_flush_text_to_ui(segment) # 直接将这部分文本刷新到UI。
-			current_pos = _chunk.length() # 标记数据块处理完毕。
+		#if newline_pos == -1:
+			#var segment: String = _chunk.substr(current_pos)
+			#_flush_text_to_ui(segment) # 直接将这部分文本刷新到UI。
+			#current_pos = _chunk.length() # 标记数据块处理完毕。
 		# 如果找到了换行符。
-		else:
+		#else:
 			# 提取从当前位置到换行符（包含换行符本身）的文本片段。
-			var segment: String = _chunk.substr(current_pos, newline_pos - current_pos + 1)
-			_flush_text_to_ui(segment) # 刷新这部分文本。
-			is_start_of_line = true # 标记下一块数据将是新一行的开始。
-			current_pos = newline_pos + 1 # 更新指针到换行符之后。
+			#var segment: String = _chunk.substr(current_pos, newline_pos - current_pos + 1)
+			#_flush_text_to_ui(segment) # 刷新这部分文本。
+			#is_start_of_line = true # 标记下一块数据将是新一行的开始。
+			#current_pos = newline_pos + 1 # 更新指针到换行符之后。
+
+# 修改后的 append_chunk：移除了不严谨的快速路径，统一使用行缓冲处理
+func append_chunk(_chunk: String) -> void:
+	# 始终将新到达的碎片放入缓冲区
+	line_buffer += _chunk
+	# 处理缓冲区中所有完整的行
+	_process_buffered_lines()
 
 
 # 当外部数据流结束时调用，用于处理缓冲中可能剩余的最后内容。
@@ -216,117 +223,196 @@ func _set_message_block_title(_role: String, _model_name: String) -> void:
 
 
 # 异步逐行渲染内容的内部实现。
+#func _render_content_by_line_async(_full_content: String, _instant_display: bool = false) -> void:
+	#var lines: PackedStringArray = _full_content.split("\n")
+	#for i in range(lines.size()):
+		#var line: String = lines[i]
+		#
+		# 这里我们直接处理每一行，而不是调用 append_chunk，以简化逻辑
+		# 因为这是一个完整的、非流式的内容
+		#if current_parse_state == _ParseState.IN_TEXT:
+			#var m_open: RegExMatch = re_fence_open.search(line)
+			#if m_open:
+				#var text_before_fence: String = line.substr(0, m_open.get_start(0))
+				#if not text_before_fence.is_empty():
+					#_flush_text_to_ui(text_before_fence, _instant_display)
+				#
+				#current_parse_state = _ParseState.IN_CODE
+				#var fence_str: String = m_open.get_string(1)
+				#code_fence_char = fence_str
+				#code_fence_len = fence_str.length()
+				#_append_to_code_block("")
+			#else:
+				#_flush_text_to_ui(line + "\n", _instant_display)
+		#else: # _ParseState.IN_CODE
+			#var m_close: RegExMatch = re_fence_close.search(line)
+			#if m_close and m_close.get_string(1) == code_fence_char and m_close.get_string(1).length() == code_fence_len:
+				#current_parse_state = _ParseState.IN_TEXT
+				#code_fence_char = ""
+				#code_fence_len = 0
+			#else:
+				#_append_to_code_block(line + "\n")
+		#
+		#if i % 5 == 0: # 每处理5行，等待一帧，避免单行过长或过多导致卡顿
+			#await get_tree().process_frame
+	#
+	# 等待最后一帧确保UI更新
+	#await get_tree().process_frame
+
+# 修改后的 _render_content_by_line_async：使其与流式解析逻辑保持高度一致
 func _render_content_by_line_async(_full_content: String, _instant_display: bool = false) -> void:
+	# 重置状态
+	_message_block_context_clean()
+	
 	var lines: PackedStringArray = _full_content.split("\n")
 	for i in range(lines.size()):
 		var line: String = lines[i]
 		
-		# 这里我们直接处理每一行，而不是调用 append_chunk，以简化逻辑
-		# 因为这是一个完整的、非流式的内容
-		if current_parse_state == _ParseState.IN_TEXT:
-			var m_open: RegExMatch = re_fence_open.search(line)
-			if m_open:
-				var text_before_fence: String = line.substr(0, m_open.get_start(0))
-				if not text_before_fence.is_empty():
-					_flush_text_to_ui(text_before_fence, _instant_display)
-				
-				current_parse_state = _ParseState.IN_CODE
-				var fence_str: String = m_open.get_string(1)
-				code_fence_char = fence_str
-				code_fence_len = fence_str.length()
-				_append_to_code_block("")
-			else:
-				_flush_text_to_ui(line + "\n", _instant_display)
-		else: # _ParseState.IN_CODE
-			var m_close: RegExMatch = re_fence_close.search(line)
-			if m_close and m_close.get_string(1) == code_fence_char and m_close.get_string(1).length() == code_fence_len:
-				current_parse_state = _ParseState.IN_TEXT
-				code_fence_char = ""
-				code_fence_len = 0
-			else:
-				_append_to_code_block(line + "\n")
+		# 直接复用核心解析逻辑，确保渲染结果与流式输出完全一致
+		_process_line(line)
 		
-		if i % 5 == 0: # 每处理5行，等待一帧，避免单行过长或过多导致卡顿
+		# 每处理一定行数释放 CPU，防止 UI 冻结
+		if i % 10 == 0:
 			await get_tree().process_frame
 	
-	# 等待最后一帧确保UI更新
-	await get_tree().process_frame
+	# 处理完成后强制刷新
+	flush_assistant_stream_output()
 
 
 # 循环查找换行符，并将每行交给 _process_line 函数处理。
-func _process_buffered_lines() -> void:
-	var newline_pos: int = line_buffer.find("\n")
+#func _process_buffered_lines() -> void:
+	#var newline_pos: int = line_buffer.find("\n")
 	# 只要还能在缓冲区中找到换行符，就持续处理。
-	while newline_pos != -1:
+	#while newline_pos != -1:
 		# 提取一行（不包含换行符）。
-		var line_to_process: String = line_buffer.substr(0, newline_pos)
+		#var line_to_process: String = line_buffer.substr(0, newline_pos)
 		# 从缓冲区中移除已提取的行和它后面的换行符。
-		line_buffer = line_buffer.substr(newline_pos + 1)
-		
-		_process_line(line_to_process)
-		
+		#line_buffer = line_buffer.substr(newline_pos + 1)
+		#
+		#_process_line(line_to_process)
+		#
 		# 一个关键的逻辑转换点：如果在处理完一行后（例如代码块结束），
 		# 解析状态从代码模式切换回了文本模式，并且我们不再处于“潜在代码行”的怀疑状态，
 		# 那么缓冲区中剩余的内容就不应该再按行缓冲模式处理了。
 		# 它们应该被送回 append_chunk 的“快速路径”进行即时处理。
-		if current_parse_state == _ParseState.IN_TEXT and not is_buffering_potential_code_line:
-			var remaining_buffer: String = line_buffer
-			line_buffer = ""
-			append_chunk(remaining_buffer) # 将剩余部分重新注入处理流程。
-			return # 退出循环，因为append_chunk会接管后续处理。
-		
+		#if current_parse_state == _ParseState.IN_TEXT and not is_buffering_potential_code_line:
+			#var remaining_buffer: String = line_buffer
+			#line_buffer = ""
+			#append_chunk(remaining_buffer) # 将剩余部分重新注入处理流程。
+			#return # 退出循环，因为append_chunk会接管后续处理。
+		#
 		# 继续在更新后的缓冲区中查找下一个换行符。
+		#newline_pos = line_buffer.find("\n")
+
+# 修改后的 _process_buffered_lines：确保状态切换后能正确处理剩余数据
+func _process_buffered_lines() -> void:
+	var newline_pos: int = line_buffer.find("\n")
+	while newline_pos != -1:
+		# 提取一行（不包含换行符）
+		var line_to_process: String = line_buffer.substr(0, newline_pos)
+		# 更新缓冲区
+		line_buffer = line_buffer.substr(newline_pos + 1)
+		
+		# 处理这一行
+		_process_line(line_to_process)
+		
+		# 检查下一个换行符
 		newline_pos = line_buffer.find("\n")
 
 
 # 这是状态机逻辑的核心分发器。
-func _process_line(_line: String) -> void:
+#func _process_line(_line: String) -> void:
 	# 如果我们是从“潜在代码行缓冲”状态过来的，现在有了一整行，就可以重置这个标记了。
-	if is_buffering_potential_code_line:
-		is_buffering_potential_code_line = false # 重置状态。
-		is_start_of_line = true # 下一块数据将被视为新一行的开始。
+	#if is_buffering_potential_code_line:
+		#is_buffering_potential_code_line = false # 重置状态。
+		#is_start_of_line = true # 下一块数据将被视为新一行的开始。
+	#
+	#if current_parse_state == _ParseState.IN_TEXT:
+		#_parse_line_in_text_state(_line)
+	#else: # _ParseState.IN_CODE
+		#_parse_line_in_code_state(_line)
+
+# 修改后的 _process_line：简化逻辑，明确职责
+func _process_line(_line: String) -> void:
+	# 重置潜在缓冲标记，因为我们已经拿到了一整行
+	is_buffering_potential_code_line = false
 	
 	if current_parse_state == _ParseState.IN_TEXT:
 		_parse_line_in_text_state(_line)
-	else: # _ParseState.IN_CODE
+	else:
 		_parse_line_in_code_state(_line)
 
 
 # 主要任务是检测代码块的开始标记。
+#func _parse_line_in_text_state(_line: String) -> void:
+	#var m_open: RegExMatch = re_fence_open.search(_line)
+	# 如果匹配到了代码块的开始标记...
+	#if m_open:
+		# 将标记之前可能存在的文本先刷新到UI。
+		#var text_before_fence: String = _line.substr(0, m_open.get_start(0))
+		#if not text_before_fence.is_empty():
+			#_flush_text_to_ui(text_before_fence)
+		#
+		# --- 状态转换：进入代码模式 ---
+		#current_parse_state = _ParseState.IN_CODE
+		#var fence_str: String = m_open.get_string(1)
+		#code_fence_char = fence_str # 记录围栏字符和长度，用于精确匹配结束标记。
+		#code_fence_len = fence_str.length()
+		#
+		# 不提取语言提示，而是用空内容代替，以避免代码块开头出现语言标记。
+		#_append_to_code_block("")
+	#
+	#else:
+		# 如果不是代码块标记，就当作普通文本行处理，并加上换行符。
+		#_flush_text_to_ui(_line + "\n")
+
+# 修改后的 _parse_line_in_text_state：严谨处理代码块开启前的文本
 func _parse_line_in_text_state(_line: String) -> void:
 	var m_open: RegExMatch = re_fence_open.search(_line)
-	# 如果匹配到了代码块的开始标记...
 	if m_open:
-		# 将标记之前可能存在的文本先刷新到UI。
-		var text_before_fence: String = _line.substr(0, m_open.get_start(0))
-		if not text_before_fence.is_empty():
-			_flush_text_to_ui(text_before_fence)
+		# 提取标记之前的文本（例如行首的空格或意外出现的文字）
+		var fence_start_pos = m_open.get_start(0)
+		var text_before_fence: String = _line.substr(0, fence_start_pos)
 		
-		# --- 状态转换：进入代码模式 ---
+		if not text_before_fence.strip_edges().is_empty():
+			_flush_text_to_ui(text_before_fence + "\n")
+		
+		# 切换到代码模式
 		current_parse_state = _ParseState.IN_CODE
 		var fence_str: String = m_open.get_string(1)
-		code_fence_char = fence_str # 记录围栏字符和长度，用于精确匹配结束标记。
+		code_fence_char = fence_str
 		code_fence_len = fence_str.length()
 		
-		# 不提取语言提示，而是用空内容代替，以避免代码块开头出现语言标记。
+		# 初始化代码块（不在此处添加语言标签行）
 		_append_to_code_block("")
-	
 	else:
-		# 如果不是代码块标记，就当作普通文本行处理，并加上换行符。
+		# 普通文本行，补回被 split 掉的换行符
 		_flush_text_to_ui(_line + "\n")
 
 
 # 主要任务是检测代码块的结束标记。
+#func _parse_line_in_code_state(_line: String) -> void:
+	#var m_close: RegExMatch = re_fence_close.search(_line)
+	# 如果匹配到了结束标记，并且其字符和长度与开始标记完全一致...
+	#if m_close and m_close.get_string(1) == code_fence_char and m_close.get_string(1).length() == code_fence_len:
+		# --- 状态转换：回到文本模式 ---
+		#current_parse_state = _ParseState.IN_TEXT
+		#code_fence_char = ""
+		#code_fence_len = 0
+	#else:
+		# 如果不是结束标记，就当作普通的代码行，并加上换行符追加到代码块。
+		#_append_to_code_block(_line + "\n")
+
+# 修改后的 _parse_line_in_code_state：确保结束标记匹配后立即切回文本模式
 func _parse_line_in_code_state(_line: String) -> void:
 	var m_close: RegExMatch = re_fence_close.search(_line)
-	# 如果匹配到了结束标记，并且其字符和长度与开始标记完全一致...
-	if m_close and m_close.get_string(1) == code_fence_char and m_close.get_string(1).length() == code_fence_len:
-		# --- 状态转换：回到文本模式 ---
+	# 检查是否是匹配的结束标记
+	if m_close and m_close.get_string(1).begins_with(code_fence_char) and m_close.get_string(1).length() >= code_fence_len:
 		current_parse_state = _ParseState.IN_TEXT
 		code_fence_char = ""
 		code_fence_len = 0
 	else:
-		# 如果不是结束标记，就当作普通的代码行，并加上换行符追加到代码块。
+		# 如果不是结束标记，作为代码内容追加
 		_append_to_code_block(_line + "\n")
 
 

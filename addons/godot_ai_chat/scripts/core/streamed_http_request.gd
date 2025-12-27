@@ -201,6 +201,7 @@ func _parse_url(_url_string: String) -> Dictionary:
 func _establish_connection(_http_client: HTTPClient, _parsed_url: Dictionary, _thread_id: int, _timeout_msec: int) -> bool:
 	var tls_options: TLSOptions = TLSOptions.client() if _parsed_url.use_ssl else null
 	var err: Error = _http_client.connect_to_host(_parsed_url.host, _parsed_url.port, tls_options)
+	
 	if err != OK:
 		Callable(self, "_on_stream_request_failed_from_thread").call_deferred("HTTPClient: Failed to initiate connection.", _thread_id)
 		return false
