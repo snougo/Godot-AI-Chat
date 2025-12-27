@@ -63,6 +63,12 @@ func _execute_tool_call(_tool_name: String, _arguments: Dictionary) -> Dictionar
 		# [新增] 文档搜索工具分支
 		"search_documents":
 			var keywords = _arguments.get("keywords", "")
+			
+			if keywords is Array: # 简单的容错处理
+				keywords = " ".join(keywords)
+			elif not keywords is String:
+				keywords = str(keywords)
+			
 			var path = _arguments.get("path", "res://godot_doc") # 默认为 res://godot_doc
 			
 			if keywords.is_empty():

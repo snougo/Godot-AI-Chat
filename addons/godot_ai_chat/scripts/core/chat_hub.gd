@@ -80,7 +80,7 @@ func _ready() -> void:
 	
 	# --- Token计算的信号连接 ---
 	network_manager.chat_usage_data_received.connect(current_chat_window.add_token_usage)
-	network_manager.prompt_tokens_consumed_on_failure.connect(current_chat_window.add_estimated_prompt_tokens)
+	network_manager.fallback_token_usage_estimated.connect(current_chat_window.add_estimated_prompt_tokens)
 	current_chat_window.token_cost_updated.connect(chat_ui.update_token_cost_display)
 	
 	# --- 初始化操作 ---

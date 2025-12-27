@@ -365,7 +365,7 @@ class GeminiAPI:
 					parts.append({"text": msg.get("content", "")})
 			
 			elif msg["role"] == "tool":
-				role = "user"
+				role = "function"
 				# 处理工具执行结果
 				parts.append({
 					"functionResponse": {
@@ -390,10 +390,10 @@ class GeminiAPI:
 			"generationConfig": {"temperature": _temperature},
 			# [新增] 放宽安全设置
 			"safetySettings": [
-				{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-				{"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-				{"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-				{"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+				{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
+				{"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},
+				{"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_ONLY_HIGH"},
+				{"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_ONLY_HIGH"}
 			]
 		}
 		

@@ -49,7 +49,6 @@ func process_new_assistant_response(_response_data: Dictionary) -> void:
 		print("[ChatBackend] WARN: process_new_assistant_response called while a workflow is active. Ignoring.")
 
 
-
 #==============================================================================
 # ## 内部函数 ##
 #==============================================================================

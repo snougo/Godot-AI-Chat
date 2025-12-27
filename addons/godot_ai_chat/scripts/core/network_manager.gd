@@ -37,7 +37,7 @@ signal chat_request_failed(error: String)
 
 # --- 流式数据token相关信号 ---
 signal chat_usage_data_received(usage_data: Dictionary)
-signal prompt_tokens_consumed_on_failure(estimated_tokens: int)
+signal fallback_token_usage_estimated(estimated_tokens: int)
 
 const CONNECTION_CHECK_TIMEOUT: float = 10.0 # API服务连线检查的超时时间（秒）
 
@@ -357,7 +357,7 @@ func _on_chat_stream_request_completed():
 	# 在这种情况下，我们必须使用估算值作为回退。
 	if not _usage_data_was_received and _last_estimated_prompt_tokens > 0:
 		print("[NetworkManager] Stream completed without usage data. Committing estimated tokens.")
-		emit_signal("prompt_tokens_consumed_on_failure", _last_estimated_prompt_tokens)
+		emit_signal("fallback_token_usage_estimated", _last_estimated_prompt_tokens)
 	
 	# 清理估算值，无论是否使用
 	_last_estimated_prompt_tokens = 0
@@ -375,7 +375,7 @@ func _on_stream_usage_data_received(usage_data: Dictionary) -> void:
 # 流式数据传输中断时发送信号
 func _on_chat_stream_interrupted(error_message: String = ""):
 	if _last_estimated_prompt_tokens > 0:
-		emit_signal("prompt_tokens_consumed_on_failure", _last_estimated_prompt_tokens)
+		emit_signal("fallback_token_usage_estimated", _last_estimated_prompt_tokens)
 		_last_estimated_prompt_tokens = 0
 	
 	if not error_message.is_empty():
