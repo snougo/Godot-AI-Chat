@@ -89,70 +89,65 @@ func _thread_worker(_url_string: String, _headers: PackedStringArray, _body_json
 	print("[THREAD] Worker started. URL: ", _url_string)
 	var http_client := HTTPClient.new()
 	
-	#  解析URL字符串
+	# 获取全局超时设置
+	var timeout_sec: float = ToolBox.get_plugin_settings().network_timeout
+	var timeout_msec: int = int(timeout_sec * 1000)
+	
+	# 1. 解析URL
 	var parsed_url_result: Dictionary = _parse_url(_url_string)
 	if not parsed_url_result.success:
-		print("[THREAD][ERROR] URL parsing failed: ", parsed_url_result.error)
 		Callable(self, "_on_stream_request_failed_from_thread").call_deferred(parsed_url_result.error, _thread_id)
 		return
 	
-	# 建立到服务器的连接
-	print("[THREAD] URL parsed successfully. Host: ", parsed_url_result.host)
-	if not _establish_connection(http_client, parsed_url_result, _thread_id): return
-		
-	# 发送HTTP请求
-	print("[THREAD] Connection established.")
+	# 2. 建立连接 (增加超时检测)
+	if not _establish_connection(http_client, parsed_url_result, _thread_id, timeout_msec):
+		return
+	
+	# 3. 发送请求
 	if not _send_request(http_client, parsed_url_result.path, _headers, _body_json, _thread_id): return
 	
-	# 等待并验证响应头和状态码
-	if not _wait_and_verify_response(http_client, _thread_id): return
+	# 4. 等待响应头 (增加超时检测)
+	if not _wait_and_verify_response(http_client, _thread_id, timeout_msec):
+		return
 	
-	# 循环处理服务器返回的流式响应
-	print("[THREAD] Request sent. Starting to process response stream...")
-	var stream_read_timeout_sec: float = ToolBox.get_plugin_settings().network_timeout
-	var stream_read_timeout_msec: int = int(stream_read_timeout_sec * 1000)
-	_process_response_stream(http_client, _api_provider, _thread_id, stream_read_timeout_msec)
+	# 5. 处理流式响应 (保持现有的数据块超时检测)
+	_process_response_stream(http_client, _api_provider, _thread_id, timeout_msec)
 	
-	# 检查线程是否在中途被主线程要求停止
+	# 线程结束逻辑...
 	_mutex.lock()
 	var was_stopped: bool = _stop_thread_flag
 	_mutex.unlock()
 	
 	if not was_stopped:
-		# 如果没有被停止，说明流正常结束，发出 stream_request_completed 信号
-		print("[THREAD] Stream processing finished. Signaling end.")
 		Callable(self, "_on_stream_request_completed_from_thread").call_deferred(_thread_id)
 	else:
-		print("[THREAD] Stream processing was stopped by user request.")
 		Callable(self, "_on_stream_request_canceled_from_thread").call_deferred(_thread_id)
 
 
 # 等待响应头并检查状态码
-func _wait_and_verify_response(_http_client: HTTPClient, _thread_id: int) -> bool:
-	print("[THREAD] Waiting for response headers...")
+func _wait_and_verify_response(_http_client: HTTPClient, _thread_id: int, _timeout_msec: int) -> bool:
+	var start_time = Time.get_ticks_msec()
 	while _http_client.get_status() == HTTPClient.STATUS_REQUESTING:
-		_mutex.lock()
-		if _stop_thread_flag:
-			_mutex.unlock()
+		# 超时检查
+		if Time.get_ticks_msec() - start_time > _timeout_msec:
+			Callable(self, "_on_stream_request_failed_from_thread").call_deferred("Request timed out while waiting for response.", _thread_id)
 			return false
+		
+		_mutex.lock()
+		if _stop_thread_flag: _mutex.unlock(); return false
 		_mutex.unlock()
+		
 		_http_client.poll()
 		OS.delay_msec(10)
 	
 	if not _http_client.has_response():
-		var error_msg: String = "HTTPClient: No response received from server after request."
-		print("[THREAD][ERROR] ", error_msg)
-		Callable(self, "_on_stream_request_failed_from_thread").call_deferred(error_msg, _thread_id)
+		Callable(self, "_on_stream_request_failed_from_thread").call_deferred("No response received from server.", _thread_id)
 		return false
 	
 	var response_code: int = _http_client.get_response_code()
-	print("[THREAD] Received response code: ", response_code)
 	if response_code != 200:
-		# 读取错误响应体以获取更详细的错误信息
 		var body_chunk: PackedByteArray = _http_client.read_response_body_chunk()
-		var error_body: String = body_chunk.get_string_from_utf8()
-		var error_msg: String = "Request failed with HTTP %d. Reason: %s" % [response_code, error_body]
-		print("[THREAD][ERROR] ", error_msg)
+		var error_msg: String = "HTTP %d: %s" % [response_code, body_chunk.get_string_from_utf8()]
 		Callable(self, "_on_stream_request_failed_from_thread").call_deferred(error_msg, _thread_id)
 		return false
 	
@@ -203,32 +198,29 @@ func _parse_url(_url_string: String) -> Dictionary:
 	return result
 
 
-func _establish_connection(_http_client: HTTPClient, _parsed_url: Dictionary, _thread_id: int) -> bool:
-	var tls_options: TLSOptions
-	if _parsed_url.use_ssl:
-		tls_options = TLSOptions.client()
-	else:
-		tls_options = null
-	
+func _establish_connection(_http_client: HTTPClient, _parsed_url: Dictionary, _thread_id: int, _timeout_msec: int) -> bool:
+	var tls_options: TLSOptions = TLSOptions.client() if _parsed_url.use_ssl else null
 	var err: Error = _http_client.connect_to_host(_parsed_url.host, _parsed_url.port, tls_options)
 	if err != OK:
-		var error_msg = "HTTPClient: Failed to initiate connection to host."
-		print("[THREAD][ERROR] ", error_msg)
-		Callable(self, "_on_stream_request_failed_from_thread").call_deferred(error_msg, _thread_id)
+		Callable(self, "_on_stream_request_failed_from_thread").call_deferred("HTTPClient: Failed to initiate connection.", _thread_id)
 		return false
 	
-	print("[THREAD] Waiting for connection...")
+	var start_time = Time.get_ticks_msec()
 	while _http_client.get_status() in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
+		# 超时检查
+		if Time.get_ticks_msec() - start_time > _timeout_msec:
+			Callable(self, "_on_stream_request_failed_from_thread").call_deferred("Connection timed out.", _thread_id)
+			return false
+		
 		_mutex.lock()
 		if _stop_thread_flag: _mutex.unlock(); return false
 		_mutex.unlock()
+		
 		_http_client.poll()
 		OS.delay_msec(10)
 	
 	if _http_client.get_status() != HTTPClient.STATUS_CONNECTED:
-		var error_msg = "HTTPClient: Connection failed after polling. Status: %s" % _http_client.get_status()
-		print("[THREAD][ERROR] ", error_msg)
-		Callable(self, "_on_stream_request_failed_from_thread").call_deferred(error_msg, _thread_id)
+		Callable(self, "_on_stream_request_failed_from_thread").call_deferred("Connection failed. Status: %d" % _http_client.get_status(), _thread_id)
 		return false
 	
 	return true
