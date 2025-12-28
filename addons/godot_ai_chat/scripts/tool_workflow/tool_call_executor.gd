@@ -2,7 +2,7 @@ extends RefCounted
 class_name ToolExecutor
 
 
-var context_provider = ContextProvider.new() # ContextProvider为外部上下文工具调用API接口类
+var context_provider: ContextProvider = ContextProvider.new() # ContextProvider为外部上下文工具调用API接口类
 
 
 #==============================================================================
@@ -37,48 +37,17 @@ func tool_call_execute_parsed(_parsed_call: Dictionary) -> String:
 # ## 内部函数 ##
 #==============================================================================
 
+
 # 根据工具名称和参数，分派并执行具体的工具逻辑。
 func _execute_tool_call(_tool_name: String, _arguments: Dictionary) -> Dictionary:
-	match _tool_name:
-		"get_context":
-			var context_type = _arguments.get("context_type")
-			var path = _arguments.get("path")
-			
-			# 健壮性检查：确保必要参数存在
-			if not context_type or not path:
-				var feedback = ToolCallUtils.handle_tool_call_error("missing_parameters", {"tool_name": _tool_name})
-				return {"success": false, "data": feedback}
-			
-			# 将语义化的 context_type 映射到具体的 ContextProvider 函数
-			match context_type:
-				"folder_structure": return context_provider.get_folder_structure_as_markdown(path)
-				"scene_tree": return context_provider.get_scene_tree_as_markdown(path)
-				"gdscript": return context_provider.get_script_content_as_markdown(path)
-				"text-based_file": return context_provider.get_text_content_as_markdown(path)
-				"image-meta": return context_provider.get_image_metadata_as_markdown(path)
-				_:
-					var feedback = ToolCallUtils.handle_tool_call_error("unknown_context_type", {"context_type": context_type})
-					return {"success": false, "data": feedback}
-		
-		# [新增] 文档搜索工具分支
-		"search_documents":
-			var keywords = _arguments.get("keywords", "")
-			
-			if keywords is Array: # 简单的容错处理
-				keywords = " ".join(keywords)
-			elif not keywords is String:
-				keywords = str(keywords)
-			
-			var path = _arguments.get("path", "res://godot_doc") # 默认为 res://godot_doc
-			
-			if keywords.is_empty():
-				var feedback = ToolCallUtils.handle_tool_call_error("missing_parameters", {"tool_name": "search_documents"})
-				# 注意：ToolCallUtils.handle_tool_call_error 返回的是 String
-				return feedback
-			
-			# 目前默认搜索 .md 文件，如果未来需要支持更多类型，可以在参数中添加 extension 字段
-			return context_provider.search_files_as_markdown(path, keywords, ".md")
-		
-		_:
-			var feedback = ToolCallUtils.handle_tool_call_error("unknown_tool", {"tool_name": _tool_name})
-			return {"success": false, "data": feedback}
+	# 1. 从注册中心获取工具实例
+	var tool_instance = ToolRegistry.get_tool(_tool_name)
+	
+	# 2. 如果工具不存在，返回错误
+	if tool_instance == null:
+		var feedback = ToolCallUtils.handle_tool_call_error("unknown_tool", {"tool_name": _tool_name})
+		return {"success": false, "data": feedback}
+	
+	# 3. 执行工具逻辑 (注入 context_provider)
+	# context_provider 是 ToolExecutor 的成员变量
+	return tool_instance.execute(_arguments, context_provider)

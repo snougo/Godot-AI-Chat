@@ -146,53 +146,8 @@ static func parse_stream_usage_chunk(_api_provider: String, _json_data: Dictiona
 # [优化] 统一的工具定义函数
 # for_gemini: 如果为 true，则使用大写类型 (OBJECT, STRING)，否则使用标准小写 (object, string)
 static func _get_all_tool_definitions(for_gemini: bool = false) -> Array:
-	var type_object = "OBJECT" if for_gemini else "object"
-	var type_string = "STRING" if for_gemini else "string"
-	
-	var tools: Array = []
-	
-	# --- 工具 1: get_context (获取文件内容) ---
-	tools.append({
-		"name": "get_context",
-		"description": "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, or text-based files.",
-		"parameters": {
-			"type": type_object,
-			"properties": {
-				"context_type": {
-					"type": type_string,
-					"enum": ["folder_structure", "scene_tree", "gdscript", "text-based_file"],
-					"description": "The type of context to retrieve."
-				},
-				"path": {
-					"type": type_string,
-					"description": "The relative path to the file or directory, starting with res://"
-				}
-			},
-			"required": ["context_type", "path"]
-		}
-	})
-	
-	# --- 工具 2: search_documents (搜索文档) ---
-	tools.append({
-		"name": "search_documents",
-		"description": "Search for documentation files (markdown) by filename keywords. Use this to locate relevant documentation in the 'res://godot_doc' folder or other specified paths.",
-		"parameters": {
-			"type": type_object,
-			"properties": {
-				"keywords": {
-					"type": type_string,
-					"description": "The keyword(s) to search for in filenames."
-				},
-				"path": {
-					"type": type_string,
-					"description": "The folder path to search in. Defaults to 'res://godot_doc' if not specified."
-				}
-			},
-			"required": ["keywords"]
-		}
-	})
-	
-	return tools
+	# 重构：直接调用注册中心获取所有工具定义
+	return ToolRegistry.get_all_tool_definitions(for_gemini)
 
 
 #==============================================================================

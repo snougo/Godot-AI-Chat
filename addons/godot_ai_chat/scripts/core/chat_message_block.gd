@@ -343,7 +343,6 @@ func _add_text_block(_text: String, _instant_display: bool = false) -> void:
 
 # 创建并添加一个新的代码块 (CodeEdit)。
 func _add_code_block(_code_content: String) -> void:
-	if _code_content.is_empty(): return
 	# 在创建新节点前，强制完成上一个节点的动画。
 	_force_finish_last_rtf_animation()
 	var code_edit: CodeEdit = CodeEdit.new()
