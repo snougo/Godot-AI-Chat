@@ -23,6 +23,9 @@ func _enter_tree() -> void:
 		push_error("[Godot AI Chat] Can't find ChatUI Node")
 		return
 	
+	# [新增] 注册默认工具
+	_register_default_tools()
+	
 	#inject_ui_async()
 	
 	# 新增：使用标准API将插件UI添加到编辑器右侧停靠栏
@@ -168,3 +171,21 @@ func _on_chat_ui_ready() -> void:
 			push_error("[Godot AI Chat] chat_ui.gd is missing the initialize_editor_dependencies method!")
 	else:
 		push_error("[Godot AI Chat] Could not get a valid EditorFileSystem in plugin.gd.")
+
+
+# [新增] 注册默认工具的私有函数
+func _register_default_tools() -> void:
+	# 加载工具脚本
+	var GetContextTool = load("res://addons/godot_ai_chat/scripts/tools/get_context_tool.gd")
+	var SearchDocsTool = load("res://addons/godot_ai_chat/scripts/tools/search_documents_tool.gd")
+	
+	# 实例化并注册
+	if GetContextTool:
+		ToolRegistry.register_tool(GetContextTool.new())
+	else:
+		push_error("[Godot AI Chat] Failed to load GetContextTool script.")
+	
+	if SearchDocsTool:
+		ToolRegistry.register_tool(SearchDocsTool.new())
+	else:
+		push_error("[Godot AI Chat] Failed to load SearchDocsTool script.")
