@@ -23,7 +23,10 @@ func _enter_tree() -> void:
 		push_error("[Godot AI Chat] Can't find ChatUI Node")
 		return
 	
-	# [新增] 注册默认工具
+	# 确保 notebook.md 存在
+	_ensure_notebook_exists()
+	
+	# 注册默认工具
 	_register_default_tools()
 	
 	#inject_ui_async()
@@ -136,25 +139,27 @@ func _exit_tree() -> void:
 
 
 # 稳定地查找脚本编辑器的主要水平分割容器
-func find_main_h_split_container_with_certainty() -> HSplitContainer:
-	var script_editor = EditorInterface.get_script_editor()
-	if not is_instance_valid(script_editor):
-		return null
+#func find_main_h_split_container_with_certainty() -> HSplitContainer:
+	#var script_editor = EditorInterface.get_script_editor()
+	#if not is_instance_valid(script_editor):
+		#return null
 	# 1. 遍历 ScriptEditor 的直接子节点，寻找第一个 VBoxContainer
-	var main_vbox: VBoxContainer = null
-	for child in script_editor.get_children():
-		if child is VBoxContainer:
-			main_vbox = child
-			break # 找到了，停止循环
-	if not is_instance_valid(main_vbox):
+	#var main_vbox: VBoxContainer = null
+	#for child in script_editor.get_children():
+		#if child is VBoxContainer:
+			#main_vbox = child
+			# 找到了，停止循环
+			#break
+	#if not is_instance_valid(main_vbox):
 		# 在这一帧没找到
-		return null
+		#return null
 	# 2. 遍历 VBoxContainer 的直接子节点，寻找第一个 HSplitContainer
-	for child in main_vbox.get_children():
-		if child is HSplitContainer:
-			return child # 找到了！返回最终目标！
+	#for child in main_vbox.get_children():
+		#if child is HSplitContainer:
+			# 找到了！返回最终目标！
+			#return child
 	
-	return null
+	#return null
 
 
 # ChatUI节点发出ready信号后的回调处理函数
@@ -173,19 +178,39 @@ func _on_chat_ui_ready() -> void:
 		push_error("[Godot AI Chat] Could not get a valid EditorFileSystem in plugin.gd.")
 
 
-# [新增] 注册默认工具的私有函数
+# 注册默认工具的私有函数
 func _register_default_tools() -> void:
 	# 加载工具脚本
-	var GetContextTool = load("res://addons/godot_ai_chat/scripts/tools/get_context_tool.gd")
-	var SearchDocsTool = load("res://addons/godot_ai_chat/scripts/tools/search_documents_tool.gd")
+	var get_context_tool = load("res://addons/godot_ai_chat/scripts/tools/get_context_tool.gd")
+	var search_docs_tool = load("res://addons/godot_ai_chat/scripts/tools/search_documents_tool.gd")
+	var write_notebook_tool = load("res://addons/godot_ai_chat/scripts/tools/write_notebook_tool.gd")
 	
 	# 实例化并注册
-	if GetContextTool:
-		ToolRegistry.register_tool(GetContextTool.new())
+	if get_context_tool:
+		ToolRegistry.register_tool(get_context_tool.new())
 	else:
 		push_error("[Godot AI Chat] Failed to load GetContextTool script.")
 	
-	if SearchDocsTool:
-		ToolRegistry.register_tool(SearchDocsTool.new())
+	if search_docs_tool:
+		ToolRegistry.register_tool(search_docs_tool.new())
 	else:
 		push_error("[Godot AI Chat] Failed to load SearchDocsTool script.")
+	
+	if write_notebook_tool:
+		ToolRegistry.register_tool(write_notebook_tool.new())
+	else:
+		push_error("[Godot AI Chat] Failed to load WriteNotebookTool script.")
+
+
+# 确保 notebook 文件存在的辅助函数
+func _ensure_notebook_exists() -> void:
+	var notebook_path = "res://addons/godot_ai_chat/notebook.md"
+	if not FileAccess.file_exists(notebook_path):
+		var file = FileAccess.open(notebook_path, FileAccess.WRITE)
+		if file:
+			file.store_string("# AI Notebook\n\nThis file is used by the AI to store notes, plans, and code snippets.\n")
+			file.close()
+			# 刷新文件系统，让编辑器看到新文件
+			var fs = EditorInterface.get_resource_filesystem()
+			if fs:
+				fs.scan()
