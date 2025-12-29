@@ -25,6 +25,8 @@ var code_fence_len: int = 0
 var re_fence_open: RegEx = RegEx.create_from_string("^\\s*([`~]{3,})")
 # 用于匹配代码块关闭的正则表达式。
 var re_fence_close: RegEx = RegEx.create_from_string("^\\s*([`~]{3,})\\s*$")
+# 用于匹配潜在的代码块标记前缀（例如 "  ", "`", " ``"），用于增量缓冲判断。
+var re_potential_fence: RegEx = RegEx.create_from_string("^\\s*[`~]*$")
 
 # --- 缓冲机制 ---
 # 用于累积字符，直到形成完整的一行。当解析器处于代码模式或怀疑某行是代码标记时激活。
@@ -113,13 +115,15 @@ func set_tool_message_block(_content: String) -> void:
 func append_chunk(_chunk: String) -> void:
 	# 始终将新到达的碎片放入缓冲区
 	line_buffer += _chunk
-	# 处理缓冲区中所有完整的行
+	# 1. 优先处理缓冲区中所有完整的行（包含换行符的部分）
 	_process_buffered_lines()
+	# 2. 尝试处理剩余的缓冲区内容（不包含换行符的部分）
+	# 实现 Token 级的即时显示，减少延迟
+	_try_flush_partial_text()
 
 
-# 替换原有的 flush_assistant_stream_output() 函数
 func flush_assistant_stream_output() -> void:
-	# 关键修复：无论是否有换行符，都处理缓冲区剩余内容
+	# 无论是否有换行符，都处理缓冲区剩余内容
 	if not line_buffer.is_empty():
 		# 根据当前状态调用相应的处理方法
 		if current_parse_state == _ParseState.IN_TEXT:
@@ -210,11 +214,50 @@ func _process_buffered_lines() -> void:
 		# 更新缓冲区
 		line_buffer = line_buffer.substr(newline_pos + 1)
 		
-		# 处理这一行
-		_process_line(line_to_process)
+		# 逻辑分支：
+		# 如果 is_start_of_line 为 false，说明这一行的前一部分已经通过 _try_flush_partial_text 输出了。
+		# 此时 line_to_process 只是这一行的剩余部分（尾巴）。
+		# 既然已经输出了部分内容，说明这一行绝对不可能是代码块标记（Fence），
+		# 所以直接作为普通文本刷新，并补上换行符。
+		if not is_start_of_line:
+			_flush_text_to_ui(line_to_process + "\n")
+			is_start_of_line = true # 遇到换行符，下一行又是行首
+		else:
+			# 如果是完整的行（从行首开始），则走标准解析逻辑（检测代码块等）
+			_process_line(line_to_process)
+			# _process_line 处理完一行后，隐含下一行是行首
+			is_start_of_line = true
 		
 		# 检查下一个换行符
 		newline_pos = line_buffer.find("\n")
+
+
+# 尝试刷新缓冲区中的部分内容（不等待换行符）
+func _try_flush_partial_text() -> void:
+	if line_buffer.is_empty():
+		return
+	
+	# 目前仅在文本模式下启用增量刷新，代码模式下保持行缓冲以确保高亮准确性（可选优化）
+	if current_parse_state != _ParseState.IN_TEXT:
+		return
+		
+	if is_start_of_line:
+		# 如果处于行首，必须小心，因为可能是代码块标记的开始。
+		# 使用正则检查 buffer 是否可能是 Fence 的前缀 (例如 "  ", "```", "  `")
+		if re_potential_fence.search(line_buffer):
+			# 可能是 Fence，保持缓冲，等待更多字符或换行符
+			return
+		
+		# 如果不匹配 re_potential_fence，说明这一行开头就不是代码块标记。
+		# 安全刷新当前 buffer 到 UI。
+		_flush_text_to_ui(line_buffer)
+		line_buffer = ""
+		is_start_of_line = false # 已经输出了内容，不再是行首
+	else:
+		# 如果不处于行首，说明这一行之前已经输出过内容了，肯定不是 Fence。
+		# 直接刷新。
+		_flush_text_to_ui(line_buffer)
+		line_buffer = ""
 
 
 func _process_line(_line: String) -> void:
@@ -251,11 +294,10 @@ func _parse_line_in_text_state(_line: String) -> void:
 		_flush_text_to_ui(_line + "\n")
 
 
-# 替换原有的 _parse_line_in_code_state() 函数
 func _parse_line_in_code_state(_line: String) -> void:
 	var m_close: RegExMatch = re_fence_close.search(_line)
 	
-	# 关键修复：允许结束围栏长度 >= 开始围栏长度
+	# 允许结束围栏长度 >= 开始围栏长度
 	# 同时确保围栏字符类型匹配（` 或 ~）
 	if m_close and m_close.get_string(1).length() >= code_fence_len:
 		var close_fence: String = m_close.get_string(1)
