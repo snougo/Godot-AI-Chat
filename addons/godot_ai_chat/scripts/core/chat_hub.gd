@@ -16,8 +16,6 @@ var _is_canceling: bool = false
 func _ready() -> void:
 	# 在执行任何操作之前，先确保存档目录存在。
 	ChatArchive.initialize_archive_directory()
-	# 初始化磁盘上的长期记忆，如果文件不存在会创建一个新的空长期记忆文件。
-	LongTermMemoryManager.get_all_folder_context()
 	# 等待一帧，确保所有子节点都已经准备就绪
 	await get_tree().process_frame
 	

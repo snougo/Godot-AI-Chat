@@ -84,23 +84,6 @@ static func print_structured_context(title: String, messages: Array, context_inf
 	print("--- 报告结束 ---\n")
 
 
-# 从长期记忆上下文信息中提取纯净的树状结构
-static func extract_folder_tree_from_context(raw_content: String) -> String:
-	const MARKER = "Folder File Structure:"
-	var start_pos: int = raw_content.find(MARKER)
-	
-	if start_pos == -1:
-		return raw_content
-	
-	var content_after_marker: String = raw_content.substr(start_pos + MARKER.length())
-	
-	var cleaned_content: String = content_after_marker.strip_edges()
-	cleaned_content = cleaned_content.trim_prefix("```").strip_edges()
-	cleaned_content = cleaned_content.trim_suffix("```").strip_edges()
-	
-	return cleaned_content
-
-
 static func update_editor_filesystem(_path) -> void:
 	if Engine.is_editor_hint():
 		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()

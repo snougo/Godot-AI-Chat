@@ -66,7 +66,6 @@ func _start_tool_workflow(_response_data: Dictionary) -> void:
 	current_tool_workflow.tool_workflow_failed.connect(self._on_workflow_failed)
 	# 将工作流的 tool_message_generated 信号直接转发出去
 	current_tool_workflow.tool_message_generated.connect(func(tool_msg): emit_signal("tool_message_received", tool_msg))
-	current_tool_workflow.tool_call_resulet_received.connect(self._on_tool_call_resulet_received)
 	# 使用触发消息来启动工作流
 	current_tool_workflow.tool_workflow_start(_response_data)
 
@@ -82,12 +81,6 @@ func _cleanup_workflow_state() -> void:
 #==============================================================================
 # ## 信号回调函数 ##
 #==============================================================================
-
-func _on_tool_call_resulet_received(_context_type: String, _path: String, _content: String) -> void:
-	# 过滤逻辑: 只将 folder_structure 类型的上下文存入长期记忆
-	if _context_type == "folder_structure":
-		LongTermMemoryManager.add_folder_context(_path, _content)
-
 
 # 工作流成功结束时的回调
 func _on_workflow_completed(_final_messages: Dictionary, _workflow_history: Array) -> void:

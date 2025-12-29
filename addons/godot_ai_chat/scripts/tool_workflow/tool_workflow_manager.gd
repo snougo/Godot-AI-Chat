@@ -124,21 +124,6 @@ func _execute_tools(_tool_calls: Array) -> void:
 				"arguments": parsed_args
 			}
 			result_content = tool_executor.tool_call_execute_parsed(execution_data)
-			
-			# 发出包含 context_type 的更详细信号
-			if function_name == "get_context" and not result_content.begins_with("[SYSTEM FEEDBACK"):
-				var path = parsed_args.get("path", "")
-				var context_type = parsed_args.get("context_type", "")
-				if not path.is_empty() and not context_type.is_empty():
-					# 只有在需要记忆，并且该路径在本批次中尚未出现时，才发出信号
-					if context_type == "folder_structure":
-						if not check_context_paths_in_batch.has(path):
-							emit_signal("tool_call_resulet_received", context_type, path, result_content)
-							# 将此路径标记为在本批次中已处理
-							check_context_paths_in_batch[path] = true
-					else:
-						# 对于非文件夹类型的上下文，总是发出信号（如果未来需要处理）
-						emit_signal("tool_call_resulet_received", context_type, path, result_content)
 		else:
 			result_content = "[SYSTEM FEEDBACK - Tool Call Failed]\nFailed to parse the 'arguments' field for tool call ID '%s'. The provided JSON string was: '%s'" % [tool_call_id, args_str]
 		
