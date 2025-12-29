@@ -105,6 +105,7 @@ func connection_check(_user_prompt: String) -> bool:
 	var error: Error = connection_check_httprequest.request(url, headers, HTTPClient.METHOD_GET)
 	
 	if error == OK:
+		# 移除立即成功的信号，等待 request_completed
 		emit_signal("connection_check_request_succeeded", _user_prompt)
 		return true
 	else:
@@ -307,6 +308,9 @@ func _handle_request_failure(_result: HTTPRequest.Result, _response_code: int, _
 # 处理API服务连线检查请求完成的事情
 func _on_connection_check_request_completed(_result: HTTPRequest.Result, _response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 	if not (_result == HTTPRequest.RESULT_SUCCESS and _response_code == 200):
+		# 既然连接检查都失败了，那个并行的聊天请求也没必要继续了，直接杀掉。
+		# 这能防止它在后台继续运行并在稍后返回数据导致报错。
+		cancel_stream_request()
 		var err_msg: String = _handle_request_failure(_result, _response_code, _body)
 		emit_signal("connection_check_request_failed", err_msg)
 
