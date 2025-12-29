@@ -60,6 +60,8 @@ var current_model_name: String = ""
 var user_prompt: String = ""
 var _last_estimated_prompt_tokens: int = 0
 var _usage_data_was_received: bool = false
+# 用于暂存待发送的用户提示词
+var _pending_user_prompt: String = ""
 
 
 func _ready() -> void:
@@ -99,13 +101,17 @@ func connection_check(_user_prompt: String) -> bool:
 	if not _set_http_request_base_parameters():
 		return false
 	
+	# 保存提示词
+	_pending_user_prompt = _user_prompt
+	
 	var stream: bool = false
 	var headers: PackedStringArray = AiServiceAdapter.get_request_headers(api_provider, api_key, stream)
 	var url: String = AiServiceAdapter.get_models_url(api_provider, api_base_url, api_key)
 	var error: Error = connection_check_httprequest.request(url, headers, HTTPClient.METHOD_GET)
 	
 	if error == OK:
-		emit_signal("connection_check_request_succeeded", _user_prompt)
+		# 移除立即成功的信号，等待 request_completed
+		#emit_signal("connection_check_request_succeeded", _user_prompt)
 		return true
 	else:
 		# 如果连线检查失败，则交由API连线检查信号回调函数处理错误
@@ -307,6 +313,11 @@ func _handle_request_failure(_result: HTTPRequest.Result, _response_code: int, _
 # 处理API服务连线检查请求完成的事情
 func _on_connection_check_request_completed(_result: HTTPRequest.Result, _response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 	if not (_result == HTTPRequest.RESULT_SUCCESS and _response_code == 200):
+		#var err_msg: String = _handle_request_failure(_result, _response_code, _body)
+		#emit_signal("connection_check_request_failed", err_msg)
+		# 成功时发出信号，并传递暂存的提示词
+		emit_signal("connection_check_request_succeeded", _pending_user_prompt)
+	else:
 		var err_msg: String = _handle_request_failure(_result, _response_code, _body)
 		emit_signal("connection_check_request_failed", err_msg)
 

@@ -249,7 +249,10 @@ class OpenAICompatibleAPI:
 				
 				# B. 检测到参数流 (arguments)
 				if function.has("arguments") and not function.arguments.is_empty():
-					output_text += function.arguments
+					# 同样对流式参数中的 ``` 进行转义，防止破坏 Markdown 结构
+					# 虽然流式分包可能导致极少数情况下转义失败（如 ``` 被拆分），但这能解决绝大多数情况
+					output_text += function.arguments.replace("```", "\\u0060\\u0060\\u0060")
+
 			
 			# 3. 检测结束信号
 			# 当整个流结束时，闭合最后一个工具调用的代码块
@@ -418,7 +421,12 @@ class GeminiAPI:
 						if signature != null:
 							tool_payload["gemini_thought_signature"] = signature
 						
-						text_chunk += "\n```json\n" + JSON.stringify(tool_payload) + "\n```\n"
+						var json_str = JSON.stringify(tool_payload)
+						# 转义内容中的 ``` 为 \u0060\u0060\u0060，防止破坏 Markdown 代码块结构
+						json_str = json_str.replace("```", "\\u0060\\u0060\\u0060")
+						
+						text_chunk += "\n```json\n" + json_str + "\n```\n"
+
 		
 		return text_chunk
 
