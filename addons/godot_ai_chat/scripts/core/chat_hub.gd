@@ -27,8 +27,7 @@ func _ready() -> void:
 	current_chat_window.chat_scroll_container = self.chat_scroll_container
 	
 	# --- 单步操作相关的信号连接，不涉及复杂的插件工作流程 ---
-	#chat_ui.new_chat_button_pressed.connect(current_chat_window.creat_new_chat_window)
-	chat_ui.new_chat_button_pressed.connect(self._on_new_chat_button_pressed)
+	chat_ui.new_chat_button_pressed.connect(current_chat_window.creat_new_chat_window)
 	chat_ui.model_selection_changed.connect(network_manager.update_model_name)
 	chat_ui.model_selection_changed.connect(current_chat_window.update_model_name)
 	chat_ui.reconnect_button_pressed.connect(network_manager.get_model_list_from_api_service)
@@ -90,17 +89,6 @@ func _ready() -> void:
 #==============================================================================
 # ## 信号回调函数 ##
 #==============================================================================
-
-# 当用户点击新建对话按钮时触发
-func _on_new_chat_button_pressed() -> void:
-	# 1. 强制停止当前所有活动（网络请求、流、工作流）
-	# 这会清理所有挂起的请求和连接，防止旧请求干扰新会话
-	_on_stop_button_pressed()
-	
-	# 2. 创建新窗口（清空数据和UI）
-	current_chat_window.creat_new_chat_window()
-
-
 
 # 当设置面板保存设置后触发
 func _on_settings_saved_and_reconnect() -> void:

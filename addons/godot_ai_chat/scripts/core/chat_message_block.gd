@@ -26,10 +26,7 @@ var re_fence_open: RegEx = RegEx.create_from_string("^\\s*([`~]{3,})")
 # 用于匹配代码块关闭的正则表达式。
 var re_fence_close: RegEx = RegEx.create_from_string("^\\s*([`~]{3,})\\s*$")
 # 用于匹配潜在的代码块标记前缀（例如 "  ", "`", " ``"），用于增量缓冲判断。
-#var re_potential_fence: RegEx = RegEx.create_from_string("^\\s*[`~]*$")
-# 修改正则：只要以反引号或波浪号开头（允许后面跟任意字符），就视为潜在的代码块标记进行缓冲
-var re_potential_fence: RegEx = RegEx.create_from_string("^\\s*([`~].*)?$")
-
+var re_potential_fence: RegEx = RegEx.create_from_string("^\\s*[`~]*$")
 
 # --- 缓冲机制 ---
 # 用于累积字符，直到形成完整的一行。当解析器处于代码模式或怀疑某行是代码标记时激活。
