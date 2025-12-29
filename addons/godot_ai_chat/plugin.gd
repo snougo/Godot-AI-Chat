@@ -184,6 +184,7 @@ func _register_default_tools() -> void:
 	var get_context_tool = load("res://addons/godot_ai_chat/scripts/tools/get_context_tool.gd")
 	var search_docs_tool = load("res://addons/godot_ai_chat/scripts/tools/search_documents_tool.gd")
 	var write_notebook_tool = load("res://addons/godot_ai_chat/scripts/tools/write_notebook_tool.gd")
+	var get_current_date_tool = load("res://addons/godot_ai_chat/scripts/tools/get_current_date_tool.gd")
 	
 	# 实例化并注册
 	if get_context_tool:
@@ -200,6 +201,11 @@ func _register_default_tools() -> void:
 		ToolRegistry.register_tool(write_notebook_tool.new())
 	else:
 		push_error("[Godot AI Chat] Failed to load WriteNotebookTool script.")
+	
+	if get_current_date_tool:
+		ToolRegistry.register_tool(get_current_date_tool.new())
+	else:
+		push_error("[Godot AI Chat] Failed to load GetCurrentDateTool script.")
 
 
 # 确保 notebook 文件存在的辅助函数
