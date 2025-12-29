@@ -128,13 +128,40 @@ func complete_assistant_stream_output() -> void:
 
 
 # 提交AI模型消息的最终完整文本：更新数据模型并同步 UI
-func commit_final_assistant_message(_final_message: Dictionary) -> void:
-	# 覆盖数据模型
-	if not chat_messages.is_empty() and chat_messages[-1].role == "assistant":
-		chat_messages[-1] = _final_message
-		# 同步UI
-		var last_block = chat_list_container.get_child(chat_list_container.get_child_count() - 1)
-		if is_instance_valid(last_block) and last_block is ChatMessageBlock:
+func commit_final_assistant_message(_final_message: Dictionary, _workflow_history: Array = []) -> void:
+	# 如果没有提供历史片段，则只包含最终消息
+	if _workflow_history.is_empty():
+		_workflow_history = [_final_message]
+	
+	# --- 历史回填逻辑 ---
+	# 目标：用包含完整结构化数据（如 tool_calls）的 _workflow_history 
+	# 替换掉 chat_messages 中对应的那部分“低质量”数据。
+	
+	# 1. 找到最后一条 User 消息的索引，作为替换的起点
+	var last_user_msg_index: int = -1
+	for i in range(chat_messages.size() - 1, -1, -1):
+		if chat_messages[i].role == "user":
+			last_user_msg_index = i
+			break
+	
+	# 2. 执行替换
+	if last_user_msg_index != -1:
+		# 保留 User 消息及其之前的所有内容
+		chat_messages = chat_messages.slice(0, last_user_msg_index + 1)
+		# 追加高质量的历史片段
+		chat_messages.append_array(_workflow_history)
+	else:
+		# 如果找不到 User 消息（极少见），则保留 System 消息并追加新历史
+		var system_msgs = chat_messages.filter(func(m): return m.role == "system")
+		chat_messages = system_msgs + _workflow_history
+	
+	# --- UI 同步 ---
+	# 我们只需要确保最后一条文本消息在 UI 上显示正确。
+	# 中间的工具消息和过程消息已经在流式传输中显示在 UI 上了，无需重绘。
+	
+	var last_block = chat_list_container.get_child(chat_list_container.get_child_count() - 1)
+	if is_instance_valid(last_block) and last_block is ChatMessageBlock:
+		if _final_message.role == "assistant":
 			last_block.set_message_block(
 				_final_message.role,
 				_final_message.content,
@@ -190,14 +217,14 @@ func initialize_chat_with_summarization_message(role: String, content: String) -
 #==============================================================================
 
 # 根据设置获取并截断聊天历史，用于发送给AI模型。
-# 新逻辑：以“对话轮次”为单位进行截断。
+# 以“对话轮次”为单位进行截断。
 func _get_truncated_chat_history() -> Array:
 	# 1. 总是从ToolBox获取最新的设置
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	var max_turns: int = settings.max_chat_turns
 	var system_prompt: String = settings.system_prompt
 	
-	# 3. (原始逻辑) 处理和截断对话历史
+	# 2. 处理和截断对话历史
 	var conversation_turns: Array = []
 	var current_turn: Array = []
 	for message in chat_messages:
@@ -219,14 +246,12 @@ func _get_truncated_chat_history() -> Array:
 	var final_messages: Array = []
 	for turn in truncated_turns: final_messages.append_array(turn)
 	
-	# 4. 组装最终要发送给模型的历史记录
+	# 3. 组装最终要发送给模型的历史记录
 	var chat_messages_for_AI: Array = []
-	
-	# 4.1 放置主系统提示词
+	# 3.1 放置主系统提示词
 	if not system_prompt.is_empty():
 		chat_messages_for_AI.append({"role": "system", "content": system_prompt})
-	
-	# 4.2 放置截断后的对话消息
+	# 3.2 放置截断后的对话消息
 	chat_messages_for_AI.append_array(final_messages)
 	
 	return chat_messages_for_AI

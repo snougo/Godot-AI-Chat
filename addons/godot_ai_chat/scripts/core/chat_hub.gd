@@ -162,7 +162,7 @@ func _save_chat_messages_to_markdown(_save_path: String) -> void:
 	ToolBox.update_editor_filesystem(_save_path)
 
 
-# 新增：当总结按钮被按下时
+# 当总结按钮被按下时
 func _on_summarize_button_pressed() -> void:
 	var messages: Array = current_chat_window.get_current_chat_messages()
 	# 过滤掉系统消息，只检查实际对话是否存在
@@ -177,23 +177,23 @@ func _on_summarize_button_pressed() -> void:
 	network_manager.request_summary(conversation_messages)
 
 
-# 新增：当总结请求成功返回时
+# 当总结请求成功返回时
 func _on_summary_request_succeeded(summary_text: String) -> void:
-	# 1. 在使用之前，先清理总结内容可能包含的<think>内容
+	# 在使用之前，先清理总结内容可能包含的<think>内容
 	var cleaned_summary: String = ToolBox.remove_think_tags(summary_text)
 	
-	# 2. 保存清理后的总结到文件
+	# 保存清理后的总结到文件
 	var saved_path: String = ChatArchive.save_summary_to_markdown(cleaned_summary)
 	if not saved_path.is_empty():
 		ToolBox.update_editor_filesystem(saved_path)
 	
-	# 3. 构建新聊天的第一条消息
+	# 构建新聊天的第一条消息
 	var initial_message_content: String = "This is a summary of the previous conversation. Please remember it for our new chat:\n\n---\n\n" + cleaned_summary
 	
-	# 4. 使用新函数初始化聊天窗口
+	# 使用新函数初始化聊天窗口
 	current_chat_window.initialize_chat_with_summarization_message("user", initial_message_content)
 	
-	# 5. 恢复UI状态并显示成功信息
+	# 恢复UI状态并显示成功信息
 	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Summary complete. New chat started.")
 	chat_ui.show_confirmation("Conversation summarized and saved to:\n" + saved_path)
 
@@ -202,7 +202,7 @@ func _on_summary_request_succeeded(summary_text: String) -> void:
 func _on_stop_button_pressed() -> void:
 	# 无论当前状态如何，立即升起“门卫”旗帜，阻止任何后续的工具流启动
 	_is_canceling = true
-	# 新增：在清理主连接之前，先命令后端取消任何活动的工具工作流
+	# 在清理主连接之前，先命令后端取消任何活动的工具工作流
 	chat_backend.cancel_current_workflow()
 	# 使用新的、健壮的清理函数
 	_cleanup_stream_connections()
@@ -220,7 +220,7 @@ func _on_stop_button_pressed() -> void:
 
 # 当一个新的聊天请求即将发送时调用
 func _on_chat_request_sending() -> void:
-	# 关键修复：在建立新的流式连接之前，清理所有旧的流式连接。
+	# 在建立新的流式连接之前，清理所有旧的流式连接。
 	_cleanup_stream_connections()
 	# 更新UI状态到“等待响应”
 	chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE, "Waiting for AI response...")
@@ -257,7 +257,7 @@ func _on_new_assistant_message_appended(message_data: Dictionary) -> void:
 		print("[ChatHub] Assistant message appended, but process is canceling. Ignoring.")
 		return
 	
-	# 关键修复：如果后端正处于一个工具工作流中，则不通过此路径处理新消息。
+	# 如果后端正处于一个工具工作流中，则不通过此路径处理新消息。
 	# 工作流会通过其自身的网络信号监听来管理流程，避免双重处理和状态冲突。
 	if chat_backend.is_in_tool_workflow:
 		print("[ChatHub] Assistant message appended, but a tool workflow is active. Workflow will self-manage.")
@@ -271,11 +271,11 @@ func _on_new_assistant_message_appended(message_data: Dictionary) -> void:
 
 
 # 当 ChatBackend 的工作流成功完成时调用
-func _on_assistant_processing_completed(_final_message: Dictionary) -> void:
+func _on_assistant_processing_completed(_final_message: Dictionary, _workflow_history: Array) -> void:
 	# 使用新的、健壮的清理函数
 	_cleanup_stream_connections()
 	# 命令 CurrentChatWindow 更新最终的消息显示
-	current_chat_window.commit_final_assistant_message(_final_message)
+	current_chat_window.commit_final_assistant_message(_final_message, _workflow_history)
 	# 命令 ChatUI 恢复空闲状态
 	chat_ui.on_assistant_message_appending_complete()
 
@@ -289,8 +289,9 @@ func _on_tool_workflow_failed(_error_message: String) -> void:
 		"role": "assistant", 
 		"content": "[ERROR] Tool execution failed: " + _error_message
 	}
-	# 命令 CurrentChatWindow 显示这个错误消息
-	current_chat_window.commit_final_assistant_message(error_response)
+	
+	# 错误情况下，历史片段只包含这个错误消息
+	current_chat_window.commit_final_assistant_message(error_response, [error_response])
 	# 命令 ChatUI 恢复空闲状态
 	chat_ui.on_assistant_message_appending_complete()
 

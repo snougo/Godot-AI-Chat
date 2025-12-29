@@ -21,7 +21,6 @@ var _stop_thread_flag: bool = false
 var _mutex: Mutex = Mutex.new()
 # 用于区分不同的线程任务，防止旧线程的回调影响新线程的状态。
 var _current_thread_id: int = 0
-
 var _last_usage_data_in_stream: Dictionary = {}
 
 
@@ -273,7 +272,7 @@ func _process_response_stream(_http_client: HTTPClient, _api_provider: String, _
 		if status == HTTPClient.STATUS_BODY:
 			var chunk = _http_client.read_response_body_chunk()
 			if chunk.size() > 0:
-				# 关键修复：在这里更新最后接收数据的时间
+				# 在这里更新最后接收数据的时间
 				last_data_received_time = Time.get_ticks_msec()
 				response_buffer.append_array(chunk)
 				
@@ -290,7 +289,7 @@ func _process_response_stream(_http_client: HTTPClient, _api_provider: String, _
 				else:
 					# 如果不完整，打印一个调试信息（可选），然后什么都不做
 					# 等待下一次循环读取更多数据拼接到 response_buffer 后面
-					# print("[THREAD] UTF-8 truncated, waiting for next chunk...")
+					print("[THREAD] UTF-8 truncated, waiting for next chunk...")
 					pass
 			else:
 				# 状态是 BODY 但没数据，稍微休息一下避免 CPU 空转
@@ -325,7 +324,6 @@ func _parse_buffer_and_get_remainder(_buffer: PackedByteArray, _json_parser: JSO
 
 
 func _parse_gemini_json_stream(_buffer: PackedByteArray, _json_parser: JSON, _api_provider: String, _thread_id: int) -> Dictionary:
-	# 关键修复：Godot 4.x 的 get_string_from_utf8() 本身就是容错的
 	# 遇到不完整UTF-8字符时会自动替换为 �，不会崩溃
 	var text: String = _buffer.get_string_from_utf8()
 	
@@ -380,14 +378,13 @@ func _parse_gemini_json_stream(_buffer: PackedByteArray, _json_parser: JSON, _ap
 			# 验证JSON完整性，失败则保留缓冲区等待更多数据
 			if _json_parser.parse(json_str) == OK:
 				var json_data = _json_parser.get_data()
+				
 				if json_data is Dictionary:
-					var chunk: String = AiServiceAdapter.parse_stream_chunk(_api_provider, json_data)
+					# 使用新函数提取数据
+					var chunk: String = _extract_chunk_and_usage(json_data, _api_provider)
+					
 					if not chunk.is_empty():
 						Callable(self, "_on_chunk_received_from_thread").call_deferred(chunk, _thread_id)
-					
-					var usage: Dictionary = AiServiceAdapter.parse_stream_usage_chunk(_api_provider, json_data)
-					if not usage.is_empty():
-						_last_usage_data_in_stream = usage
 				
 				last_processed_pos = object_end + 1
 				search_offset = last_processed_pos
@@ -453,12 +450,8 @@ func _process_stream_line(_line_content: String, _json_parser: JSON, _api_provid
 	
 	var json_data = _json_parser.get_data()
 	if json_data is Dictionary:
-		result.chunk = AiServiceAdapter.parse_stream_chunk(_api_provider, json_data)
-		
-		var usage: Dictionary = AiServiceAdapter.parse_stream_usage_chunk(_api_provider, json_data)
-		if not usage.is_empty():
-			# 修改: 不再发送信号，而是更新缓存变量
-			_last_usage_data_in_stream = usage
+		# 使用新函数提取数据，result.chunk 直接接收返回值
+		result.chunk = _extract_chunk_and_usage(json_data, _api_provider)
 	
 	return result
 
@@ -522,7 +515,7 @@ func _on_stream_request_failed_from_thread(_error_message: String, _finished_thr
 # ## 内部辅助函数 ##
 #==============================================================================
 
-# [新增] 检查 PackedByteArray 的末尾是否中断了 UTF-8 多字节序列
+# 检查 PackedByteArray 的末尾是否中断了 UTF-8 多字节序列
 # 返回 true 表示数据完整（或为空），可以安全转换字符串
 # 返回 false 表示末尾有残缺的字节，需要等待更多数据
 func _is_buffer_safe_for_utf8(buffer: PackedByteArray) -> bool:
@@ -571,3 +564,16 @@ func _is_buffer_safe_for_utf8(buffer: PackedByteArray) -> bool:
 		return false
 		
 	return true
+
+
+# 统一从 JSON 数据中提取文本块并自动更新 Usage 数据
+func _extract_chunk_and_usage(_json_data: Dictionary, _api_provider: String) -> String:
+	# 1. 提取文本块
+	var chunk: String = AiServiceAdapter.parse_stream_chunk(_api_provider, _json_data)
+	
+	# 2. 提取并更新 Usage 数据 (副作用)
+	var usage: Dictionary = AiServiceAdapter.parse_stream_usage_chunk(_api_provider, _json_data)
+	if not usage.is_empty():
+		_last_usage_data_in_stream = usage
+	
+	return chunk

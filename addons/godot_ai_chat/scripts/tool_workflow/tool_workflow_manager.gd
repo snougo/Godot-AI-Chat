@@ -1,8 +1,8 @@
 extends RefCounted
 class_name ToolWorkflowManager
 
-# 当工作流成功返回最终答案时发出
-signal tool_workflow_completed(assistant_response: Dictionary)
+
+signal tool_workflow_completed(assistant_response: Dictionary, full_workflow_history: Array)
 # 当工作流中途失败时发出
 signal tool_workflow_failed(error_message: String)
 # 当有工具的中间结果产生时发出，用于UI显示
@@ -23,7 +23,7 @@ func _init(_network_manager: NetworkManager, _tool_executor: ToolExecutor, _full
 	tool_executor = _tool_executor
 	full_chat_history = _full_chat_history.duplicate(true)
 	
-	# 关键修复 1：在初始化时就建立所有需要的连接
+	# 在初始化时就建立所有需要的连接
 	network_manager.new_stream_chunk_received.connect(self._on_next_chunk)
 	network_manager.chat_stream_request_completed.connect(self._on_next_stream_ended)
 	network_manager.chat_request_failed.connect(self._on_next_request_failed)
@@ -33,7 +33,7 @@ func _init(_network_manager: NetworkManager, _tool_executor: ToolExecutor, _full
 # ## 公共函数 ##
 #==============================================================================
 
-# 新增：一个专门的清理函数，用于断开所有连接
+# 一个专门的清理函数，用于断开所有连接
 func cleanup_connections() -> void:
 	if is_instance_valid(network_manager):
 		if network_manager.is_connected("new_stream_chunk_received", Callable(self, "_on_next_chunk")):
@@ -58,7 +58,7 @@ func _process_ai_response(_response_data: Dictionary) -> void:
 		# 助手消息只在它们被最终确定时（即从网络流接收完毕后）才被添加。
 		var normalized_response: Dictionary = ToolCallUtils.tool_call_converter(_response_data)
 		
-		# [修复逻辑] 区分初始消息和后续消息的更新目标
+		# 区分初始消息和后续消息的更新目标
 		if tool_workflow_messages.is_empty():
 			# 情况 A: tool_workflow_messages 为空，说明这是工作流的第一步（初始触发消息）
 			# 这条消息位于 full_chat_history 的末尾，我们需要更新它
@@ -82,8 +82,18 @@ func _process_ai_response(_response_data: Dictionary) -> void:
 	
 	# 如果没有工具调用，说明工作流结束
 	elif _response_data.has("content"):
-		# 这是工作流的最终答案，它不是历史的一部分，而是工作流的“返回值”。
-		emit_signal("tool_workflow_completed", _response_data)
+		# 构建并返回完整的历史片段
+		var workflow_history: Array = []
+		
+		# 1. 获取触发工作流的那条 Assistant 消息 (现在它包含了关键的 tool_calls 信息)
+		if not full_chat_history.is_empty():
+			workflow_history.append(full_chat_history[-1])
+		# 2. 添加工作流中间产生的所有消息 (Tool 消息, 中间 Assistant 消息)
+		workflow_history.append_array(tool_workflow_messages)
+		# 3. 添加最终的回复消息
+		workflow_history.append(_response_data)
+		# 发出信号，传递最终回复和完整历史
+		emit_signal("tool_workflow_completed", _response_data, workflow_history)
 	else:
 		emit_signal("tool_workflow_failed", "AI response was empty.")
 
@@ -91,7 +101,7 @@ func _process_ai_response(_response_data: Dictionary) -> void:
 func _execute_tools(_tool_calls: Array) -> void:
 	var tool_messages_for_api: Array = []
 	var aggregated_content_for_ui: String = ""
-	# 新增: 创建一个临时的、仅用于此函数作用域的字典，以跟踪本批次中已处理的路径
+	# 创建一个临时的、仅用于此函数作用域的字典，以跟踪本批次中已处理的路径
 	var check_context_paths_in_batch: Dictionary = {}
 	
 	for call in _tool_calls:
@@ -101,26 +111,26 @@ func _execute_tools(_tool_calls: Array) -> void:
 			continue
 		
 		var function = call.get("function", {})
-		# --- 修复点 1: 从 'function' 字典中正确获取工具名称 ---
+		# 从 'function' 字典中正确获取工具名称
 		var function_name = function.get("name", "unknown_tool")
 		var args_str = function.get("arguments", "{}")
 		var parsed_args = JSON.parse_string(args_str)
 		var result_content: String
 		
 		if parsed_args is Dictionary:
-			# --- 修复点 2: 创建一个包含名称和参数的完整字典传递给执行器 ---
+			# 2: 创建一个包含名称和参数的完整字典传递给执行器
 			var execution_data = {
 				"tool_name": function_name,
 				"arguments": parsed_args
 			}
 			result_content = tool_executor.tool_call_execute_parsed(execution_data)
 			
-			# 修改点: 发出包含 context_type 的更详细信号
+			# 发出包含 context_type 的更详细信号
 			if function_name == "get_context" and not result_content.begins_with("[SYSTEM FEEDBACK"):
 				var path = parsed_args.get("path", "")
 				var context_type = parsed_args.get("context_type", "")
 				if not path.is_empty() and not context_type.is_empty():
-					# 关键修复: 只有在需要记忆，并且该路径在本批次中尚未出现时，才发出信号
+					# 只有在需要记忆，并且该路径在本批次中尚未出现时，才发出信号
 					if context_type == "folder_structure":
 						if not check_context_paths_in_batch.has(path):
 							emit_signal("tool_call_resulet_received", context_type, path, result_content)
@@ -166,21 +176,18 @@ func _request_next_ai_step() -> void:
 func _build_optimized_context() -> Array:
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	var system_prompt: String = settings.system_prompt
-	
-	# 步骤 1: 将启动工作流时的完整历史和当前工作流中累积的消息合并。
+	# 将启动工作流时的完整历史和当前工作流中累积的消息合并。
 	# 这确保了所有中间步骤都被保留。
 	var combined_history: Array = full_chat_history + tool_workflow_messages
-	
-	# 步骤 3: 组装最终要发送给模型的历史记录
+	# 组装最终要发送给模型的历史记录
 	var chat_messages_for_AI: Array = []
 	
-	# 3.1 放置主系统提示词
+	# 放置主系统提示词
 	if not system_prompt.is_empty():
 		chat_messages_for_AI.append({"role": "system", "content": system_prompt})
 	
-	# 3.2 放置合并后的完整对话消息
-	var conversation_messages = combined_history.filter(func(m): return m.get("role") != "system")
-	
+	# 放置合并后的完整对话消息
+	var conversation_messages: Array = combined_history.filter(func(m): return m.get("role") != "system")
 	chat_messages_for_AI.append_array(conversation_messages)
 	
 	return chat_messages_for_AI
