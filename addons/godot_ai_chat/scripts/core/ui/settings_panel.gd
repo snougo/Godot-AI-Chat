@@ -25,7 +25,6 @@ var settings_resource: PluginSettings
 @onready var temperature_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureLabel
 @onready var temperature_value_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureValueLabel
 @onready var system_prompt_label: Label = $Panel/MarginContainer/VBoxContainer/SystemPromptLabel
-@onready var summarize_prompt_label: Label = $Panel/MarginContainer/VBoxContainer/SummarizePromptLabel
 
 @onready var api_provider_options: OptionButton = $Panel/MarginContainer/VBoxContainer/HBoxContainer/APIProviderOptions
 @onready var base_url_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer2/BaseUrlInput
@@ -34,7 +33,6 @@ var settings_resource: PluginSettings
 @onready var timeout_value: SpinBox = $Panel/MarginContainer/VBoxContainer/HBoxContainer5/TimeoutValue
 @onready var temperature_value: HSlider = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureValue
 @onready var system_prompt_input: TextEdit = $Panel/MarginContainer/VBoxContainer/SystemPromptInput
-@onready var summarize_prompt_input: TextEdit = $Panel/MarginContainer/VBoxContainer/SummarizePromptInput
 
 @onready var save_button: Button = $Panel/MarginContainer/VBoxContainer/CenterContainer/SaveButton
 
@@ -51,8 +49,6 @@ func _ready() -> void:
 	timeout_label.text = "Timeout (sec):"
 	temperature_label.text = "Temperature:"
 	system_prompt_label.text = "System Prompt:"
-	summarize_prompt_label.text = "Summarization Prompt:"
-	summarize_prompt_label.tooltip_text = "Summarize Current Chat Context"
 	
 	# 连接UI控件的信号
 	temperature_value.value_changed.connect(_on_temperature_value_changed)
@@ -116,7 +112,6 @@ func _populate_ui_from_resource() -> void:
 	temperature_value.value = settings_resource.temperature
 	_on_temperature_value_changed(settings_resource.temperature) # 更新温度标签显示
 	system_prompt_input.text = settings_resource.system_prompt
-	summarize_prompt_input.text = settings_resource.summarization_prompt
 
 
 #==============================================================================
@@ -142,7 +137,6 @@ func _on_save_button_pressed():
 	settings_resource.network_timeout = int(timeout_value.value)
 	settings_resource.temperature = temperature_value.value
 	settings_resource.system_prompt = system_prompt_input.text
-	settings_resource.summarization_prompt = summarize_prompt_input.text
 	# 保存资源到文件
 	if ResourceSaver.save(settings_resource, SETTINGS_PATH) == OK:
 		emit_signal("settings_saved")

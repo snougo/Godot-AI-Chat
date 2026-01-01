@@ -13,12 +13,10 @@ class_name PluginSettings
 # API密钥（可选，取决于服务提供商）。
 @export var api_key: String = ""
 # 在每次请求中发送给AI的上下文消息的需要被保留的最大对话轮数。
-@export_range(1, 50, 1) var max_chat_turns: int = 6
+@export_range(1, 50, 1) var max_chat_turns: int = 8
 # 网络流式输出请求的超时时间（秒）。
 @export var network_timeout: int = 180
 # AI模型的“温度”参数，控制生成文本的随机性和创造性。值越高越有创意，越低越确定。
-@export_range(0.0, 1.0, 0.1) var temperature: float = 0.7
+@export_range(0.0, 1.0, 0.1) var temperature: float = 1.0
 # 系统提示词（System Prompt），用于设定AI的角色和行为准则。
 @export_multiline var system_prompt: String = "You are a helpful Godot Engine Assistant."
-# 用于请求内容总结的系统提示词
-@export_multiline var summarization_prompt: String = "Please summarize the following conversation concisely. Identify the key points, decisions made, and any unresolved questions. The summary should be clear and easy to understand for someone who has not read the full conversation."

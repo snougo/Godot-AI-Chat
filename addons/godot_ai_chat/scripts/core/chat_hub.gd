@@ -1,7 +1,11 @@
 @tool
 extends Control
+class_name ChatHub
 
+# 存档目录常量
+const ARCHIVE_DIR = "res://addons/godot_ai_chat/chat_archives/"
 
+# --- 场景引用 ---
 @onready var chat_ui: ChatUI = $ChatUI
 @onready var network_manager: NetworkManager = $NetworkManager
 @onready var chat_backend: ChatBackend = $ChatBackend
@@ -10,313 +14,196 @@ extends Control
 @onready var chat_list_container: VBoxContainer = $ChatUI/TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer/ChatListContainer
 @onready var chat_scroll_container: ScrollContainer = $ChatUI/TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer
 
-var _is_canceling: bool = false
+# 当前绑定的资源文件路径 (用于自动保存)
+var current_history_path: String = ""
 
 
 func _ready() -> void:
-	# 在执行任何操作之前，先确保存档目录存在。
-	ChatArchive.initialize_archive_directory()
-	# 等待一帧，确保所有子节点都已经准备就绪
+	# 确保目录存在
+	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
+		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
+	
+	# 依赖注入
+	chat_backend.network_manager = network_manager
+	chat_backend.current_chat_window = current_chat_window
+	current_chat_window.chat_list_container = chat_list_container
+	current_chat_window.chat_scroll_container = chat_scroll_container
+	
+	# 等待一帧让子节点 Ready
 	await get_tree().process_frame
 	
-	# 之所以选择在ChatHub中注入依赖是因为ChatHub的子节点会早于ChatHub准备完毕
-	# 因此不会出现某个子节点因没有准备好导致后续的步骤报错
-	chat_backend.network_manager = self.network_manager
-	chat_backend.current_chat_window = self.current_chat_window
-	current_chat_window.chat_list_container = self.chat_list_container
-	current_chat_window.chat_scroll_container = self.chat_scroll_container
+	# --- 信号连接 ---
 	
-	# --- 单步操作相关的信号连接，不涉及复杂的插件工作流程 ---
-	#chat_ui.new_chat_button_pressed.connect(current_chat_window.creat_new_chat_window)
-	chat_ui.new_chat_button_pressed.connect(self._on_new_chat_button_pressed)
-	chat_ui.model_selection_changed.connect(network_manager.update_model_name)
-	chat_ui.model_selection_changed.connect(current_chat_window.update_model_name)
-	chat_ui.reconnect_button_pressed.connect(network_manager.get_model_list_from_api_service)
+	# 1. UI 操作
+	chat_ui.send_button_pressed.connect(_on_user_send_message)
+	chat_ui.stop_button_pressed.connect(_on_stop_requested)
+	chat_ui.new_chat_button_pressed.connect(_create_new_session)
+	chat_ui.reconnect_button_pressed.connect(network_manager.get_model_list)
+	chat_ui.load_chat_button_pressed.connect(_load_session)
+	chat_ui.settings_save_button_pressed.connect(network_manager.get_model_list)
+	chat_ui.save_as_markdown_button_pressed.connect(_export_markdown)
 	
-	chat_ui.summarize_button_pressed.connect(self._on_summarize_button_pressed)
-	network_manager.summary_request_succeeded.connect(self._on_summary_request_succeeded)
-	network_manager.summary_request_failed.connect(chat_ui.on_chat_request_failed)
+	# 2. 模型与设置
+	chat_ui.model_selection_changed.connect(func(name): network_manager.current_model_name = name)
 	
-	# --- 模型列表获取的信号连接 ---
-	network_manager.get_model_list_request.connect(chat_ui.update_ui_state.bind(ChatUI.UIState.CONNECTING, "Loading Model List..."))
+	# 3. 网络事件 -> UI 反馈
+	network_manager.get_model_list_request_started.connect(chat_ui.update_ui_state.bind(ChatUI.UIState.CONNECTING))
 	network_manager.get_model_list_request_succeeded.connect(chat_ui.update_model_list)
 	network_manager.get_model_list_request_failed.connect(chat_ui.on_get_model_list_request_failed)
 	
-	# --- 保存/加载/设置相关的信号连接 ---
-	chat_ui.save_chat_button_pressed.connect(self._save_chat_messages_to_tres)
-	chat_ui.save_as_markdown_button_pressed.connect(self._save_chat_messages_to_markdown)
-	chat_ui.load_chat_button_pressed.connect(self._on_load_chat_archive)
-	chat_ui.settings_save_button_pressed.connect(self._on_settings_saved_and_reconnect)
+	network_manager.new_chat_request_sending.connect(func(): chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE))
+	network_manager.new_stream_chunk_received.connect(_on_chunk_received)
+	network_manager.chat_stream_request_completed.connect(_on_stream_completed)
+	network_manager.chat_request_failed.connect(_on_chat_failed)
 	
-	# --- 工作流程的信号连接 ---
-	# 点击发送按钮后先检查和API服务的连线
-	chat_ui.send_button_pressed.connect(network_manager.connection_check)
-	# 如果和API服务的连线检查成功，通知ChatUI清除用户输入框中的内容，并通知CurrentChatWindow将用户消息添加到聊天对话界面中
-	network_manager.connection_check_request_succeeded.connect(chat_ui.clear_user_input)
-	network_manager.connection_check_request_succeeded.connect(current_chat_window.append_new_user_message)
-	# 如果和API服务的连线检查失败，通知ChatUI执行连线检查失败时的逻辑
-	network_manager.connection_check_request_failed.connect(chat_ui.on_connection_check_request_failed)
-	# 当用户信息在聊天对话界面中添加完毕后通知NetworkManager向模型API服务发起新会话请求并等待模型的流式回应
-	current_chat_window.new_user_message_append_completed.connect(network_manager.new_chat_stream_request)
-	# 为发起的新会话请求执行设定的逻辑
-	network_manager.new_chat_request_sending.connect(self._on_chat_request_sending)
-	# 当模型的流式输出完毕之后通知CurrentChatWindow完成模型回应消息的流式接收
-	network_manager.chat_stream_request_completed.connect(current_chat_window.complete_assistant_stream_output)
-	# 当模型的回应消息在聊天对话界面中添加完毕后执行设定的逻辑
-	current_chat_window.new_assistant_message_append_completed.connect(self._on_new_assistant_message_appended)
+	# 4. 后端 Agent 事件
+	chat_backend.tool_workflow_started.connect(chat_ui.update_ui_state.bind(ChatUI.UIState.TOOLCALLING))
+	chat_backend.tool_workflow_failed.connect(_on_chat_failed)
+	chat_backend.assistant_message_ready.connect(_on_assistant_reply_completed)
+	chat_backend.tool_message_generated.connect(_on_tool_message_generated)
 	
-	network_manager.chat_request_failed.connect(chat_ui.on_chat_request_failed)
+	# 5. Token 统计
+	network_manager.chat_usage_data_received.connect(current_chat_window.update_token_usage)
 	
-	# 用户主动停止工作流程
-	chat_ui.stop_button_pressed.connect(self._on_stop_button_pressed)
-	network_manager.chat_stream_request_canceled.connect(self._on_chat_stream_canceled)
-	
-	# --- 工具工作流的信号连接 ---
-	chat_backend.tool_workflow_started.connect(chat_ui.update_ui_state.bind(ChatUI.UIState.TOOLCALLING, "Tool Calling..."))
-	chat_backend.tool_message_received.connect(current_chat_window.add_tool_message_block)
-	chat_backend.assistant_message_processing_completed.connect(self._on_assistant_processing_completed)
-	chat_backend.tool_workflow_failed.connect(self._on_tool_workflow_failed)
-	
-	# --- Token计算的信号连接 ---
-	network_manager.chat_usage_data_received.connect(current_chat_window.add_token_usage)
-	network_manager.fallback_token_usage_estimated.connect(current_chat_window.add_estimated_prompt_tokens)
-	current_chat_window.token_cost_updated.connect(chat_ui.update_token_cost_display)
-	
-	# --- 初始化操作 ---
-	network_manager.get_model_list_from_api_service()
-	current_chat_window.creat_new_chat_window()
+	# --- 初始化 ---
+	network_manager.get_model_list()
+	_create_new_session() # 启动时自动新建一个会话
 
 
-#==============================================================================
-# ## 信号回调函数 ##
-#==============================================================================
+# --- 核心业务逻辑 ---
 
-# 当用户点击新建对话按钮时触发
-func _on_new_chat_button_pressed() -> void:
-	# 1. 强制停止当前所有活动（网络请求、流、工作流）
-	# 这会清理所有挂起的请求和连接，防止旧请求干扰新会话
-	_on_stop_button_pressed()
-	# 2. 创建新窗口（清空数据和UI）
-	current_chat_window.creat_new_chat_window()
-
-
-# 当设置面板保存设置后触发
-func _on_settings_saved_and_reconnect() -> void:
-	network_manager.get_model_list_from_api_service()
-	# 将UI切换回聊天标签页
-	var tab_container: TabContainer = chat_ui.get_node_or_null("TabContainer")
-	if is_instance_valid(tab_container):
-		tab_container.current_tab = 0
-
-
-# 当UI请求加载聊天存档时触发
-func _on_load_chat_archive(_archive_name: String) -> void:
-	# 调用存档工具类从文件加载历史记录
-	var archive_resource: PluginChatHistory = ChatArchive.load_chat_archive_from_file(_archive_name)
+# 新建会话 (自动保存逻辑的核心)
+func _create_new_session() -> void:
+	# 1. 停止当前可能的生成
+	_on_stop_requested()
 	
-	if is_instance_valid(archive_resource):
-		# 在开始加载前更新UI状态
-		chat_ui.update_ui_state(ChatUI.UIState.LOADING, "Loading chat history...")
-		# 加载成功，将历史消息传递给 CurrentChatWindow 进行显示
-		await current_chat_window.load_chat_messages_from_archive(archive_resource.messages)
-		# 加载完成后恢复UI状态
-		chat_ui.update_ui_state(ChatUI.UIState.IDLE, " %s loaded." % _archive_name)
-		chat_ui.show_confirmation("Chat archive '%s' loaded successfully." % _archive_name)
+	# 2. 生成新文件名
+	var now = Time.get_datetime_dict_from_system(false)
+	var filename = "chat_%d-%02d-%02d_%02d-%02d-%02d.tres" % [now.year, now.month, now.day, now.hour, now.minute, now.second]
+	current_history_path = ARCHIVE_DIR.path_join(filename)
+	
+	# 3. 创建新资源并保存
+	var new_history = ChatMessageHistory.new()
+	var err = ResourceSaver.save(new_history, current_history_path)
+	if err != OK:
+		chat_ui.show_confirmation("Error: Failed to create chat file at %s" % current_history_path)
+		return
+	
+	# 4. 绑定到窗口
+	current_chat_window.load_history_resource(new_history)
+	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created")
+	
+	# 5. 监听资源变化以实现自动保存
+	if not new_history.changed.is_connected(_auto_save_history):
+		new_history.changed.connect(_auto_save_history)
+
+
+# 自动保存回调
+func _auto_save_history() -> void:
+	if current_history_path.is_empty():
+		return
+	
+	var history = current_chat_window.chat_history
+	if history:
+		ResourceSaver.save(history, current_history_path)
+
+
+# 加载会话
+func _load_session(filename: String) -> void:
+	var path = ARCHIVE_DIR.path_join(filename)
+	
+	if not FileAccess.file_exists(path):
+		chat_ui.show_confirmation("Error: File not found: %s" % path)
+		return
+	
+	var history = ResourceLoader.load(path)
+	if history is ChatMessageHistory:
+		_on_stop_requested() # 停止当前
+		current_history_path = path # 更新当前路径
+		
+		current_chat_window.load_history_resource(history)
+		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % filename)
+		
+		# 重新绑定自动保存
+		if not history.changed.is_connected(_auto_save_history):
+			history.changed.connect(_auto_save_history)
 	else:
-		# 加载失败，显示错误提示
-		chat_ui.show_confirmation("Error: Failed to load chat archive '%s'." % _archive_name)
+		chat_ui.show_confirmation("Error: Invalid resource type.")
 
 
-# 当UI请求将当前聊天保存为 .tres 文件时触发
-func _save_chat_messages_to_tres(_save_path: String) -> void:
-	# 在执行任何操作之前，先确保存档目录存在。
-	ChatArchive.initialize_archive_directory()
+# 用户点击发送
+func _on_user_send_message(text: String) -> void:
+	# 1. UI 立即响应 (乐观 UI)
+	chat_ui.clear_user_input()
+	current_chat_window.append_user_message(text)
 	
-	var messages: Array = current_chat_window.get_current_chat_messages()
-	if messages.is_empty():
-		chat_ui.show_confirmation("Cannot save an empty chat.")
+	# 2. 准备上下文 [关键修改]
+	# 使用 get_truncated_messages 获取符合轮次限制的消息列表
+	var settings = ToolBox.get_plugin_settings()
+	var context_history = current_chat_window.chat_history.get_truncated_messages(
+		settings.max_chat_turns,
+		settings.system_prompt
+	)
+	
+	# 3. 发送请求
+	network_manager.start_chat_stream(context_history)
+
+
+# 收到第一个 Chunk 时，更新 UI 状态
+func _on_chunk_received(chunk: Dictionary) -> void:
+	if chat_ui.current_state == ChatUI.UIState.WAITING_RESPONSE:
+		chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
+	
+	# [修改] 传入 provider
+	current_chat_window.handle_stream_chunk(chunk, network_manager.current_provider)
+
+
+# [新增] 回调函数：显示工具结果
+func _on_tool_message_generated(msg: ChatMessage) -> void:
+	# [修改] 传递 msg.tool_call_id
+	current_chat_window.append_tool_message(msg.name, msg.content, msg.tool_call_id)
+
+
+# [修改] 处理流结束 (关键防死循环逻辑)
+func _on_stream_completed() -> void:
+	# 1. 如果后端正在进行复杂的工作流，ChatHub 不要插手！
+	# 让 ToolWorkflowManager 自己处理它的流结束事件
+	if chat_backend.is_in_workflow:
 		return
 	
-	# 创建一个新的历史记录资源并填充消息
-	var history_resource: PluginChatHistory = PluginChatHistory.new()
-	history_resource.messages = messages
+	# 2. 获取完整的助手消息
+	var last_msg = current_chat_window.chat_history.get_last_message()
 	
-	# 调用存档工具类将资源保存到文件
-	var success: bool = ChatArchive.save_current_chat_to_file(history_resource, _save_path)
+	if last_msg and last_msg.role == ChatMessage.ROLE_ASSISTANT:
+		# 3. 交给 Backend 处理
+		chat_backend.process_response(last_msg)
+	else:
+		chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+
+
+# 停止
+func _on_stop_requested() -> void:
+	network_manager.cancel_stream()
+	chat_backend.cancel_workflow()
+	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Stopped")
+
+
+# 聊天失败 (网络错误或 Agent 错误)
+func _on_chat_failed(error_msg: String) -> void:
+	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Error") # 回到 IDLE 允许重试
+	current_chat_window.append_error_message(error_msg) # 内联错误显示
+
+
+# Agent 最终回复完成
+func _on_assistant_reply_completed(final_msg: ChatMessage, additional_history: Array[ChatMessage]) -> void:
+	# 将 Agent 产生的所有历史 (Tool Calls + Results) 同步到主历史
+	current_chat_window.commit_agent_history(additional_history)
+	chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+
+
+# 导出 Markdown
+func _export_markdown(path: String) -> void:
+	# 调用 ChatArchive 的逻辑 (需适配 ChatMessageHistory)
+	var success = ChatArchive.save_to_markdown(current_chat_window.chat_history.messages, path)
 	if success:
-		await get_tree().process_frame # 等待一帧确保文件系统更新
-		chat_ui.show_confirmation("Chat successfully saved to:\n" + _save_path)
-		# 刷新UI中的存档列表
-		chat_ui._update_chat_archive_selector()
-
-
-# 当UI请求将当前聊天导出为 Markdown 文件时触发
-func _save_chat_messages_to_markdown(_save_path: String) -> void:
-	# 在执行任何操作之前，先确保存档目录存在。
-	ChatArchive.initialize_archive_directory()
-	
-	var messages: Array = current_chat_window.get_current_chat_messages()
-	if messages.is_empty():
-		chat_ui.show_confirmation("Cannot save an empty chat.")
-		return
-	
-	# 调用存档工具类将消息数组转换为 Markdown 格式并保存
-	var success: bool = ChatArchive.save_to_markdown(messages, _save_path)
-	if success:
-		await get_tree().process_frame
-		chat_ui.show_confirmation("Chat successfully exported to Markdown:\n" + _save_path)
-	
-	# 独立地通知编辑器
-	ToolBox.update_editor_filesystem(_save_path)
-
-
-# 当总结按钮被按下时
-func _on_summarize_button_pressed() -> void:
-	var messages: Array = current_chat_window.get_current_chat_messages()
-	# 过滤掉系统消息，只检查实际对话是否存在
-	var conversation_messages: Array = messages.filter(func(m): return m.role != "system")
-	
-	if conversation_messages.is_empty():
-		chat_ui.show_confirmation("Cannot summarize an empty chat.")
-		return
-	
-	chat_ui.update_ui_state(ChatUI.UIState.SUMMARIZING, "Requesting summary...")
-	print(conversation_messages)
-	network_manager.request_summary(conversation_messages)
-
-
-# 当总结请求成功返回时
-func _on_summary_request_succeeded(summary_text: String) -> void:
-	# 在使用之前，先清理总结内容可能包含的<think>内容
-	var cleaned_summary: String = ToolBox.remove_think_tags(summary_text)
-	
-	# 保存清理后的总结到文件
-	var saved_path: String = ChatArchive.save_summary_to_markdown(cleaned_summary)
-	if not saved_path.is_empty():
-		ToolBox.update_editor_filesystem(saved_path)
-	
-	# 构建新聊天的第一条消息
-	var initial_message_content: String = "This is a summary of the previous conversation. Please remember it for our new chat:\n\n---\n\n" + cleaned_summary
-	
-	# 使用新函数初始化聊天窗口
-	current_chat_window.initialize_chat_with_summarization_message("user", initial_message_content)
-	
-	# 恢复UI状态并显示成功信息
-	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Summary complete. New chat started.")
-	chat_ui.show_confirmation("Conversation summarized and saved to:\n" + saved_path)
-
-
-# 统一的停止按钮处理函数
-func _on_stop_button_pressed() -> void:
-	# 无论当前状态如何，立即升起“门卫”旗帜，阻止任何后续的工具流启动
-	_is_canceling = true
-	# 在清理主连接之前，先命令后端取消任何活动的工具工作流
-	chat_backend.cancel_current_workflow()
-	# 使用新的、健壮的清理函数
-	_cleanup_stream_connections()
-	# 尝试取消任何可能正在进行的网络请求
-	network_manager.cancel_stream_request()
-	# 立即更新UI状态，给用户即时反馈
-	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Canceled by user")
-	# 终结当前的消息流（如果存在），这可能会同步发出 new_assistant_message_append_completed 信号
-	current_chat_window.complete_assistant_stream_output()
-	# 等待一帧，确保上面发出的信号已经被我们的“门卫”逻辑（_is_canceling标志）处理（拦截）完毕
-	await get_tree().process_frame
-	# 放下“门卫”旗帜，为下一次对话做准备
-	_is_canceling = false
-
-
-# 当一个新的聊天请求即将发送时调用
-func _on_chat_request_sending() -> void:
-	# 在建立新的流式连接之前，清理所有旧的流式连接。
-	_cleanup_stream_connections()
-	# 更新UI状态到“等待响应”
-	chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE, "Waiting for AI response...")
-	# 在UI上创建新的空消息块
-	current_chat_window.creat_new_assistant_message_block()
-	# 建立一个一次性的连接，用于在收到第一个数据块时切换UI状态
-	network_manager.new_stream_chunk_received.connect(self._on_first_stream_chunk_received, CONNECT_ONE_SHOT)
-	# 建立用于追加文本块的连接
-	network_manager.new_stream_chunk_received.connect(current_chat_window.append_chunk_to_assistant_message)
-
-
-# 当收到第一个流式数据块时调用
-func _on_first_stream_chunk_received(_chunk: String) -> void:
-	# 切换UI状态到“正在生成”
-	chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING, "AI is generating...")
-
-
-# 它的主要职责是确保在流确实被取消后，任何部分完成的消息也能被正确终结。
-# 核心的UI更新和状态管理已经移至 _on_stop_button_pressed
-func _on_chat_stream_canceled() -> void:
-	# 如果取消流程尚未启动（例如，由网络错误而非用户点击触发的取消），则启动它
-	if not _is_canceling:
-		_is_canceling = true
-		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Stream canceled")
-		current_chat_window.complete_assistant_stream_output()
-		await get_tree().process_frame
-		_is_canceling = false
-
-
-# 处理助手消息完成的中间函数，包含“门卫”检查逻辑
-func _on_new_assistant_message_appended(message_data: Dictionary) -> void:
-	# 如果当前正处于取消流程中，则直接忽略这个信号，不启动任何后端处理
-	if _is_canceling:
-		print("[ChatHub] Assistant message appended, but process is canceling. Ignoring.")
-		return
-	
-	# 如果后端正处于一个工具工作流中，则不通过此路径处理新消息。
-	# 工作流会通过其自身的网络信号监听来管理流程，避免双重处理和状态冲突。
-	if chat_backend.is_in_tool_workflow:
-		print("[ChatHub] Assistant message appended, but a tool workflow is active. Workflow will self-manage.")
-		return
-	
-	# 在将控制权交给后端之前，清理当前流的信号连接。
-	# 这可以防止在工具流启动新请求时发生“信号已连接”的错误。
-	_cleanup_stream_connections()
-	# 如果不是在取消，则正常将消息传递给后端进行处理
-	chat_backend.process_new_assistant_response(message_data)
-
-
-# 当 ChatBackend 的工作流成功完成时调用
-func _on_assistant_processing_completed(_final_message: Dictionary, _workflow_history: Array) -> void:
-	# 使用新的、健壮的清理函数
-	_cleanup_stream_connections()
-	# 命令 CurrentChatWindow 更新最终的消息显示
-	current_chat_window.commit_final_assistant_message(_final_message, _workflow_history)
-	# 命令 ChatUI 恢复空闲状态
-	chat_ui.on_assistant_message_appending_complete()
-
-
-# 当 ChatBackend 的工作流失败时调用
-func _on_tool_workflow_failed(_error_message: String) -> void:
-	# 使用新的、健壮的清理函数
-	_cleanup_stream_connections()
-	# 创建一个标准的错误消息字典用于显示
-	var error_response = {
-		"role": "assistant", 
-		"content": "[ERROR] Tool execution failed: " + _error_message
-	}
-	
-	# 错误情况下，历史片段只包含这个错误消息
-	current_chat_window.commit_final_assistant_message(error_response, [error_response])
-	# 命令 ChatUI 恢复空闲状态
-	chat_ui.on_assistant_message_appending_complete()
-
-
-#==============================================================================
-# ## 内部函数 ##
-#==============================================================================
-
-# 集中处理所有与流式请求相关的信号连接的清理工作
-func _cleanup_stream_connections() -> void:
-	var callable = Callable(current_chat_window, "append_chunk_to_assistant_message")
-	if network_manager.is_connected("new_stream_chunk_received", callable):
-		network_manager.new_stream_chunk_received.disconnect(callable)
-	
-	# 防止某些情况下未收到第一个流式数据插件就进入错误状态
-	# 导致_on_first_stream_chunk_received未被调用
-	# 从而使得本该自动断掉的new_stream_chunk_received信号没有断掉
-	var first_chunk_callable = Callable(self, "_on_first_stream_chunk_received")
-	if network_manager.is_connected("new_stream_chunk_received", first_chunk_callable):
-		network_manager.new_stream_chunk_received.disconnect(first_chunk_callable)
+		chat_ui.show_confirmation("Exported to %s" % path)

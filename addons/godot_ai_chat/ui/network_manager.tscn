@@ -1,20 +1,9 @@
-[gd_scene load_steps=3 format=3 uid="uid://25giq62fx0to"]
+[gd_scene format=3 uid="uid://25giq62fx0to"]
 
-[ext_resource type="Script" uid="uid://cp6q07xwys8p0" path="res://addons/godot_ai_chat/scripts/core/network_manager.gd" id="1_fvbmw"]
-[ext_resource type="Script" uid="uid://dcf41h36tc44m" path="res://addons/godot_ai_chat/scripts/core/streamed_http_request.gd" id="2_g87ia"]
+[ext_resource type="Script" uid="uid://cp6q07xwys8p0" path="res://addons/godot_ai_chat/scripts/core/network/network_manager.gd" id="1_fvbmw"]
 
-[node name="NetworkManager" type="Node"]
+[node name="NetworkManager" type="Node" unique_id=1955945571]
 script = ExtResource("1_fvbmw")
 
-[node name="ConnectionCheckHTTPRequest" type="HTTPRequest" parent="."]
+[node name="HTTPRequest" type="HTTPRequest" parent="." unique_id=361317423]
 timeout = 10.0
-metadata/api_provider = "OpenAI-Compatible"
-metadata/is_manual_check = false
-
-[node name="GetModelListHTTPRequest" type="HTTPRequest" parent="."]
-timeout = 10.0
-
-[node name="SummaryHTTPRequest" type="HTTPRequest" parent="."]
-
-[node name="ChatStreamedHTTPRequest" type="Node" parent="."]
-script = ExtResource("2_g87ia")

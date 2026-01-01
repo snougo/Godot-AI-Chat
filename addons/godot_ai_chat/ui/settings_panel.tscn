@@ -1,11 +1,11 @@
-[gd_scene load_steps=3 format=3 uid="uid://yhavhbc6hmeu"]
+[gd_scene format=3 uid="uid://yhavhbc6hmeu"]
 
-[ext_resource type="Script" uid="uid://dlkxbpvddb1rw" path="res://addons/godot_ai_chat/scripts/core/settings_panel.gd" id="1_1lswa"]
+[ext_resource type="Script" uid="uid://dlkxbpvddb1rw" path="res://addons/godot_ai_chat/scripts/core/ui/settings_panel.gd" id="1_1lswa"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vnbbj"]
 bg_color = Color(0.15178573, 0.15178573, 0.15178573, 1)
 
-[node name="SettingsPanel" type="Control"]
+[node name="SettingsPanel" type="Control" unique_id=801196259]
 custom_minimum_size = Vector2(400, 0)
 layout_mode = 3
 anchors_preset = 15
@@ -15,7 +15,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_1lswa")
 
-[node name="Panel" type="Panel" parent="."]
+[node name="Panel" type="Panel" parent="." unique_id=62633024]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -24,7 +24,7 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_vnbbj")
 
-[node name="MarginContainer" type="MarginContainer" parent="Panel"]
+[node name="MarginContainer" type="MarginContainer" parent="Panel" unique_id=1696811938]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -36,37 +36,39 @@ theme_override_constants/margin_top = 10
 theme_override_constants/margin_right = 20
 theme_override_constants/margin_bottom = 10
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Panel/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel/MarginContainer" unique_id=2105656231]
 layout_mode = 2
 theme_override_constants/separation = 20
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1040485962]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="APIProviderLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="APIProviderLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=202017400]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "API Provider:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="APIProviderOptions" type="OptionButton" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer"]
+[node name="APIProviderOptions" type="OptionButton" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1234724774]
 layout_mode = 2
 size_flags_horizontal = 3
 text_overrun_behavior = 1
 selected = 0
-item_count = 2
+item_count = 3
 popup/item_0/text = "OpenAI-Compatible"
 popup/item_0/id = 0
 popup/item_1/text = "Google Gemini"
 popup/item_1/id = 1
+popup/item_2/text = "ZhipuAI"
+popup/item_2/id = 2
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=242663543]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="BaseUrlLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2"]
+[node name="BaseUrlLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2" unique_id=827480794]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "When using openRouter as API Service Provider, You should input https://openrouter.ai/api, not https://openrouter.ai"
@@ -75,18 +77,19 @@ text = "Base Url:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="BaseUrlInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2"]
+[node name="BaseUrlInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2" unique_id=843428671]
 layout_mode = 2
 size_flags_horizontal = 3
+text = "https://api.moonshot.cn"
 placeholder_text = "LM Studio: http://127.0.0.1:1234"
 context_menu_enabled = false
 clear_button_enabled = true
 
-[node name="HBoxContainer3" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer3" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1606662049]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="APIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3"]
+[node name="APIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3" unique_id=54320686]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "When using LM Studio or Ollama, You don't need to provide an API Key."
@@ -95,18 +98,19 @@ text = "API Key(optional):"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="APIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3"]
+[node name="APIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3" unique_id=777802144]
 layout_mode = 2
 size_flags_horizontal = 3
+text = "sk-up8K1of5mltgYCkT6MGPgLdyzX1lmiJc1d8MT4Qw7PkHMnhq"
 context_menu_enabled = false
 clear_button_enabled = true
 secret = true
 
-[node name="HBoxContainer4" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer4" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1011201739]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="MaxChatTurnsLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4"]
+[node name="MaxChatTurnsLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4" unique_id=1631490628]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Sets the maximum number of dialogue turns to keep in memory.
@@ -116,43 +120,43 @@ text = "Max Chat Turns:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="MaxChatTurnsValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4"]
+[node name="MaxChatTurnsValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4" unique_id=472753440]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 1.0
-value = 6.0
+value = 8.0
 alignment = 2
 
-[node name="HBoxContainer5" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer5" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=783722443]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TimeoutLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5"]
+[node name="TimeoutLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5" unique_id=758610451]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Timeout (sec):"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="TimeoutValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5"]
+[node name="TimeoutValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5" unique_id=1675549865]
 layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1800.0
 value = 180.0
 alignment = 2
 
-[node name="HBoxContainer6" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="HBoxContainer6" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=2122965445]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TemperatureLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6"]
+[node name="TemperatureLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=1119834549]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Temperature:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="TemperatureValue" type="HSlider" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6"]
+[node name="TemperatureValue" type="HSlider" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=451349427]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.93
@@ -160,46 +164,85 @@ max_value = 1.0
 step = 0.09999999999126884
 value = 0.6999999999388816
 
-[node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6"]
+[node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=570670142]
 custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 text = "0.70"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="SystemPromptLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="SystemPromptLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer" unique_id=686488560]
 layout_mode = 2
 text = "System Prompt:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="SystemPromptInput" type="TextEdit" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="SystemPromptInput" type="TextEdit" parent="Panel/MarginContainer/VBoxContainer" unique_id=1524186122]
 layout_mode = 2
 size_flags_vertical = 3
-text = "You are a helpful Godot Engine Assistant."
+text = "## 角色设定
+
+- 你是一名与 `Godot` 引擎深度集成的高级AI助手。
+- 你在内部思考时遵循：**「分析 -> 思考 -> 初步结论 -> 反思 -> 回应」** 的流程，但在对用户的可见输出中，**只呈现「回应」部分**。
+- 除非用户有特殊要求，**所有非代码内容一律使用简体中文**回复。
+
+---
+
+## 通用行为准则
+
+- **先了解再回应**: 确保你在执行任何动作或回应之前已经**查看过项目中的相关上下文**，否则应该先使用`get_context`工具查看相关上下文后再进行下一步动作或回应。
+- 若用户未特别要求，默认回答风格为：**简洁、信息密度高**，避免废话和无意义客套。
+- 不使用表情或 emoji，除非用户明确要求。
+
+---
+
+## 工作区
+
+**工作区** 限定了你当前可操作的 **「项目上下文范围」** ，当你需要获取相关上下文信息时，**只能**在该区域内进行。
+
+### 工作区指令
+
+当用户通过指令明确要求：`进入/切换到 [工作区路径]`，你应立即调用`get_context`工具获取该路径下的 **文件夹结构**，以建立当前可操作范围。
+
+---
+
+## 工具补充说明
+
+### `search_documents`工具
+
+#### 文档路径
+
+如果用户指定了具体的文档路径，则以用户指定的路径为准，否则直接使用默认文档路径`res://godot_doc`即可。
+
+#### 何时使用
+
+当你生成**具体的功能代码**后（示例代码除外），你应当使用`search_documents`工具进行文档搜索，以便对生成的代码进行语法检查。
+
+#### 使用规范
+
+- 搜索参数中使用**不超过3个单独的英文关键词**作为文件名关键词，避免使用长句或中英文混杂，以减少无关结果。
+- 搜索后从返回的文档列表中选择**高度相关**的文档进行内容查看，若多个文档都可能相关，可优先选择命名更具体或版本更接近当前项目环境的文档。
+
+### `write_notebook`工具
+
+#### 笔记本路径
+
+你拥有一个名为 **`notebook.md`** 的外部笔记本文件，位于`res://addons/godot_ai_chat/notebook.md`
+
+#### 使用场景
+
+- 为一个中大型需求分解任务、规划实现步骤；
+- 需要跨多轮对话保持一致性的设定、约定、TODO 列表等。
+
+---"
 wrap_mode = 1
 scroll_smooth = true
 
-[node name="SummarizePromptLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer"]
-layout_mode = 2
-tooltip_text = "Summarize Current Chat Context"
-mouse_filter = 0
-text = "Summarization Prompt:"
-vertical_alignment = 1
-text_overrun_behavior = 1
-
-[node name="SummarizePromptInput" type="TextEdit" parent="Panel/MarginContainer/VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-text = "Please summarize the following conversation concisely. Identify the key points, decisions made, and any unresolved questions. The summary should be clear and easy to understand for someone who has not read the full conversation."
-wrap_mode = 1
-scroll_smooth = true
-
-[node name="CenterContainer" type="CenterContainer" parent="Panel/MarginContainer/VBoxContainer"]
+[node name="CenterContainer" type="CenterContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1618157163]
 custom_minimum_size = Vector2(0, 100)
 layout_mode = 2
 
-[node name="SaveButton" type="Button" parent="Panel/MarginContainer/VBoxContainer/CenterContainer"]
+[node name="SaveButton" type="Button" parent="Panel/MarginContainer/VBoxContainer/CenterContainer" unique_id=428212706]
 custom_minimum_size = Vector2(200, 60)
 layout_mode = 2
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
