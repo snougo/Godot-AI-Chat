@@ -33,7 +33,8 @@ func _enter_tree() -> void:
 	
 	# 4. 初始化辅助功能
 	_ensure_notebook_exists()
-	_register_default_tools()
+	# [修改] 使用新的静态方法加载工具
+	ToolRegistry.load_default_tools()
 	
 	print("[Godot AI Chat] Plugin initialized.")
 
@@ -56,27 +57,6 @@ func _exit_tree() -> void:
 
 
 # --- 内部辅助函数 ---
-
-func _register_default_tools() -> void:
-	# 动态加载工具脚本并注册
-	var tools_dir = "res://addons/godot_ai_chat/scripts/core/tools/"
-	var tool_scripts = [
-		"get_context_tool.gd",
-		"get_current_date_tool.gd",
-		"search_documents_tool.gd",
-		"write_notebook_tool.gd"
-	]
-	
-	for script_name in tool_scripts:
-		var path = tools_dir.path_join(script_name)
-		var script = load(path)
-		if script:
-			# 实例化工具并注册
-			var tool_instance = script.new()
-			ToolRegistry.register_tool(tool_instance)
-		else:
-			push_error("[Godot AI Chat] Failed to load tool script: %s" % path)
-
 
 func _ensure_notebook_exists() -> void:
 	if not FileAccess.file_exists(NOTEBOOK_PATH):

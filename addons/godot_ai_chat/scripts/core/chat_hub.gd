@@ -29,6 +29,9 @@ func _ready() -> void:
 	current_chat_window.chat_list_container = chat_list_container
 	current_chat_window.chat_scroll_container = chat_scroll_container
 	
+	# [新增] 强制加载工具，修复首次安装/脚本重载后工具丢失的问题
+	ToolRegistry.load_default_tools()
+	
 	# 等待一帧让子节点 Ready
 	await get_tree().process_frame
 	

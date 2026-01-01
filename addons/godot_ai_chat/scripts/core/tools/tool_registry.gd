@@ -6,6 +6,32 @@ class_name ToolRegistry
 static var _tools: Dictionary = {}
 
 
+# [新增] 加载默认工具集 (核心修复点)
+static func load_default_tools() -> void:
+	var tools_dir = "res://addons/godot_ai_chat/scripts/core/tools/"
+	# 显式定义核心工具列表
+	var tool_scripts = [
+		"get_context_tool.gd",
+		"get_current_date_tool.gd",
+		"search_documents_tool.gd",
+		"write_notebook_tool.gd"
+	]
+	
+	# 避免重复加载日志刷屏，可以加个判断或者只在非空时注册
+	# 这里简单处理：每次调用重新注册一遍，覆盖旧引用是安全的
+	for script_name in tool_scripts:
+		var path = tools_dir.path_join(script_name)
+		if not FileAccess.file_exists(path):
+			push_warning("[ToolRegistry] Tool script not found: %s" % path)
+			continue
+		
+		var script = load(path)
+		if script:
+			var tool_instance = script.new()
+			if tool_instance is AiTool:
+				register_tool(tool_instance)
+
+
 # 注册一个工具实例
 static func register_tool(tool: AiTool) -> void:
 	if tool.name.is_empty():
