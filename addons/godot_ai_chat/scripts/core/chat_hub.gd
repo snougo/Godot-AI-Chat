@@ -69,17 +69,12 @@ func _ready() -> void:
 	network_manager.chat_usage_data_received.connect(current_chat_window.update_token_usage)
 	
 	# --- 初始化 ---
-	self._create_new_chat_history()
-	# 进行延迟防止创建对话历史存档后的状态覆盖掉后续获取模型列表的状态
-	await get_tree().create_timer(0.2).timeout
-	# 尝试在插件的文件环境初始化后获取模型列表
-	# 如果失败，则提示用户检查插件设置。
 	network_manager.get_model_list()
 
 
 # --- 核心业务逻辑 ---
 
-# 新建会话 (自动保存逻辑的核心)
+# 新建会话
 func _create_new_chat_history() -> void:
 	# 如果正在创建中，直接忽略本次请求
 	if is_creating_new_chat:
@@ -126,9 +121,6 @@ func _create_new_chat_history() -> void:
 		# 解锁
 		is_creating_new_chat = false
 		
-		# 增加较长延迟，确保 UI 加载完成后再监听变化
-		await  get_tree().create_timer(1.0).timeout
-		
 		# 监听资源变化以实现自动保存
 		if not new_history.changed.is_connected(self._auto_save_history):
 			new_history.changed.connect(self._auto_save_history)
@@ -171,6 +163,12 @@ func _load_chat_history(filename: String) -> void:
 
 # 用户点击发送
 func _on_user_send_message(text: String) -> void:
+	# 增加空状态检查
+	# 检查路径是否为空，或者 CurrentChatWindow 中的 chat history 是否为空
+	if current_history_path.is_empty() or current_chat_window.chat_history == null:
+		chat_ui.show_confirmation("No chat active.\nPlease click 'New Button' or 'Load Button' to start.")
+		return
+	
 	# UI 立即响应 (乐观 UI)
 	chat_ui.clear_user_input()
 	current_chat_window.append_user_message(text)
