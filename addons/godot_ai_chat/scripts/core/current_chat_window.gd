@@ -29,7 +29,7 @@ func append_error_message(text: String) -> void:
 	_scroll_to_bottom()
 
 
-# [修改] 增加 tool_call_id 参数
+# 增加 tool_call_id 参数
 func append_tool_message(tool_name: String, result_text: String, tool_call_id: String) -> void:
 	# [修改] 将正确的 ID 存入历史
 	chat_history.add_tool_message(result_text, tool_call_id, tool_name)
@@ -113,6 +113,9 @@ func _get_last_block() -> ChatMessageBlock:
 
 
 func _scroll_to_bottom() -> void:
+	# 第一帧：RichTextLabel 根据文本内容计算自身大小
+	# 第二帧：父容器响应子节点大小变化，更新 ScrollBar 的 max_value
+	await get_tree().process_frame
 	await get_tree().process_frame
 	if chat_scroll_container.get_v_scroll_bar():
 		chat_scroll_container.scroll_vertical = chat_scroll_container.get_v_scroll_bar().max_value

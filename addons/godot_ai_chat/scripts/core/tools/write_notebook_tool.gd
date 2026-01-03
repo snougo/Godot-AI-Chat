@@ -4,9 +4,11 @@ extends AiTool
 # 硬编码路径，确保安全性
 const NOTEBOOK_PATH = "res://addons/godot_ai_chat/notebook.md"
 
+
 func _init() -> void:
 	name = "write_notebook"
 	description = "Write content to the 'notebook.md' file. Useful for keeping notes, plans, or code snippets during long tasks. Supports appending, overwriting, or clearing the file."
+
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -26,9 +28,10 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["mode"]
 	}
 
-func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
-	var mode = args.get("mode", "append")
-	var content = args.get("content", "")
+
+func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+	var mode = _args.get("mode", "append")
+	var content = _args.get("content", "")
 	
 	# 确保文件存在，如果不存在则创建
 	if not FileAccess.file_exists(NOTEBOOK_PATH):

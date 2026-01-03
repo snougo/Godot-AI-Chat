@@ -18,5 +18,5 @@ func get_parameters_schema() -> Dictionary:
 # args: AI 传入的参数字典
 # context_provider: 上下文提供者实例 (依赖注入，来自 Godot Context Helper 插件)
 # 返回: {"success": bool, "data": String}
-func execute(args: Dictionary, context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
 	return {"success": false, "data": "Not implemented"}

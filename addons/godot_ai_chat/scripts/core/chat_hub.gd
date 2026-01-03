@@ -87,6 +87,10 @@ func _create_new_chat_history() -> void:
 		# 停止当前可能的生成
 		self._on_stop_requested()
 		
+		# 即使 _ready 里检查过，这里再检查一次，防止用户运行时删除了文件夹
+		if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
+			DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
+		
 		# 文件名去重逻辑
 		var now_time: Dictionary = Time.get_datetime_dict_from_system(false)
 		var base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [now_time.year, now_time.month, now_time.day, now_time.hour, now_time.minute, now_time.second]
@@ -221,6 +225,11 @@ func _on_stream_completed() -> void:
 func _on_stop_requested() -> void:
 	network_manager.cancel_stream()
 	chat_backend.cancel_workflow()
+	
+	# 用户停止时，也要保存当前已经生成的内容
+	if current_chat_window.chat_history:
+		current_chat_window.chat_history.emit_changed()
+	
 	chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Stopped")
 
 
@@ -234,6 +243,11 @@ func _on_chat_failed(error_msg: String) -> void:
 func _on_assistant_reply_completed(final_msg: ChatMessage, additional_history: Array[ChatMessage]) -> void:
 	# 将 Agent 产生的所有历史 (Tool Calls + Results) 同步到主历史
 	current_chat_window.commit_agent_history(additional_history)
+	
+	# 显式触发 changed 信号，强制将最终完整的对话内容写入磁盘
+	if current_chat_window.chat_history:
+		current_chat_window.chat_history.emit_changed()
+	
 	chat_ui.update_ui_state(ChatUI.UIState.IDLE)
 
 

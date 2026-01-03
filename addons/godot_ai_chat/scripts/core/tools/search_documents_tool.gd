@@ -23,9 +23,9 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(args: Dictionary, context_provider: ContextProvider) -> Dictionary:
-	var keywords = args.get("keywords", "")
-	var path = args.get("path", "res://godot_doc")
+func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+	var keywords = _args.get("keywords", "")
+	var path = _args.get("path", "res://godot_doc")
 	
 	# 简单的容错处理
 	if keywords is Array:
@@ -37,7 +37,7 @@ func execute(args: Dictionary, context_provider: ContextProvider) -> Dictionary:
 		return {"success": false, "data": "Missing parameters: keywords"}
 	
 	# 调用 ContextProvider 的搜索方法
-	if context_provider.has_method("search_files_as_markdown"):
-		return context_provider.search_files_as_markdown(path, keywords, ".md")
+	if _context_provider.has_method("search_files_as_markdown"):
+		return _context_provider.search_files_as_markdown(path, keywords, ".md")
 	else:
 		return {"success": false, "data": "Internal Error: ContextProvider does not support search."}

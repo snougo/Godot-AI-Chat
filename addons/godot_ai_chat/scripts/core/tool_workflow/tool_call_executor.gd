@@ -8,23 +8,23 @@ var context_provider: ContextProvider = ContextProvider.new()
 
 # 执行工具调用的入口
 # execution_data: { "tool_name": String, "arguments": Dictionary }
-func execute_tool(execution_data: Dictionary) -> String:
-	var tool_name = execution_data.get("tool_name", "")
-	var args = execution_data.get("arguments", {})
+func execute_tool(_execution_data: Dictionary) -> String:
+	var tool_name = _execution_data.get("tool_name", "")
+	var args = _execution_data.get("arguments", {})
 	
 	if tool_name.is_empty():
 		return "[SYSTEM ERROR] Tool name missing in execution data."
 	
-	# 1. 从注册中心获取工具
-	var tool_instance = ToolRegistry.get_tool(tool_name)
+	# 从注册中心获取工具
+	var tool_instance: AiTool = ToolRegistry.get_tool(tool_name)
 	if tool_instance == null:
 		return _format_error("Unknown tool: '%s'" % tool_name)
 	
-	# 2. 执行
+	# 执行
 	# print("[ToolExecutor] Executing: %s with %s" % [tool_name, args])
 	var result = tool_instance.execute(args, context_provider)
 	
-	# 3. 格式化结果
+	# 格式化结果
 	if result.has("success") and result.success:
 		var data = result.get("data", "")
 		# 确保返回字符串
@@ -33,5 +33,5 @@ func execute_tool(execution_data: Dictionary) -> String:
 		return _format_error(result.get("data", "Unknown execution error"))
 
 
-func _format_error(msg: String) -> String:
-	return "[SYSTEM FEEDBACK - Tool Execution Failed]\n%s" % msg
+func _format_error(_msg: String) -> String:
+	return "[SYSTEM FEEDBACK - Tool Execution Failed]\n%s" % _msg
