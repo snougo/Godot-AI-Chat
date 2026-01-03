@@ -66,7 +66,13 @@ func _ready() -> void:
 	chat_backend.tool_message_generated.connect(self._on_tool_message_generated)
 	
 	# Token 统计
-	network_manager.chat_usage_data_received.connect(current_chat_window.update_token_usage)
+	# [修复 1] 依然保留 NetworkManager 的连接 (作为备份)，但直接连给 ChatUI
+	if not network_manager.chat_usage_data_received.is_connected(chat_ui.update_token_cost_display):
+		network_manager.chat_usage_data_received.connect(chat_ui.update_token_cost_display)
+	
+	# [修复 2] 连接 CurrentChatWindow 的新信号到 ChatUI
+	if not current_chat_window.token_usage_updated.is_connected(chat_ui.update_token_cost_display):
+		current_chat_window.token_usage_updated.connect(chat_ui.update_token_cost_display)
 	
 	# --- 初始化 ---
 	network_manager.get_model_list()
@@ -118,6 +124,9 @@ func _create_new_chat_history() -> void:
 		# 我们通过 ToolBox 精确通知编辑器更新【这一个文件】。
 		ToolBox.update_editor_filesystem(current_history_path)
 		
+		# [修复] 重置 Token 显示
+		chat_ui.reset_token_cost_display()
+		
 		# 绑定到窗口
 		current_chat_window.load_history_resource(new_history)
 		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created")
@@ -152,6 +161,10 @@ func _load_chat_history(filename: String) -> void:
 	if chat_history is ChatMessageHistory:
 		self._on_stop_requested() # 停止当前
 		current_history_path = path # 更新当前路径
+		
+		# [修复] 加载新存档前，重置 Token 显示为 0
+		# 因为存档文件(.tres)里不保存 Token 数据，所以只能重置
+		chat_ui.reset_token_cost_display()
 		
 		current_chat_window.load_history_resource(chat_history)
 		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % filename)

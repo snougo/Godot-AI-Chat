@@ -2,6 +2,9 @@
 extends Node
 class_name CurrentChatWindow
 
+# [新增] 定义 Token 更新信号
+signal token_usage_updated(usage: Dictionary)
+
 # --- 场景引用 ---
 var chat_list_container: VBoxContainer
 var chat_scroll_container: ScrollContainer
@@ -122,7 +125,5 @@ func _scroll_to_bottom() -> void:
 
 
 func update_token_usage(usage: Dictionary) -> void:
-	# 信号转发逻辑应由 ChatHub 处理，这里作为终点，其实可以直接调用 ChatUI
-	# 但为了架构清晰，最好发出信号。这里简化为直接打印验证。
-	# print("Usage update: ", usage)
-	pass
+	if not usage.is_empty():
+		emit_signal("token_usage_updated", usage)

@@ -69,6 +69,9 @@ func _ready() -> void:
 	# 初始化时更新一次聊天存档列表
 	self._update_chat_archive_selector()
 	
+	# [新增] 初始化 Token 显示为 0
+	reset_token_cost_display()
+	
 	# 初始状态
 	init_count += 1
 	update_ui_state(UIState.IDLE)
@@ -181,6 +184,11 @@ func update_token_cost_display(usage: Dictionary) -> void:
 	var c = usage.get("completion_tokens", 0)
 	var t = usage.get("total_tokens", p + c)
 	current_token_cost.text = "Token Cost: Total: %d (Prompt: %d, Completion: %d)" % [t, p, c]
+
+
+# [新增] 重置 Token 显示（清空或设为 0）
+func reset_token_cost_display() -> void:
+	current_token_cost.text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
 
 
 # 显示一个简单的确认/成功对话框
