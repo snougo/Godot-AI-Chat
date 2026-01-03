@@ -69,8 +69,12 @@ func _ready() -> void:
 	network_manager.chat_usage_data_received.connect(current_chat_window.update_token_usage)
 	
 	# --- 初始化 ---
-	network_manager.get_model_list()
 	self._create_new_chat_history()
+	# 进行延迟防止创建对话历史存档后的状态覆盖掉后续获取模型列表的状态
+	await get_tree().create_timer(0.2).timeout
+	# 尝试在插件的文件环境初始化后获取模型列表
+	# 如果失败，则提示用户检查插件设置。
+	network_manager.get_model_list()
 
 
 # --- 核心业务逻辑 ---
@@ -123,7 +127,7 @@ func _create_new_chat_history() -> void:
 		is_creating_new_chat = false
 		
 		# 增加较长延迟，确保 UI 加载完成后再监听变化
-		await  get_tree().create_timer(1.0).timeout
+		#await  get_tree().create_timer(1.0).timeout
 		
 		# 监听资源变化以实现自动保存
 		if not new_history.changed.is_connected(self._auto_save_history):

@@ -50,26 +50,27 @@ enum UIState {
 # --- 内部变量 ---
 var current_state: UIState = UIState.IDLE
 var model_list: Array[String] = []
+# 用于判断是否为首次运行或初始化阶段
 var init_count: int = 0
 
 
 func _ready() -> void:
 	# 连接UI控件的信号到对应的处理函数
-	send_button.pressed.connect(_on_send_button_pressed)
-	new_chat_button.pressed.connect(_on_new_chat_button_pressed)
-	model_selector.item_selected.connect(_on_model_selected)
-	model_name_filter_input.text_changed.connect(_on_model_name_filter_text_changed)
-	settings_panel.settings_saved.connect(_on_settings_save_button_pressed)
-	file_dialog.file_selected.connect(_on_file_selected)
-	save_as_markdown_button.pressed.connect(_on_save_as_markdown_button_pressed)
-	load_chat_button.pressed.connect(_on_load_chat_button_pressed)
-	reconnect_button.pressed.connect(_on_reconnect_button_pressed)
+	send_button.pressed.connect(self._on_send_button_pressed)
+	new_chat_button.pressed.connect(self._on_new_chat_button_pressed)
+	model_selector.item_selected.connect(self._on_model_selected)
+	model_name_filter_input.text_changed.connect(self._on_model_name_filter_text_changed)
+	settings_panel.settings_saved.connect(self._on_settings_save_button_pressed)
+	file_dialog.file_selected.connect(self._on_file_selected)
+	save_as_markdown_button.pressed.connect(self._on_save_as_markdown_button_pressed)
+	load_chat_button.pressed.connect(self._on_load_chat_button_pressed)
+	reconnect_button.pressed.connect(self._on_reconnect_button_pressed)
 	
-	init_count = 1
 	# 初始化时更新一次聊天存档列表
-	_update_chat_archive_selector()
+	self._update_chat_archive_selector()
 	
 	# 初始状态
+	init_count += 1
 	update_ui_state(UIState.IDLE)
 
 
@@ -83,9 +84,9 @@ func initialize_editor_dependencies(_editor_filesystem: EditorFileSystem) -> voi
 
 
 # 外部逻辑调用此函数来更新UI的整体状态
-func update_ui_state(new_state: UIState, payload: String = "") -> void:
-	current_state = new_state
-	status_label.text = payload if not payload.is_empty() else _get_default_status_text(new_state)
+func update_ui_state(_new_state: UIState, _payload: String = "") -> void:
+	current_state = _new_state
+	status_label.text = _payload if not _payload.is_empty() else _get_default_status_text(_new_state)
 	
 	match current_state:
 		UIState.IDLE:
@@ -143,8 +144,8 @@ func update_ui_state(new_state: UIState, payload: String = "") -> void:
 			new_chat_button.disabled = false
 			reconnect_button.disabled = false
 			
-			if not payload.is_empty() and init_count > 1:
-				_show_error_dialog(payload)
+			if not _payload.is_empty():
+				_show_error_dialog(_payload)
 
 
 # 更新模型下拉列表的内容
@@ -156,7 +157,15 @@ func update_model_list(_model_names: Array[String]) -> void:
 
 # 当尝试获取从API服务器上获取模型列表请求失败时调用
 func get_model_list_request_failed(_error_message: String) -> void:
-	update_ui_state(UIState.ERROR, _error_message)
+	if init_count > 1:
+		update_ui_state(UIState.ERROR, _error_message)
+	else:
+		# 保证如果启用插件后获取模型列表失败
+		# 不会导致错误提示信息的弹窗和项目设置窗口产生冲突从而引发报错
+		# 因此我们在这手动设置一次，而不是使用 update_ui_state
+		status_label.text = _error_message
+		status_label.modulate = Color.RED
+		init_count += 1
 
 
 # 清空用户输入框

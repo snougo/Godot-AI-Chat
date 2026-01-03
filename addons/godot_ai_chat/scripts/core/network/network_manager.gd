@@ -62,10 +62,11 @@ func get_model_list() -> void:
 		emit_signal("get_model_list_request_failed", "Invalid Provider Configuration")
 		return
 	
-	# 检查 Base URL 是否为空，如果是则直接返回，不报错也不发送请求
-	# 因为这通常意味着用户刚安装插件，还没配置
+	# 检查 Base URL 是否为空
+	# 如果为空，则发送信号，通知 Networkmanager 模型获取列表失败
+	# 从而通知UI进行相应的显示
 	if api_base_url.is_empty():
-		emit_signal("get_model_list_request_failed", "Please configure API Base URL in settings.")
+		emit_signal("get_model_list_request_failed", "Please Configure Plugin Settings!")
 		return
 	
 	emit_signal("get_model_list_request_started")
