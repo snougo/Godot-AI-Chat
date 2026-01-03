@@ -127,7 +127,7 @@ func _create_new_chat_history() -> void:
 		is_creating_new_chat = false
 		
 		# 增加较长延迟，确保 UI 加载完成后再监听变化
-		#await  get_tree().create_timer(1.0).timeout
+		await  get_tree().create_timer(1.0).timeout
 		
 		# 监听资源变化以实现自动保存
 		if not new_history.changed.is_connected(self._auto_save_history):
