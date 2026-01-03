@@ -89,6 +89,7 @@ func update_ui_state(new_state: UIState, payload: String = "") -> void:
 	
 	match current_state:
 		UIState.IDLE:
+			status_label.text = "Ready"
 			status_label.modulate = Color.WHITE
 			send_button.text = "Send"
 			send_button.disabled = false
@@ -98,6 +99,7 @@ func update_ui_state(new_state: UIState, payload: String = "") -> void:
 			reconnect_button.disabled = false
 		
 		UIState.CONNECTING:
+			status_label.text = "Connecting..."
 			status_label.modulate = Color.WHITE
 			send_button.disabled = true
 			user_input.editable = false
@@ -105,15 +107,17 @@ func update_ui_state(new_state: UIState, payload: String = "") -> void:
 			reconnect_button.disabled = true
 		
 		UIState.WAITING_RESPONSE:
+			status_label.text = "Waiting for AI response"
 			status_label.modulate = Color.AQUAMARINE
 			send_button.text = "Stop"
 			send_button.disabled = false
-			user_input.editable = false # 锁定输入防止干扰
+			user_input.editable = false
 			user_input.caret_blink = false
 			new_chat_button.disabled = true
 			reconnect_button.disabled = true
 		
 		UIState.RESPONSE_GENERATING:
+			status_label.text = "AI is generating..."
 			status_label.modulate = Color.AQUAMARINE
 			send_button.text = "Stop"
 			send_button.disabled = false
@@ -122,6 +126,7 @@ func update_ui_state(new_state: UIState, payload: String = "") -> void:
 			reconnect_button.disabled = true
 		
 		UIState.TOOLCALLING:
+			status_label.text = "Tool Calling "
 			status_label.modulate = Color.GOLD
 			send_button.text = "Stop"
 			send_button.disabled = false
@@ -130,6 +135,7 @@ func update_ui_state(new_state: UIState, payload: String = "") -> void:
 			reconnect_button.disabled = true
 		
 		UIState.ERROR:
+			status_label.text = "Checking The Popup Window for Error Message"
 			status_label.modulate = Color.RED
 			send_button.text = "Send"
 			send_button.disabled = false # 允许重试
@@ -149,7 +155,7 @@ func update_model_list(_model_names: Array[String]) -> void:
 
 
 # 当尝试获取从API服务器上获取模型列表请求失败时调用
-func on_get_model_list_request_failed(_error_message: String) -> void:
+func get_model_list_request_failed(_error_message: String) -> void:
 	update_ui_state(UIState.ERROR, _error_message)
 
 
@@ -233,14 +239,16 @@ func _update_chat_archive_selector() -> void:
 		previously_selected = chat_archive_selector.get_item_text(chat_archive_selector.selected)
 	
 	chat_archive_selector.clear()
+	
 	if archives.is_empty():
 		chat_archive_selector.disabled = true
 	else:
 		chat_archive_selector.disabled = false
 		var new_selection_index: int = -1
 		for i in range(archives.size()):
-			var archive_name = archives[i]
+			var archive_name: String = archives[i]
 			chat_archive_selector.add_item(archive_name)
+			
 			if archive_name == previously_selected:
 				new_selection_index = i
 		
@@ -275,10 +283,10 @@ func _on_reconnect_button_pressed() -> void:
 
 
 func _on_settings_save_button_pressed() -> void:
-	# 1. 转发信号给 ChatHub (用于触发 NetworkManager 刷新配置)
+	# 转发信号给 ChatHub (用于触发 NetworkManager 刷新配置)
 	emit_signal("settings_save_button_pressed")
 	
-	# 2. [修复] 自动切换回聊天标签页 (Tab 0)
+	# 自动切换回聊天标签页 (Tab 0)
 	if tab_container:
 		tab_container.current_tab = 0
 

@@ -3,7 +3,7 @@ class_name ToolBox
 
 
 # 插件设置资源文件的固定路径。
-const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
+const SETTINGS_PATH = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 
 #==============================================================================
@@ -11,19 +11,24 @@ const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 #==============================================================================
 
 static func get_plugin_settings() -> PluginSettings:
-	var settings: PluginSettings
+	var plugin_settings: PluginSettings
 	
 	if ResourceLoader.exists(SETTINGS_PATH):
 		# 如果设置文件存在，则直接加载。
 		# 使用 CACHE_MODE_IGNORE 可以确保每次都从磁盘读取最新的设置，
 		# 这对于用户在编辑器中修改设置后能立即生效非常重要。
-		settings = ResourceLoader.load(SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
+		plugin_settings = ResourceLoader.load(SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:
 		# 如果文件不存在，则创建一个新的默认设置对象并保存。
-		settings = PluginSettings.new()
-		ResourceSaver.save(settings, SETTINGS_PATH)
+		plugin_settings = PluginSettings.new()
+		var err: Error = ResourceSaver.save(plugin_settings, SETTINGS_PATH)
+		if err == OK:
+			# [新增修复] 强制通知编辑器文件系统有新文件，生成UID并纳入索引
+			update_editor_filesystem(SETTINGS_PATH)
+		else:
+			push_error("[Godot AI Chat] Failed to create settings file: %s" % error_string(err))
 	
-	return settings
+	return plugin_settings
 
 
 static func estimate_tokens_for_messages(messages: Array) -> int:
