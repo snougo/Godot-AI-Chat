@@ -20,6 +20,9 @@ static func load_default_tools() -> void:
 	
 	print("[ToolRegistry] Loading tools...")
 	
+	# 每次调用前先清空，防止旧的无效引用残留
+	ai_tools.clear()
+	
 	# 避免重复加载日志刷屏，可以加个判断或者只在非空时注册
 	# 这里简单处理：每次调用重新注册一遍，覆盖旧引用是安全的
 	for script_name in tool_scripts:
@@ -32,28 +35,35 @@ static func load_default_tools() -> void:
 		var script: Resource = load(path)
 		if script:
 			var tool_instance = script.new()
-			# 双重检查 —— 既查类型，也查方法
-			if (tool_instance is AiTool) or (tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema")):
+			# 双重检查 —— 既查类型，也查方法 (Duck Typing)
+			# 即使 AiTool 类型未注册(is AiTool 失败)，只要方法齐全也允许通过
+			var is_valid_tool: bool = false
+			
+			if tool_instance is AiTool:
+				is_valid_tool = true
+			elif tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):
+				is_valid_tool = true
+			
+			if is_valid_tool:
 				# 尝试获取名称，处理某些情况下 script.new() 后属性未初始化的问题
-				var t_name = tool_instance.name if "name" in tool_instance else ""
+				var t_name: String = tool_instance.name if "name" in tool_instance else ""
 				if t_name.is_empty() and tool_instance.has_method("get_tool_name"): # 备用方案
 					t_name = tool_instance.call("get_tool_name")
 				
-				if not t_name.is_empty():
+				# 如果还没名字，尝试直接 get 属性 (针对纯 GDScript 实例)
+				if t_name.is_empty():
+					t_name = tool_instance.get("name")
+				
+				if t_name and not t_name.is_empty():
 					register_tool(tool_instance)
 				else:
-					# 如果是 GDScript 实例，有时候需要手动从 script 里的 const 或默认值读
-					# 这里简单处理：如果没名字，报个错
-					if tool_instance.get("name"):
-						register_tool(tool_instance)
-					else:
-						push_error("[ToolRegistry] Tool %s has no 'name' property." % script_name)
+					push_error("[ToolRegistry] Tool %s has no 'name' property." % script_name)
 
 
 # 注册一个工具实例
-static func register_tool(_tool: AiTool) -> void:
+static func register_tool(_tool: Object) -> void:
 	var tool_name: String = _tool.name
-	if tool_name.is_empty():
+	if tool_name == null or tool_name.is_empty():
 		push_error("[ToolRegistry] Cannot register tool with empty name.")
 		return
 	
@@ -68,6 +78,12 @@ static func get_tool(_tool_name: String) -> AiTool:
 
 # 获取所有工具的定义列表 (供 AiServiceAdapter 调用)
 static func get_all_tool_definitions(_for_gemini: bool = false) -> Array:
+	# 自动重试机制：如果列表为空，尝试重新加载
+	# 这解决了首次安装插件未重启编辑器时，_ready 中注册失败的问题
+	if ai_tools.is_empty():
+		print("[ToolRegistry] Tool list is empty (first run?), attempting to reload default tools...")
+		load_default_tools()
+	
 	var definitions: Array = []
 	for tool in ai_tools.values():
 		var schema: Dictionary = tool.get_parameters_schema()
@@ -81,6 +97,7 @@ static func get_all_tool_definitions(_for_gemini: bool = false) -> Array:
 			"description": tool.description,
 			"parameters": schema
 		})
+	
 	return definitions
 
 
