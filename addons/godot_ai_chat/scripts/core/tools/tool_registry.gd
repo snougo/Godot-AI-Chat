@@ -15,7 +15,8 @@ static func load_default_tools() -> void:
 		"get_context_tool.gd",
 		"get_current_date_tool.gd",
 		"search_documents_tool.gd",
-		"write_notebook_tool.gd"
+		"write_notebook_tool.gd",
+		"todo_list_tool.gd"
 	]
 	
 	print("[ToolRegistry] Loading tools...")
