@@ -2,7 +2,7 @@
 extends RefCounted
 class_name StreamRequest
 
-# [修改] 现在的 chunk_received 信号直接传输原始 JSON 字典，不做任何处理
+# 现在的 chunk_received 信号直接传输原始 JSON 字典，不做任何处理
 signal chunk_received(raw_json: Dictionary)
 signal usage_received(usage: Dictionary) # 依然保留，部分 Provider 可能单独发 usage
 signal finished
@@ -91,6 +91,10 @@ func _thread_task() -> void:
 	if response_code != 200:
 		while client.get_status() == HTTPClient.STATUS_BODY:
 			client.poll()
+			# [建议新增修复]
+			if client.get_status() != HTTPClient.STATUS_BODY:
+				break
+			
 			var _chunk = client.read_response_body_chunk()
 		_emit_failure("HTTP Error %d" % response_code)
 		return
@@ -102,6 +106,11 @@ func _thread_task() -> void:
 		if _stop_flag: return
 		
 		client.poll()
+		
+		# poll() 可能会改变状态，如果不再是 STATUS_BODY，读取 chunk 会报错
+		if client.get_status() != HTTPClient.STATUS_BODY:
+			break
+		
 		var chunk = client.read_response_body_chunk()
 		
 		if chunk.size() > 0:

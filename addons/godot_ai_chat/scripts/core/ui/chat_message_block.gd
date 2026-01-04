@@ -19,7 +19,7 @@ var pending_buffer: String = ""
 var last_ui_node: Control = null
 
 # 正则匹配 (锚定行首)
-var re_code_start: RegEx = RegEx.create_from_string("^```([a-zA-Z0-9_+\\-]*)\\s*$")
+var re_code_start: RegEx = RegEx.create_from_string("^```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
 var re_code_end: RegEx = RegEx.create_from_string("^```\\s*$")
 
 # 动态打字机状态
@@ -52,7 +52,16 @@ func append_chunk(text: String) -> void:
 func finish_stream() -> void:
 	# 强制刷新缓冲区里剩余的内容
 	if not pending_buffer.is_empty():
-		_append_content(pending_buffer, false)
+		# 如果缓冲区里残留了 ``` 开头的内容（意味着最后一行没有换行符）
+		# 我们需要尝试作为代码块标记解析它，以防是流的结束
+		if pending_buffer.begins_with("```"):
+			var line = pending_buffer
+			if line.ends_with("\r"): 
+				line = line.left(-1)
+			_parse_fence_line(line, false)
+		else:
+			_append_content(pending_buffer, false)
+		
 		pending_buffer = ""
 	
 	# 如果打字机还在跑，让它瞬间跑完
@@ -101,31 +110,20 @@ func _process_smart_chunk(incoming_text: String, instant: bool) -> void:
 		# 搜索反引号（这是唯一的阻断符）
 		var fence_idx = pending_buffer.find("```")
 		
-		if fence_idx == -1:
-			# A. 安全情况：缓冲区里没有反引号
-			# 直接全部渲染，清空缓冲区
-			_append_content(pending_buffer, instant)
-			pending_buffer = ""
-			break
-		
-		else:
-			# B. 危险情况：发现了反引号
+		if fence_idx != -1:
+			# A. 发现了完整的标记
 			
-			# B1. 先把反引号之前的内容（安全区）渲染出来
+			# A1. 先把反引号之前的内容（安全区）渲染出来
 			if fence_idx > 0:
 				var safe_part = pending_buffer.substr(0, fence_idx)
 				_append_content(safe_part, instant)
 				# 缓冲区切除安全部分，现在的 buffer 以 ``` 开头
 				pending_buffer = pending_buffer.substr(fence_idx)
 			
-			# B2. 检查这个 ``` 所在的一行是否已经完整（即是否有换行符）
+			# A2. 检查这个 ``` 所在的一行是否已经完整（即是否有换行符）
 			var newline_pos = pending_buffer.find("\n")
 			
-			if newline_pos == -1:
-				# 还没有换行，我们无法判断这是代码块标记还是普通文本
-				# 暂停处理，等待下一个 chunk 带来换行符
-				break
-			else:
+			if newline_pos != -1:
 				# 找到了换行，提取这一行进行判定
 				var line_with_fence = pending_buffer.substr(0, newline_pos) # 不含 \n
 				
@@ -136,8 +134,42 @@ func _process_smart_chunk(incoming_text: String, instant: bool) -> void:
 				if line_with_fence.ends_with("\r"):
 					line_with_fence = line_with_fence.left(-1)
 				
-				# B3. 解析这一行
+				# A3. 解析这一行
 				_parse_fence_line(line_with_fence, instant)
+				
+				# 继续循环处理剩余 buffer (因为可能一个 chunk 里包含多个块)
+				continue
+			else:
+				# 还没有换行，我们无法判断这是代码块标记还是普通文本
+				# 暂停处理，等待下一个 chunk 带来换行符
+				break
+		
+		else:
+			# B. 没有发现完整的
+			# B1. 检查末尾是否有潜在的半个标记 (` ` 或 ` `` `)
+			# 我们不能把这两个字符渲染出去，因为它们可能是未来 ``` 的一部分
+			var safe_len = pending_buffer.length()
+			if pending_buffer.ends_with("``"):
+				safe_len -= 2
+			elif pending_buffer.ends_with("`"):
+				safe_len -= 1
+			
+			if safe_len < pending_buffer.length():
+				# B2. 有潜在标记，保留尾部，只渲染前面的安全部分
+				if safe_len > 0:
+					var safe_part = pending_buffer.left(safe_len)
+					_append_content(safe_part, instant)
+					pending_buffer = pending_buffer.right(-safe_len)
+				# 剩下的潜在标记留给下一帧处理
+			else:
+				# B3. 完全安全，没有反引号干扰
+				if not pending_buffer.is_empty():
+					_append_content(pending_buffer, instant)
+					pending_buffer = ""
+			
+			# 本轮处理结束，等待更多数据
+			break
+
 
 
 # 解析包含 ``` 的特定行
