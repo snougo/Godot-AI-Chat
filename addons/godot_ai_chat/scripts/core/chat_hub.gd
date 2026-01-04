@@ -21,6 +21,9 @@ var is_creating_new_chat: bool = false
 
 
 func _ready() -> void:
+	# 在这里注册工具，确保环境已稳定
+	ToolRegistry.load_default_tools()
+	
 	# 确保目录存在（双重保险）
 	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
 		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
@@ -32,10 +35,7 @@ func _ready() -> void:
 	current_chat_window.chat_scroll_container = chat_scroll_container
 	
 	# 等待一帧让子节点 Ready
-	await get_tree().create_timer(1.0).timeout
-	
-	# 此时编辑器应该已经完成了新插件的扫描，AiTool 类已可见
-	ToolRegistry.load_default_tools()
+	await get_tree().process_frame
 	
 	# --- 信号连接 ---
 	
