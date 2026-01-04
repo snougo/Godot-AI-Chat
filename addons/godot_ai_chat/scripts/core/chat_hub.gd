@@ -21,6 +21,9 @@ var is_creating_new_chat: bool = false
 
 
 func _ready() -> void:
+	# 在这里注册工具，确保环境已稳定
+	ToolRegistry.load_default_tools()
+	
 	# 确保目录存在（双重保险）
 	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
 		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
@@ -66,11 +69,11 @@ func _ready() -> void:
 	chat_backend.tool_message_generated.connect(self._on_tool_message_generated)
 	
 	# Token 统计
-	# [修复 1] 依然保留 NetworkManager 的连接 (作为备份)，但直接连给 ChatUI
+	# 依然保留 NetworkManager 的连接 (作为备份)，但直接连给 ChatUI
 	if not network_manager.chat_usage_data_received.is_connected(chat_ui.update_token_cost_display):
 		network_manager.chat_usage_data_received.connect(chat_ui.update_token_cost_display)
 	
-	# [修复 2] 连接 CurrentChatWindow 的新信号到 ChatUI
+	# 连接 CurrentChatWindow 的新信号到 ChatUI
 	if not current_chat_window.token_usage_updated.is_connected(chat_ui.update_token_cost_display):
 		current_chat_window.token_usage_updated.connect(chat_ui.update_token_cost_display)
 	

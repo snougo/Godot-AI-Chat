@@ -36,10 +36,6 @@ func _enter_tree() -> void:
 		chat_ui.initialize_editor_dependencies(editor_file_system)
 	else:
 		push_error("[Godot AI Chat] Could not find 'ChatUI' node in ChatHub scene.")
-	
-	# 使用静态方法加载工具
-	ToolRegistry.load_default_tools()
-	print("[Godot AI Chat] Plugin initialized.")
 
 
 func _exit_tree() -> void:
@@ -82,8 +78,10 @@ func _initialize_plugin_file_environment() -> void:
 	# 确保插件配置文件存在
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
 	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
-	if not ResourceLoader.exists("res://addons/godot_ai_chat/plugin_settings.tres"):
-		ToolBox.get_plugin_settings()
+	var settings_path: String = "res://addons/godot_ai_chat/plugin_settings.tres"
+	if not FileAccess.file_exists(settings_path):
+		print("[Godot AI Chat] Settings file not found, creating default...")
+		ToolBox.get_plugin_settings() # 这会创建默认文件
 		need_scan = true
 	
 	# 如果创建了任何新目录或文件，执行一次完整的扫描

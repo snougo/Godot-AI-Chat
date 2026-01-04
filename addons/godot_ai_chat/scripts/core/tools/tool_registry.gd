@@ -18,6 +18,8 @@ static func load_default_tools() -> void:
 		"write_notebook_tool.gd"
 	]
 	
+	print("[ToolRegistry] Loading tools...")
+	
 	# 避免重复加载日志刷屏，可以加个判断或者只在非空时注册
 	# 这里简单处理：每次调用重新注册一遍，覆盖旧引用是安全的
 	for script_name in tool_scripts:
@@ -30,17 +32,33 @@ static func load_default_tools() -> void:
 		var script: Resource = load(path)
 		if script:
 			var tool_instance = script.new()
-			if tool_instance is AiTool:
-				register_tool(tool_instance)
+			# 双重检查 —— 既查类型，也查方法
+			if (tool_instance is AiTool) or (tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema")):
+				# 尝试获取名称，处理某些情况下 script.new() 后属性未初始化的问题
+				var t_name = tool_instance.name if "name" in tool_instance else ""
+				if t_name.is_empty() and tool_instance.has_method("get_tool_name"): # 备用方案
+					t_name = tool_instance.call("get_tool_name")
+				
+				if not t_name.is_empty():
+					register_tool(tool_instance)
+				else:
+					# 如果是 GDScript 实例，有时候需要手动从 script 里的 const 或默认值读
+					# 这里简单处理：如果没名字，报个错
+					if tool_instance.get("name"):
+						register_tool(tool_instance)
+					else:
+						push_error("[ToolRegistry] Tool %s has no 'name' property." % script_name)
 
 
 # 注册一个工具实例
 static func register_tool(_tool: AiTool) -> void:
-	if _tool.name.is_empty():
+	var tool_name: String = _tool.name
+	if tool_name.is_empty():
 		push_error("[ToolRegistry] Cannot register tool with empty name.")
 		return
-	ai_tools[_tool.name] = _tool
-	print("[ToolRegistry] Registered tool: %s" % _tool.name)
+	
+	ai_tools[tool_name] = _tool
+	print("[ToolRegistry] Registered tool: %s" % tool_name)
 
 
 # 获取指定名称的工具

@@ -51,7 +51,7 @@ enum UIState {
 var current_state: UIState = UIState.IDLE
 var model_list: Array[String] = []
 # 用于判断是否为首次运行或初始化阶段
-var init_count: int = 0
+var is_first_init: bool = true
 
 
 func _ready() -> void:
@@ -69,11 +69,10 @@ func _ready() -> void:
 	# 初始化时更新一次聊天存档列表
 	self._update_chat_archive_selector()
 	
-	# [新增] 初始化 Token 显示为 0
+	# 初始化 Token 显示为 0
 	reset_token_cost_display()
 	
 	# 初始状态
-	init_count += 1
 	update_ui_state(UIState.IDLE)
 
 
@@ -160,7 +159,7 @@ func update_model_list(_model_names: Array[String]) -> void:
 
 # 当尝试获取从API服务器上获取模型列表请求失败时调用
 func get_model_list_request_failed(_error_message: String) -> void:
-	if init_count > 1:
+	if not is_first_init:
 		update_ui_state(UIState.ERROR, _error_message)
 	else:
 		# 保证如果启用插件后获取模型列表失败
@@ -168,7 +167,7 @@ func get_model_list_request_failed(_error_message: String) -> void:
 		# 因此我们在这手动设置一次，而不是使用 update_ui_state
 		status_label.text = _error_message
 		status_label.modulate = Color.RED
-		init_count += 1
+		is_first_init = false
 
 
 # 清空用户输入框
