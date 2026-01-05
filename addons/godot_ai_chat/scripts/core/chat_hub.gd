@@ -228,8 +228,13 @@ func _on_chunk_received(chunk: Dictionary) -> void:
 
 # 显示工具结果
 func _on_tool_message_generated(msg: ChatMessage) -> void:
-	# 传递 msg.tool_call_id
-	current_chat_window.append_tool_message(msg.name, msg.content, msg.tool_call_id)
+	current_chat_window.append_tool_message(
+		msg.name, 
+		msg.content, 
+		msg.tool_call_id, 
+		msg.image_data, 
+		msg.image_mime
+	)
 
 
 # 处理流结束 (关键防死循环逻辑)

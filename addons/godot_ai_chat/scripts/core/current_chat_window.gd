@@ -32,13 +32,16 @@ func append_error_message(text: String) -> void:
 	_scroll_to_bottom()
 
 
-# 增加 tool_call_id 参数
-func append_tool_message(tool_name: String, result_text: String, tool_call_id: String) -> void:
-	# 将正确的 ID 存入历史
-	chat_history.add_tool_message(result_text, tool_call_id, tool_name)
+func append_tool_message(tool_name: String, result_text: String, tool_call_id: String, image_data: PackedByteArray = [], image_mime: String = "") -> void:
+	# 将图片数据也存入历史记录
+	var msg = ChatMessage.new(ChatMessage.ROLE_TOOL, result_text, tool_name)
+	msg.tool_call_id = tool_call_id
+	msg.image_data = image_data
+	msg.image_mime = image_mime
+	chat_history.add_message(msg)
 	
-	var block = _create_block()
-	block.set_content(ChatMessage.ROLE_TOOL, result_text)
+	# UI 显示
+	_add_block(ChatMessage.ROLE_TOOL, result_text, true, [], image_data, image_mime)
 	_scroll_to_bottom()
 
 
@@ -101,13 +104,19 @@ func _refresh_display() -> void:
 		c.queue_free()
 	for msg in chat_history.messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM: continue
-		_add_block(msg.role, msg.content, true, msg.tool_calls)
+		# 传入图片数据参数
+		_add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime)
 	_scroll_to_bottom()
 
 
-func _add_block(role: String, content: String, instant: bool, tool_calls: Array = []) -> void:
+func _add_block(role: String, content: String, instant: bool, tool_calls: Array = [], image_data: PackedByteArray = [], image_mime: String = "") -> void:
 	var block = _create_block()
 	block.set_content(role, content, current_model_name if role == ChatMessage.ROLE_ASSISTANT else "", tool_calls)
+	
+	# 如果有图片数据，调用显示方法
+	if not image_data.is_empty():
+		block.display_image(image_data, image_mime)
+	
 	_scroll_to_bottom()
 
 

@@ -61,7 +61,7 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 			
 			if parts.is_empty():
 				parts.append({"text": ""})
-				
+		
 		elif msg.role == ChatMessage.ROLE_TOOL:
 			role = "function"
 			parts.append({
@@ -73,7 +73,17 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 				}
 			})
 		else:
+			# User 消息
 			parts.append({"text": msg.content})
+		
+		# --- 多模态图片支持 ---
+		if not msg.image_data.is_empty():
+			parts.append({
+				"inline_data": {
+					"mime_type": msg.image_mime,
+					"data": Marshalls.raw_to_base64(msg.image_data)
+				}
+			})
 		
 		if not parts.is_empty():
 			gemini_contents.append({"role": role, "parts": parts})
