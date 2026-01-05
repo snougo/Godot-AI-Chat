@@ -15,7 +15,6 @@ static func load_default_tools() -> void:
 		"get_context_tool.gd",
 		"get_current_date_tool.gd",
 		"search_documents_tool.gd",
-		"get_image_tool.gd",
 		#"write_notebook_tool.gd", # 暂时禁用笔记本工具
 		#"create_script_tool.gd", #暂时禁用脚本创建工具
 		"todo_list_tool.gd"

@@ -151,44 +151,6 @@ func show_tool_call(_tool_call: Dictionary) -> void:
 	last_ui_node = null
 
 
-# 在 chat_message_block.gd 中添加此方法，替换之前报错的部分
-
-func display_image(data: PackedByteArray, mime: String) -> void:
-	if data.is_empty(): return
-	
-	var img = Image.new()
-	var err = OK
-	
-	# 根据 MIME 类型选择加载方式
-	if mime == "image/png":
-		err = img.load_png_from_buffer(data)
-	elif mime == "image/jpeg" or mime == "image/jpg":
-		err = img.load_jpg_from_buffer(data)
-	elif mime == "image/webp":
-		err = img.load_webp_from_buffer(data)
-	elif mime == "image/svg+xml":
-		err = img.load_svg_from_buffer(data)
-	else:
-		# 兜底：尝试作为 PNG 加载
-		err = img.load_png_from_buffer(data)
-	
-	if err == OK:
-		var tex = ImageTexture.create_from_image(img)
-		var rect = TextureRect.new()
-		rect.texture = tex
-		rect.expand_mode = TextureRect.EXPAND_KEEP_SIZE
-		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		
-		# 限制预览图的最大高度，防止图片过大撑破 UI
-		rect.custom_minimum_size = Vector2(0, 250) 
-		
-		content_container.add_child(rect)
-		# 重置 last_ui_node，确保图片后的文字能正确开启新的 RichTextLabel
-		last_ui_node = null
-	else:
-		push_error("Failed to load image buffer in ChatMessageBlock, error code: %d" % err)
-
-
 # --- 核心渲染逻辑 ---
 
 func _set_title(role: String, model_name: String) -> void:

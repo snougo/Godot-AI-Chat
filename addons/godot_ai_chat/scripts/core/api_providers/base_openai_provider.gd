@@ -24,63 +24,10 @@ func get_request_url(_base_url: String, _model_name: String, _api_key: String, _
 	return _base_url.path_join("v1/chat/completions")
 
 
-#func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
-	#var api_messages: Array[Dictionary] = []
-	#for msg in _messages:
-		#api_messages.append(msg.to_api_dict())
-	#
-	#var body: Dictionary = {
-		#"model": _model_name,
-		#"messages": api_messages,
-		#"temperature": _temperature,
-		#"stream": _stream
-	#}
-	#
-	#if not _tool_definitions.is_empty():
-		#var tools_list: Array = []
-		#for tool_def in _tool_definitions:
-			#tools_list.append({
-				#"type": "function",
-				#"function": tool_def
-			#})
-		#body["tools"] = tools_list
-		#body["tool_choice"] = "auto"
-	#
-	#if _stream:
-		#body["stream_options"] = {"include_usage": true}
-	#
-	#return body
-
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
 	var api_messages: Array[Dictionary] = []
-	
 	for msg in _messages:
-		var msg_dict: Dictionary = msg.to_api_dict()
-		
-		# --- 多模态图片支持 ---
-		if not msg.image_data.is_empty():
-			var content_array = []
-			
-			# 1. 如果有文本内容，添加为 text 类型块
-			if not msg.content.is_empty():
-				content_array.append({
-					"type": "text",
-					"text": msg.content
-				})
-			
-			# 2. 添加图片块 (使用 Data URL 格式)
-			var base64_str = Marshalls.raw_to_base64(msg.image_data)
-			content_array.append({
-				"type": "image_url",
-				"image_url": {
-					"url": "data:%s;base64,%s" % [msg.image_mime, base64_str]
-				}
-			})
-			
-			# 覆盖原有的 String content
-			msg_dict["content"] = content_array
-		
-		api_messages.append(msg_dict)
+		api_messages.append(msg.to_api_dict())
 	
 	var body: Dictionary = {
 		"model": _model_name,
@@ -101,9 +48,8 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 	
 	if _stream:
 		body["stream_options"] = {"include_usage": true}
-	
+		
 	return body
-
 
 
 func parse_model_list_response(_body_bytes: PackedByteArray) -> Array[String]:

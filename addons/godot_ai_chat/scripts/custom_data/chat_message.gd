@@ -20,10 +20,6 @@ const ROLE_TOOL = "tool"
 # 消息内容
 @export_multiline var content: String = ""
 
-# 图片内容
-@export var image_data: PackedByteArray = [] # 存储图片原始字节
-@export var image_mime: String = "image/png" # 默认为 PNG
-
 # --- 工具调用相关 (Agent) ---
 
 # [Assistant 专用]

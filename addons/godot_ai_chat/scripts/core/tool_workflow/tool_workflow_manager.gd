@@ -54,26 +54,12 @@ func _execute_tool_calls(msg: ChatMessage) -> void:
 		if args == null: args = {}
 		
 		# 执行工具
-		#var result_str = tool_executor.execute_tool({"tool_name": tool_name, "arguments": args})
-		
-		# 调用工具并获取完整返回字典
-		# 假设 ToolExecutor.execute_tool 已经改为返回整个 Dictionary 而不仅仅是 String
-		# 如果 ToolExecutor 只返回 String，你需要在这里直接调用工具实例
-		var tool_instance = ToolRegistry.get_tool(tool_name)
-		var result_dict = tool_instance.execute(args, tool_executor.context_provider)
-		
-		var result_str = result_dict.get("data", "")
+		var result_str = tool_executor.execute_tool({"tool_name": tool_name, "arguments": args})
 		
 		# 创建 Tool Message
 		# 传入 tool_name 以适配 Gemini
 		var tool_msg = ChatMessage.new(ChatMessage.ROLE_TOOL, result_str, tool_name)
 		tool_msg.tool_call_id = call_id
-		
-		# 处理图片附件
-		if result_dict.has("attachments"):
-			var att = result_dict.attachments
-			tool_msg.image_data = att.get("image_data", [])
-			tool_msg.image_mime = att.get("mime", "image/png")
 		
 		workflow_messages.append(tool_msg)
 		emit_signal("tool_msg_generated", tool_msg)
