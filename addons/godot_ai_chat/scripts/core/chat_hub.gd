@@ -79,6 +79,10 @@ func _ready() -> void:
 	
 	# --- 初始化 ---
 	network_manager.get_model_list()
+	
+	# 插件启动时，若无当前对话路径，提示用户操作
+	if current_history_path.is_empty():
+		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
 
 
 # --- 核心业务逻辑 ---
@@ -111,7 +115,9 @@ func _create_new_chat_history() -> void:
 		while FileAccess.file_exists(final_path):
 			final_path = ARCHIVE_DIR.path_join("%s_%d%s" % [base_filename, counter, extension_type])
 			counter += 1
+		
 		current_history_path = final_path
+		var filename: String = final_path.get_file() # 获取用于 UI 显示的文件名
 		
 		# 创建新资源并保存
 		var new_history: ChatMessageHistory = ChatMessageHistory.new()
@@ -127,12 +133,16 @@ func _create_new_chat_history() -> void:
 		# 我们通过 ToolBox 精确通知编辑器更新【这一个文件】。
 		ToolBox.update_editor_filesystem(current_history_path)
 		
-		# [修复] 重置 Token 显示
+		# 同步 UI 下拉框选中项
+		chat_ui.select_archive_by_name(filename)
+		# 重置 Token 显示
 		chat_ui.reset_token_cost_display()
 		
 		# 绑定到窗口
 		current_chat_window.load_history_resource(new_history)
-		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created")
+		
+		# [优化] 更新状态文字，包含明确的文件名反馈
+		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created: " + filename)
 		
 		# 解锁
 		is_creating_new_chat = false
@@ -165,10 +175,12 @@ func _load_chat_history(filename: String) -> void:
 		self._on_stop_requested() # 停止当前
 		current_history_path = path # 更新当前路径
 		
-		# [修复] 加载新存档前，重置 Token 显示为 0
+		# 同步 UI 下拉框选中项（防止从非下拉框途径触发加载时不同步）
+		chat_ui.select_archive_by_name(filename)
+		
+		# 加载新存档前，重置 Token 显示为 0
 		# 因为存档文件(.tres)里不保存 Token 数据，所以只能重置
 		chat_ui.reset_token_cost_display()
-		
 		current_chat_window.load_history_resource(chat_history)
 		chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % filename)
 		

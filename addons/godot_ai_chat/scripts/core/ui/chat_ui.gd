@@ -92,8 +92,13 @@ func update_ui_state(_new_state: UIState, _payload: String = "") -> void:
 	
 	match current_state:
 		UIState.IDLE:
-			status_label.text = "Ready"
-			status_label.modulate = Color.WHITE
+			#status_label.text = "Ready"
+			#status_label.modulate = Color.WHITE
+			# [新增] 逻辑：如果提示信息包含 "No Chat"，使用金色/黄色提醒用户
+			if "No Chat" in status_label.text:
+				status_label.modulate = Color.GOLD
+			else:
+				status_label.modulate = Color.WHITE
 			send_button.text = "Send"
 			send_button.disabled = false
 			user_input.editable = true
@@ -152,9 +157,15 @@ func update_ui_state(_new_state: UIState, _payload: String = "") -> void:
 
 # 更新模型下拉列表的内容
 func update_model_list(_model_names: Array[String]) -> void:
-	update_ui_state(UIState.IDLE, "Ready")
+	# 检查当前状态栏是否包含特殊的初始化提示
+	# 如果包含，则不使用 "Ready" 覆盖它
+	var current_msg := status_label.text
+	if not ("No Chat" in current_msg):
+		update_ui_state(UIState.IDLE, "Ready")
+	
 	model_list = _model_names
 	_apply_model_filter()
+
 
 
 # 当尝试获取从API服务器上获取模型列表请求失败时调用
@@ -168,6 +179,17 @@ func get_model_list_request_failed(_error_message: String) -> void:
 		status_label.text = _error_message
 		status_label.modulate = Color.RED
 		is_first_init = false
+
+
+# 用于根据文件名同步下拉选择框
+func select_archive_by_name(_archive_name: String) -> void:
+	# 强制刷新一次列表，确保新创建的文件已在列表中
+	_update_chat_archive_selector()
+	
+	for i in range(chat_archive_selector.get_item_count()):
+		if chat_archive_selector.get_item_text(i) == _archive_name:
+			chat_archive_selector.select(i)
+			return
 
 
 # 清空用户输入框
