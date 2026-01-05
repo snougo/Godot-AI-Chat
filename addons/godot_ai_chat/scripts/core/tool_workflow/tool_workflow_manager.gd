@@ -46,15 +46,18 @@ func _execute_tool_calls(msg: ChatMessage) -> void:
 		var tool_name = func_def.get("name", "")
 		var args_str = func_def.get("arguments", "{}")
 		
+		# [优化] 在控制台打印，方便调试，同时为后续 UI 状态扩展预留位置
+		print("[Workflow] Executing tool: %s" % tool_name)
+		
 		# 解析参数
 		var args = JSON.parse_string(args_str)
 		if args == null: args = {}
 		
-		# [修复] 调用正确的函数名 execute_tool
+		# 执行工具
 		var result_str = tool_executor.execute_tool({"tool_name": tool_name, "arguments": args})
 		
 		# 创建 Tool Message
-		# [关键] 传入 tool_name 以适配 Gemini
+		# 传入 tool_name 以适配 Gemini
 		var tool_msg = ChatMessage.new(ChatMessage.ROLE_TOOL, result_str, tool_name)
 		tool_msg.tool_call_id = call_id
 		

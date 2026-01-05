@@ -73,10 +73,11 @@ func handle_stream_chunk(raw_chunk: Dictionary, provider: BaseLLMProvider) -> vo
 		last_block.append_chunk(content_delta)
 	
 	# 4. 工具调用视觉反馈 (可选)
-	if not target_msg.tool_calls.is_empty() and target_msg.content.strip_edges().is_empty():
-		# 这里可以做一些显示 "Calling Tool..." 的逻辑，但为了防止重复显示，
-		# 可以在 ChatMessageBlock 里加一个状态位，或者简单地跳过。
-		pass
+	if not target_msg.tool_calls.is_empty():
+		for tc in target_msg.tool_calls:
+			# 只要存在工具调用数据，就调用 Block 的显示方法
+			# Block 内部会通过 ID 自动处理“创建”或“更新”
+			last_block.show_tool_call(tc)
 	
 	# 5. Token 统计
 	var usage = ui_update.get("usage", null)
@@ -100,13 +101,13 @@ func _refresh_display() -> void:
 		c.queue_free()
 	for msg in chat_history.messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM: continue
-		_add_block(msg.role, msg.content, true)
+		_add_block(msg.role, msg.content, true, msg.tool_calls)
 	_scroll_to_bottom()
 
 
-func _add_block(role: String, content: String, instant: bool) -> void:
+func _add_block(role: String, content: String, instant: bool, tool_calls: Array = []) -> void:
 	var block = _create_block()
-	block.set_content(role, content, current_model_name if role == ChatMessage.ROLE_ASSISTANT else "")
+	block.set_content(role, content, current_model_name if role == ChatMessage.ROLE_ASSISTANT else "", tool_calls)
 	_scroll_to_bottom()
 
 

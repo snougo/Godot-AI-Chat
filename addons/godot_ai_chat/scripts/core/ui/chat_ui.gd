@@ -129,7 +129,7 @@ func update_ui_state(_new_state: UIState, _payload: String = "") -> void:
 			reconnect_button.disabled = true
 		
 		UIState.TOOLCALLING:
-			status_label.text = "Tool Calling "
+			status_label.text = "⚙️ Executing Tools... " + _payload
 			status_label.modulate = Color.GOLD
 			send_button.text = "Stop"
 			send_button.disabled = false

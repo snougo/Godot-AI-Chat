@@ -37,11 +37,15 @@ func _ready() -> void:
 
 # --- 公共接口 ---
 
-func set_content(role: String, content: String, model_name: String = "") -> void:
+func set_content(role: String, content: String, model_name: String = "", tool_calls: Array = []) -> void:
 	_set_title(role, model_name)
 	_clear_content()
 	# 静态加载时，直接一次性处理，并在最后强制换行确保闭合
 	_process_smart_chunk(content + "\n", true)
+	
+	# 静态加载历史中的工具调用
+	for tc in tool_calls:
+		show_tool_call(tc)
 
 
 func start_stream(role: String, model_name: String = "") -> void:
@@ -87,49 +91,64 @@ func get_role() -> String:
 	return get_meta("role") if has_meta("role") else ""
 
 
-# 展示工具调用信息（兼容 OpenAI 嵌套/平铺两种结构）
-#func show_tool_call(_tool_call: Dictionary) -> void:
-	#if _tool_rtl:
-		#return # 已经展示过，不再重复创建
+func show_tool_call(_tool_call: Dictionary) -> void:
+	# 检查是否已经存在该 ID 的展示（防止流式多次重复创建 UI 节点）
+	var call_id = _tool_call.get("id", "no-id")
 	
-	# 创建 RichTextLabel
-	#_tool_rtl = RichTextLabel.new()
-	#_tool_rtl.bbcode_enabled = true
-	#_tool_rtl.fit_content = true
-	#_tool_rtl.selection_enabled = false
-	#_tool_rtl.theme_type_variation = "TooltipPanel"
-	#_tool_rtl.add_theme_constant_override("margin_left",   8)
-	#_tool_rtl.add_theme_constant_override("margin_top",    4)
-	#_tool_rtl.add_theme_constant_override("margin_right",  8)
-	#_tool_rtl.add_theme_constant_override("margin_bottom", 4)
+	# 使用 meta 记录已显示的 call_id
+	var shown_calls = content_container.get_meta("shown_calls", [])
+	if call_id in shown_calls:
+		_update_tool_call_ui(call_id, _tool_call)
+		return
 	
-	# 兼容两种字段结构
-	#var tool_name := ""
-	#var args_str := "" # 只保留原始字符串，不再强制解析
-	#var call_id := _tool_call.get("id", "no-id")
+	shown_calls.append(call_id)
+	content_container.set_meta("shown_calls", shown_calls)
 	
-	#if _tool_call.has("function"): # OpenAI 嵌套
-		#tool_name = _tool_call.function.get("name", "unknown")
-		#args_str = _tool_call.function.get("arguments", "")
-	#else:
-		#tool_name = _tool_call.get("name", "unknown")
-		#args_str = str(_tool_call.get("arguments", ""))
+	# 1. 创建外观容器 (PanelContainer)
+	var panel = PanelContainer.new()
+	panel.name = "Tool_" + call_id
 	
-	# 如果已经收到完整 JSON，就格式化；否则原样打印
-	#var args_pretty: String
+	# 设置背景样式，使其看起来像一个控制台或代码块
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.13, 0.16, 0.9) # 深色背景
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(10)
+	style.border_width_left = 4
+	style.border_color = Color.GOLD # 左侧金边提醒
+	panel.add_theme_stylebox_override("panel", style)
 	
-	#if args_str.begins_with("{") and args_str.ends_with("}"):
-		#var parsed = JSON.parse_string(args_str)
-		#args_pretty = "[color=yellow]Parameters:[/color] %s" % JSON.stringify(parsed, "\t") if parsed != null else args_str
-	#else:
-		#args_pretty = "[color=yellow]Parameters:[/color] %s" % args_str
+	var vbox = VBoxContainer.new()
+	panel.add_child(vbox)
 	
-	#_tool_rtl.append_text("[b]🔧 Calling tool: %s[/b]\n" % tool_name)
-	#_tool_rtl.append_text(args_pretty + "\n")
-	#_tool_rtl.append_text("[color=gray]Call ID: %s[/color]" % call_id)
+	# 2. 标题：🔧 Tool Call: [工具名]
+	var title_label = RichTextLabel.new()
+	title_label.bbcode_enabled = true
+	title_label.fit_content = true
+	title_label.selection_enabled = false
 	
-	#content_container.add_child(_tool_rtl)
-	#last_ui_node = null
+	var tool_name = ""
+	if _tool_call.has("function"):
+		tool_name = _tool_call.function.get("name", "unknown")
+	else:
+		tool_name = _tool_call.get("name", "unknown")
+	
+	title_label.append_text("[b][color=cyan]🔧 Tool Call:[/color][/b] [color=yellow]%s[/color]" % tool_name)
+	vbox.add_child(title_label)
+	
+	# 3. 参数详情 (RichTextLabel)
+	var args_label = RichTextLabel.new()
+	args_label.name = "ArgsLabel"
+	args_label.bbcode_enabled = true
+	args_label.fit_content = true
+	#args_label.add_theme_font_size_override("normal_font_size", 20)
+	vbox.add_child(args_label)
+	
+	_update_args_display(args_label, _tool_call)
+	
+	content_container.add_child(panel)
+	
+	# [重要] 重置 last_ui_node，确保工具调用后的普通文本会创建新的 RichTextLabel
+	last_ui_node = null
 
 
 # --- 核心渲染逻辑 ---
@@ -144,9 +163,44 @@ func _set_title(role: String, model_name: String) -> void:
 		_: title = role.capitalize()
 
 
+# 更新流式工具调用参数
+func _update_tool_call_ui(call_id: String, tool_call: Dictionary) -> void:
+	var panel = content_container.get_node_or_null("Tool_" + call_id)
+	if panel:
+		var args_label = panel.find_child("ArgsLabel", true, false)
+		if args_label:
+			_update_args_display(args_label, tool_call)
+
+
+# 解析并格式化参数显示
+func _update_args_display(label: RichTextLabel, tool_call: Dictionary) -> void:
+	var args_str = ""
+	if tool_call.has("function"):
+		args_str = tool_call.function.get("arguments", "")
+	else:
+		args_str = str(tool_call.get("arguments", ""))
+	
+	label.clear()
+	label.push_color(Color(0.7, 0.7, 0.7))
+	if args_str.strip_edges().begins_with("{"):
+		# 尝试美化 JSON，如果失败则原样显示
+		var parsed = JSON.parse_string(args_str)
+		if parsed != null:
+			label.add_text(JSON.stringify(parsed, "  "))
+		else:
+			label.add_text(args_str)
+	else:
+		label.add_text(args_str)
+	label.pop()
+
+
 func _clear_content() -> void:
 	for c in content_container.get_children():
 		c.queue_free()
+	
+	# 重置已显示的工具调用记录，防止内容刷新时逻辑冲突
+	if content_container.has_meta("shown_calls"):
+		content_container.set_meta("shown_calls", [])
 	
 	current_state = ParseState.TEXT
 	pending_buffer = ""
