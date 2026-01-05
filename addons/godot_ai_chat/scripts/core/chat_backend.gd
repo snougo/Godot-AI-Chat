@@ -19,13 +19,14 @@ func cancel_workflow() -> void:
 	if current_workflow:
 		current_workflow.cleanup()
 		current_workflow = null
+	
 	is_in_workflow = false
 
 
 # 处理新的助手响应 (这是整个流程的入口)
 # msg: 从流中构建完整的 ChatMessage 对象
 func process_response(msg: ChatMessage) -> void:
-	# [新增] 强制打印，看看最终收到了什么
+	# 强制打印，看看最终收到了什么
 	print("[ChatBackend] Processing response. Role: %s, Content len: %d, Tool calls: %d" % [msg.role, msg.content.length(), msg.tool_calls.size()])
 	
 	# 检查是否有原生的工具调用

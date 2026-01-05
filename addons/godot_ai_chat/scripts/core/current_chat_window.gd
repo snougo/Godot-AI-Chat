@@ -2,7 +2,7 @@
 extends Node
 class_name CurrentChatWindow
 
-# [新增] 定义 Token 更新信号
+# 定义 Token 更新信号
 signal token_usage_updated(usage: Dictionary)
 
 # --- 场景引用 ---
@@ -34,7 +34,7 @@ func append_error_message(text: String) -> void:
 
 # 增加 tool_call_id 参数
 func append_tool_message(tool_name: String, result_text: String, tool_call_id: String) -> void:
-	# [修改] 将正确的 ID 存入历史
+	# 将正确的 ID 存入历史
 	chat_history.add_tool_message(result_text, tool_call_id, tool_name)
 	
 	var block = _create_block()
@@ -71,7 +71,7 @@ func handle_stream_chunk(raw_chunk: Dictionary, provider: BaseLLMProvider) -> vo
 	
 	if not content_delta.is_empty():
 		last_block.append_chunk(content_delta)
-		
+	
 	# 4. 工具调用视觉反馈 (可选)
 	if not target_msg.tool_calls.is_empty() and target_msg.content.strip_edges().is_empty():
 		# 这里可以做一些显示 "Calling Tool..." 的逻辑，但为了防止重复显示，
@@ -79,14 +79,20 @@ func handle_stream_chunk(raw_chunk: Dictionary, provider: BaseLLMProvider) -> vo
 		pass
 	
 	# 5. Token 统计
-	if ui_update.has("usage"):
-		update_token_usage(ui_update["usage"])
-
+	var usage = ui_update.get("usage", null)
+	if usage is Dictionary and not usage.is_empty():
+		update_token_usage(usage)
+	
 	_scroll_to_bottom()
 
 
 func commit_agent_history(_new_messages: Array[ChatMessage]) -> void:
 	pass
+
+
+func update_token_usage(usage: Dictionary) -> void:
+	if not usage.is_empty():
+		emit_signal("token_usage_updated", usage)
 
 
 func _refresh_display() -> void:
@@ -122,8 +128,3 @@ func _scroll_to_bottom() -> void:
 	await get_tree().process_frame
 	if chat_scroll_container.get_v_scroll_bar():
 		chat_scroll_container.scroll_vertical = chat_scroll_container.get_v_scroll_bar().max_value
-
-
-func update_token_usage(usage: Dictionary) -> void:
-	if not usage.is_empty():
-		emit_signal("token_usage_updated", usage)

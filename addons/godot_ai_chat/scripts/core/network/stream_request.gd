@@ -19,6 +19,9 @@ var _task_id: int = -1
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
 var _incoming_text_buffer: String = ""
 
+# 新增成员变量：孤立的反斜杠缓存
+var _pending_backslash: String = ""
+
 
 func _init(provider: BaseLLMProvider, url: String, headers: PackedStringArray, body_dict: Dictionary) -> void:
 	_provider = provider
@@ -134,19 +137,61 @@ func _thread_task() -> void:
 
 # --- 协议解析辅助 ---
 
+#func _process_sse_buffer() -> void:
+	#while true:
+		#var newline_pos = _incoming_text_buffer.find("\n")
+		#if newline_pos == -1: break
+		#var line = _incoming_text_buffer.substr(0, newline_pos).strip_edges()
+		#_incoming_text_buffer = _incoming_text_buffer.substr(newline_pos + 1)
+		
+		#if line.begins_with("data:"):
+			#var json_str = line.substr(5).strip_edges()
+			#if json_str == "[DONE]": continue
+			#var json = JSON.parse_string(json_str)
+			#if json is Dictionary:
+				#_emit_raw_json(json)
+
 func _process_sse_buffer() -> void:
 	while true:
-		var newline_pos = _incoming_text_buffer.find("\n")
-		if newline_pos == -1: break
-		var line = _incoming_text_buffer.substr(0, newline_pos).strip_edges()
+		var newline_pos: int = _incoming_text_buffer.find("\n")
+		if newline_pos == -1:
+			break
+		
+		var line: String = _incoming_text_buffer.substr(0, newline_pos).strip_edges()
 		_incoming_text_buffer = _incoming_text_buffer.substr(newline_pos + 1)
 		
-		if line.begins_with("data:"):
-			var json_str = line.substr(5).strip_edges()
-			if json_str == "[DONE]": continue
-			var json = JSON.parse_string(json_str)
-			if json is Dictionary:
-				_emit_raw_json(json)
+		if not line.begins_with("data:"):
+			continue
+		var json_str_raw: String = line.substr(5).strip_edges()
+		if json_str_raw == "[DONE]":
+			continue
+		
+		# 1. 拼接上一次可能遗留的反斜杠
+		json_str_raw = _pending_backslash + json_str_raw
+		_pending_backslash = ""
+		
+		# 2. 如果结尾是孤立的反斜杠，先缓存，等下一行
+		var i := json_str_raw.length() - 1
+		var backslash_count := 0
+		
+		while i >= 0 and json_str_raw[i] == '\\':
+			i -= 1
+		
+		backslash_count = (json_str_raw.length() - 1 - i)
+		# 奇数个 '\' → 最后一个是孤立的
+		if backslash_count % 2 == 1:
+			_pending_backslash = "\\"
+			json_str_raw = json_str_raw.substr(0, json_str_raw.length() - 1)
+		
+		# 3. 尝试解析
+		var json: JSON = JSON.new()
+		var err: Error = json.parse(json_str_raw)
+		if err == OK:
+			_emit_raw_json(json.data)
+		else:
+			# 把原始字符串和错误详情一起抛出去，方便调试
+			var detail = "SSE JSON parse error: %s\nRaw string: %s" % [error_string(err), json_str_raw]
+			_emit_failure(detail)
 
 
 func _process_json_list_buffer() -> void:

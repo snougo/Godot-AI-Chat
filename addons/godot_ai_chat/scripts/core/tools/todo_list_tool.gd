@@ -24,7 +24,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"path": {
 				"type": "string",
-				"description": "Optional relative path to the TODO file (e.g., 'res://The workspace path you are working on/TODO.md')."
+				"description": "Optional relative path to the TODO file (e.g., 'res://The current workspace path/TODO.md')."
 			}
 		},
 		"required": ["action"]

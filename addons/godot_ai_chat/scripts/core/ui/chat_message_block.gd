@@ -26,6 +26,9 @@ var re_code_end: RegEx = RegEx.create_from_string("^```\\s*$")
 var typing_active: bool = false
 var current_typing_node: RichTextLabel = null
 
+# 工具调用展示节点
+var _tool_rtl: RichTextLabel = null
+
 
 func _ready() -> void:
 	if not content_container:
@@ -40,14 +43,17 @@ func set_content(role: String, content: String, model_name: String = "") -> void
 	# 静态加载时，直接一次性处理，并在最后强制换行确保闭合
 	_process_smart_chunk(content + "\n", true)
 
+
 func start_stream(role: String, model_name: String = "") -> void:
 	_set_title(role, model_name)
 	_clear_content()
 	visible = true
 
+
 func append_chunk(text: String) -> void:
 	if text.is_empty(): return
 	_process_smart_chunk(text, false)
+
 
 func finish_stream() -> void:
 	# 强制刷新缓冲区里剩余的内容
@@ -69,14 +75,61 @@ func finish_stream() -> void:
 		current_typing_node.visible_characters = -1
 		typing_active = false
 
+
 func set_error(text: String) -> void:
 	title = "❌ Error"
 	_clear_content()
 	var label = _create_text_block(text, true)
 	label.modulate = Color(1, 0.4, 0.4)
 
+
 func get_role() -> String:
 	return get_meta("role") if has_meta("role") else ""
+
+
+# 展示工具调用信息（兼容 OpenAI 嵌套/平铺两种结构）
+#func show_tool_call(_tool_call: Dictionary) -> void:
+	#if _tool_rtl:
+		#return # 已经展示过，不再重复创建
+	
+	# 创建 RichTextLabel
+	#_tool_rtl = RichTextLabel.new()
+	#_tool_rtl.bbcode_enabled = true
+	#_tool_rtl.fit_content = true
+	#_tool_rtl.selection_enabled = false
+	#_tool_rtl.theme_type_variation = "TooltipPanel"
+	#_tool_rtl.add_theme_constant_override("margin_left",   8)
+	#_tool_rtl.add_theme_constant_override("margin_top",    4)
+	#_tool_rtl.add_theme_constant_override("margin_right",  8)
+	#_tool_rtl.add_theme_constant_override("margin_bottom", 4)
+	
+	# 兼容两种字段结构
+	#var tool_name := ""
+	#var args_str := "" # 只保留原始字符串，不再强制解析
+	#var call_id := _tool_call.get("id", "no-id")
+	
+	#if _tool_call.has("function"): # OpenAI 嵌套
+		#tool_name = _tool_call.function.get("name", "unknown")
+		#args_str = _tool_call.function.get("arguments", "")
+	#else:
+		#tool_name = _tool_call.get("name", "unknown")
+		#args_str = str(_tool_call.get("arguments", ""))
+	
+	# 如果已经收到完整 JSON，就格式化；否则原样打印
+	#var args_pretty: String
+	
+	#if args_str.begins_with("{") and args_str.ends_with("}"):
+		#var parsed = JSON.parse_string(args_str)
+		#args_pretty = "[color=yellow]Parameters:[/color] %s" % JSON.stringify(parsed, "\t") if parsed != null else args_str
+	#else:
+		#args_pretty = "[color=yellow]Parameters:[/color] %s" % args_str
+	
+	#_tool_rtl.append_text("[b]🔧 Calling tool: %s[/b]\n" % tool_name)
+	#_tool_rtl.append_text(args_pretty + "\n")
+	#_tool_rtl.append_text("[color=gray]Call ID: %s[/color]" % call_id)
+	
+	#content_container.add_child(_tool_rtl)
+	#last_ui_node = null
 
 
 # --- 核心渲染逻辑 ---
@@ -90,14 +143,17 @@ func _set_title(role: String, model_name: String) -> void:
 		ChatMessage.ROLE_SYSTEM: title = "🔧 System"
 		_: title = role.capitalize()
 
+
 func _clear_content() -> void:
 	for c in content_container.get_children():
 		c.queue_free()
+	
 	current_state = ParseState.TEXT
 	pending_buffer = ""
 	last_ui_node = null
 	typing_active = false
 	current_typing_node = null
+	_tool_rtl = null
 
 
 # [核心逻辑] 智能分块处理
