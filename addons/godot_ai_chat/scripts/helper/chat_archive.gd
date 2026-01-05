@@ -54,6 +54,8 @@ static func save_to_markdown(messages: Array[ChatMessage], file_path: String) ->
 	
 	if file:
 		file.store_string(md_text)
+		file.close()
+		ToolBox.refresh_editor_filesystem()
 		return true
 	else:
 		push_error("Failed to export markdown: %s" % FileAccess.get_open_error())

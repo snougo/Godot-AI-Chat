@@ -35,7 +35,7 @@ func _ready() -> void:
 
 # --- 核心：初始化 Provider ---
 func _update_provider_config() -> bool:
-	var settings = ToolBox.get_plugin_settings()
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	api_key = settings.api_key
 	api_base_url = settings.api_base_url
 	temperature = settings.temperature
@@ -71,29 +71,31 @@ func get_model_list() -> void:
 	
 	emit_signal("get_model_list_request_started")
 	
+	# 特殊处理 ZhipuAI - 直接返回硬编码模型列表
 	if current_provider is ZhipuAIProvider:
-		get_tree().create_timer(0.5).timeout.connect(func():
-			emit_signal("get_model_list_request_succeeded", ["glm-4", "glm-4-air", "glm-4-flash", "glm-4-plus"])
-		)
+		# 使用正确的类型转换
+		var model_list: Array[String] = current_provider.parse_model_list_response(PackedByteArray())
+		emit_signal("get_model_list_request_succeeded", model_list)
 		return
 	
-	var url = current_provider.get_request_url(api_base_url, "", api_key, false)
+	# 其他提供商的正常处理逻辑
+	var url: String = current_provider.get_request_url(api_base_url, "", api_key, false)
 	
-	# OpenAI 兼容接口特例修正
+	# OpenAI 兼容接口特例修正 - 获取模型列表需要特殊URL
 	if current_provider is BaseOpenAIProvider:
 		url = api_base_url.path_join("v1/models")
 	
-	var headers = current_provider.get_request_headers(api_key, false)
+	var headers: PackedStringArray = current_provider.get_request_headers(api_key, false)
 	
 	http_request_node.request_completed.connect(_on_model_list_completed, CONNECT_ONE_SHOT)
-	var err = http_request_node.request(url, headers, HTTPClient.METHOD_GET)
+	var err: Error = http_request_node.request(url, headers, HTTPClient.METHOD_GET)
 	
 	if err != OK:
 		emit_signal("get_model_list_request_failed", "Request failed: %s" % error_string(err))
 
 
 # 发起聊天流
-func start_chat_stream(messages: Array[ChatMessage]) -> void:
+func start_chat_stream(_messages: Array[ChatMessage]) -> void:
 	if current_model_name.is_empty():
 		emit_signal("chat_request_failed", "No model selected.")
 		return
@@ -105,7 +107,7 @@ func start_chat_stream(messages: Array[ChatMessage]) -> void:
 	var is_gemini: bool = (current_provider is GeminiProvider)
 	var tools: Array = ToolRegistry.get_all_tool_definitions(is_gemini)
 	
-	var body: Dictionary = current_provider.build_request_body(current_model_name, messages, temperature, true, tools)
+	var body: Dictionary = current_provider.build_request_body(current_model_name, _messages, temperature, true, tools)
 	var url: String = current_provider.get_request_url(api_base_url, current_model_name, api_key, true)
 	var headers: PackedStringArray = current_provider.get_request_headers(api_key, true)
 	
@@ -129,13 +131,13 @@ func cancel_stream() -> void:
 
 # --- 回调处理 ---
 
-func _on_model_list_completed(result, response_code, _headers, body):
-	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		emit_signal("get_model_list_request_failed", "HTTP Error %d" % response_code)
+func _on_model_list_completed(_result: HTTPRequest.Result, _response_code: int, _headers, _body: PackedByteArray):
+	if _result != HTTPRequest.RESULT_SUCCESS or _response_code != 200:
+		emit_signal("get_model_list_request_failed", "HTTP Error %d" % _response_code)
 		return
 	
 	# 使用 Provider 进行多态解析
-	var list: Array[String] = current_provider.parse_model_list_response(body)
+	var list: Array[String] = current_provider.parse_model_list_response(_body)
 	
 	if not list.is_empty():
 		list.sort() # 顺手排个序

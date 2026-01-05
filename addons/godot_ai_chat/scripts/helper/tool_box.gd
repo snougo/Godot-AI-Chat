@@ -89,12 +89,21 @@ static func print_structured_context(title: String, messages: Array, context_inf
 	print("--- 报告结束 ---\n")
 
 
+# 更新指定文件的编辑器文件系统状态
 static func update_editor_filesystem(_path) -> void:
 	if Engine.is_editor_hint():
 		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
 		if editor_filesystem:
 			editor_filesystem.update_file(_path)
 			print(editor_filesystem.get_file_type(_path))
+
+
+# 触发编辑器文件系统的完全扫描
+static func refresh_editor_filesystem() -> void:
+	if Engine.is_editor_hint():
+		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+		if editor_filesystem:
+			editor_filesystem.scan()
 
 
 # 用于从AI响应中移除<think>...</think>标签块的通用函数

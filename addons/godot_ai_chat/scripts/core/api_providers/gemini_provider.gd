@@ -90,10 +90,10 @@ func build_request_body(model_name: String, messages: Array[ChatMessage], temper
 	}
 	
 	if not tool_definitions.is_empty():
-		body["tools"] = [{"function_declarations": tool_definitions}]
+		body["tools"] = [{"functionDeclarations": tool_definitions}]
 	
 	if not system_instruction.is_empty():
-		body["system_instruction"] = system_instruction
+		body["systemInstruction"] = system_instruction
 	
 	return body
 
