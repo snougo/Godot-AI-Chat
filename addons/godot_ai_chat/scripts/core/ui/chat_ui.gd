@@ -167,7 +167,6 @@ func update_model_list(_model_names: Array[String]) -> void:
 	_apply_model_filter()
 
 
-
 # 当尝试获取从API服务器上获取模型列表请求失败时调用
 func get_model_list_request_failed(_error_message: String) -> void:
 	if not is_first_init:
