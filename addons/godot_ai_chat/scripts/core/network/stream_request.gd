@@ -159,64 +159,21 @@ func _process_sse_buffer() -> void:
 				continue
 			
 			if not json_raw.is_empty():
-				# [核心修复] 直接解析标准 JSON，不再使用脆弱的手动拼接/切分逻辑
-				var json := JSON.new()
-				var err: Error = json.parse(json_raw)
-				if err == OK:
-					if json.data is Dictionary:
-						_emit_raw_json(json.data)
+				# [修复] 优先使用 _try_parse_one_json 提取第一个闭合的 JSON 对象
+				# 这可以有效忽略 GLM-4.7 等模型输出的尾部垃圾 (如 <tool_call>)
+				var result = _try_parse_one_json(json_raw)
+				if result.success:
+					if result.data is Dictionary:
+						_emit_raw_json(result.data)
 				else:
-					# 仅在非标准或数据损坏时打印警告，避免红字刷屏
-					push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
-
-
-#func _process_sse_buffer() -> void:
-	#while true:
-		#var newline_pos = _incoming_text_buffer.find("\n")
-		#if newline_pos == -1:
-			#break
-		#
-		#var line = _incoming_text_buffer.substr(0, newline_pos).strip_edges()
-		#_incoming_text_buffer = _incoming_text_buffer.substr(newline_pos + 1)
-		#
-		#if line.begins_with("data:"):
-			#var content = line.substr(5)
-			#if content.begins_with(" "):
-				#content = content.substr(1)
-			#
-			#content = content.rstrip(" \t\r\n")
-			#
-			#if content == "[DONE]":
-				#continue
-			#if content.is_empty():
-				#continue
-			#
-			#_sse_buffer += content
-			#
-			## 循环处理缓冲区
-			#while not _sse_buffer.is_empty():
-				#var first_brace = _sse_buffer.find("{")
-				#if first_brace == -1:
-					## [调试] 丢弃垃圾数据
-					## print("[StreamRequest] Discarding junk (no brace): ", _sse_buffer)
-					#_sse_buffer = ""
-					#break
-				#elif first_brace > 0:
-					## [调试] 丢弃头部垃圾
-					## print("[StreamRequest] Discarding pre-brace junk: ", _sse_buffer.substr(0, first_brace))
-					#_sse_buffer = _sse_buffer.substr(first_brace)
-				#
-				#var result = _try_parse_one_json(_sse_buffer)
-				#if result.success:
-					#if result.data is Dictionary:
-						#_emit_raw_json(result.data)
-					#_sse_buffer = _sse_buffer.substr(result.length)
-				#else:
-					## 解析未成功，可能是数据未接收完，也可能是数据有问题
-					## 只有当 buffer 长度非常大时才打印警告，防止正常的分包等待刷屏
-					#if _sse_buffer.length() > 5000: 
-						#print("[StreamRequest] Buffer growing too large (%d chars) without valid JSON." % _sse_buffer.length())
-					#break
+					# 如果提取失败，尝试直接解析作为兜底
+					var json := JSON.new()
+					var err: Error = json.parse(json_raw)
+					if err == OK:
+						if json.data is Dictionary:
+							_emit_raw_json(json.data)
+					else:
+						push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
 
 
 func _process_json_list_buffer() -> void:
@@ -275,54 +232,42 @@ func _emit_failure(msg: String) -> void:
 # --- 辅助函数 ---
 
 # 尝试从字符串开头解析一个完整的 JSON 对象
-# 返回字典：{ "success": bool, "data": Dictionary, "length": int }
-#func _try_parse_one_json(s: String) -> Dictionary:
-	#if s.is_empty() or s[0] != "{":
-		#return { "success": false, "length": 0 }
-	#
-	#var balance = 0
-	#var in_string = false
-	#var escaped = false
-	#var length = 0
-	#
-	#for i in range(s.length()):
-		#var char = s[i]
-		#length += 1
-		#
-		#if escaped:
-			#escaped = false
-			#continue
-		#if char == "\\":
-			#escaped = true
-			#continue
-		#if char == '"':
-			#in_string = not in_string
-			#continue
-		#
-		#if not in_string:
-			#if char == '{':
-				#balance += 1
-			#elif char == '}':
-				#balance -= 1
-				#
-				#if balance == 0:
-					## 找到闭合点，尝试解析
-					#var candidate = s.substr(0, length)
-					#var json = JSON.new()
-					#var err = json.parse(candidate)
-					#
-					#if err == OK:
-						#return { "success": true, "data": json.data, "length": length }
-					#else:
-						## [调试关键点] 解析失败时打印详细信息
-						#print("--------------------------------------------------")
-						#print("[StreamRequest] JSON Parse Error: ", json.get_error_message(), " at line ", json.get_error_line())
-						#print("[StreamRequest] Candidate String (Length: %d):" % length)
-						#print(">>>", candidate, "<<<")
-						#print("--------------------------------------------------")
-						#return { "success": false, "length": 0 }
-	#
-	#return { "success": false, "length": 0 }
+func _try_parse_one_json(s: String) -> Dictionary:
+	if s.is_empty() or s[0] != "{":
+		return { "success": false, "length": 0 }
+	
+	var balance = 0
+	var in_string = false
+	var escaped = false
+	var length = 0
+	
+	for i in range(s.length()):
+		var char = s[i]
+		length += 1
+		
+		if escaped:
+			escaped = false
+			continue
+		if char == "\\":
+			escaped = true
+			continue
+		if char == '"':
+			in_string = not in_string
+			continue
+		
+		if not in_string:
+			if char == '{':
+				balance += 1
+			elif char == '}':
+				balance -= 1
+				if balance == 0:
+					var candidate = s.substr(0, length)
+					var json = JSON.new()
+					if json.parse(candidate) == OK:
+						return { "success": true, "data": json.data, "length": length }
+					return { "success": false, "length": 0 }
+	
+	return { "success": false, "length": 0 }
 
 
 func _is_buffer_safe_for_utf8(buffer: PackedByteArray) -> bool:

@@ -29,12 +29,33 @@ func process_response(msg: ChatMessage) -> void:
 	# 强制打印，看看最终收到了什么
 	print("[ChatBackend] Processing response. Role: %s, Content len: %d, Tool calls: %d" % [msg.role, msg.content.length(), msg.tool_calls.size()])
 	
+	# [修复] 数据清洗：移除工具调用中的 XML 标签和非法字符
+	if not msg.tool_calls.is_empty():
+		for tool_call in msg.tool_calls:
+			if tool_call.has("function"):
+				var f = tool_call["function"]
+				# 1. 清洗函数名
+				if f.has("name") and f["name"] is String:
+					f["name"] = f["name"].replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
+				
+				# 2. 尝试修复参数 JSON (如果是坏的 JSON)
+				if f.has("arguments") and f["arguments"] is String:
+					var args_str: String = f["arguments"]
+					if JSON.parse_string(args_str) == null:
+						# 如果解析失败，尝试截取到最后一个 }
+						var last_brace = args_str.rfind("}")
+						if last_brace != -1:
+							var fixed_args = args_str.substr(0, last_brace + 1)
+							if JSON.parse_string(fixed_args) != null:
+								f["arguments"] = fixed_args
+	
 	# 检查是否有原生的工具调用
 	if not msg.tool_calls.is_empty():
 		_start_tool_workflow(msg)
 	else:
 		var history: Array[ChatMessage] = [msg]
 		emit_signal("assistant_message_ready", msg, history)
+
 
 
 func _start_tool_workflow(trigger_msg: ChatMessage) -> void:
