@@ -24,7 +24,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"path": {
 				"type": "string",
-				"description": "Optional relative path to the TODO file (e.g., 'res://The current workspace path/TODO.md')."
+				"description": "Optional relative path to the `TODO.md` file (e.g., 'res://The current workspace path/TODO.md')."
 			}
 		},
 		"required": ["action"]
@@ -38,6 +38,11 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 	
 	if target_path.is_empty():
 		target_path = DEFAULT_FILE_PATH
+	
+	# [新增] 安全检查：仅允许 .md 或 .txt 文件
+	var ext = target_path.get_extension().to_lower()
+	if ext != "md":
+		return {"success": false, "data": "Security Error: 'todo_list' tool only supports `.md` files. Invalid path: " + target_path}
 	
 	# 检查文件是否存在
 	if not FileAccess.file_exists(target_path):

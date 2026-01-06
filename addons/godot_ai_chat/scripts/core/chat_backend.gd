@@ -41,14 +41,14 @@ func _start_tool_workflow(trigger_msg: ChatMessage) -> void:
 	is_in_workflow = true
 	emit_signal("tool_workflow_started")
 	
-	# 获取当前完整的历史 (Array[ChatMessage])
-	var full_history = current_chat_window.chat_history.messages.duplicate()
-	# 必须把触发本次 workflow 的那条 assistant 消息也加进去
-	# (注意：UI 上可能已经显示了这条流式消息，但历史记录里可能还没 commit)
-	# 如果 CurrentChatWindow 逻辑是流式结束后立即 commit，那这里就不用加。
-	# 我们假设 CurrentChatWindow 在流式结束时已经把消息加入了历史。
+	# [修复] 使用截断后的历史记录，而不是完整历史
+	var settings = ToolBox.get_plugin_settings()
+	var truncated_history = current_chat_window.chat_history.get_truncated_messages(
+		settings.max_chat_turns,
+		settings.system_prompt
+	)
 	
-	current_workflow = ToolWorkflowManager.new(network_manager, tool_executor, full_history)
+	current_workflow = ToolWorkflowManager.new(network_manager, tool_executor, truncated_history)
 	current_workflow.completed.connect(_on_workflow_completed)
 	current_workflow.failed.connect(_on_workflow_failed)
 	current_workflow.tool_msg_generated.connect(func(m): emit_signal("tool_message_generated", m))
