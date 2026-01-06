@@ -24,33 +24,6 @@ func get_request_url(_base_url: String, _model_name: String, _api_key: String, _
 	return _base_url.path_join("v1/chat/completions")
 
 
-#func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
-	#var api_messages: Array[Dictionary] = []
-	#for msg in _messages:
-		#api_messages.append(msg.to_api_dict())
-	#
-	#var body: Dictionary = {
-		#"model": _model_name,
-		#"messages": api_messages,
-		#"temperature": _temperature,
-		#"stream": _stream
-	#}
-	#
-	#if not _tool_definitions.is_empty():
-		#var tools_list: Array = []
-		#for tool_def in _tool_definitions:
-			#tools_list.append({
-				#"type": "function",
-				#"function": tool_def
-			#})
-		#body["tools"] = tools_list
-		#body["tool_choice"] = "auto"
-	#
-	#if _stream:
-		#body["stream_options"] = {"include_usage": true}
-	#
-	#return body
-
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
 	var api_messages: Array[Dictionary] = []
 	
@@ -173,15 +146,14 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 			var target_call = _target_msg.tool_calls[index]
 			
 			# 增量合并
-			if tc.has("id"):
+			if tc.has("id") and tc.id != null:
 				target_call["id"] = tc.id
-			if tc.has("type"):
-				target_call["type"] = tc.type
+			
 			if tc.has("function"):
 				var f = tc.function
-				if f.has("name"):
+				if f.has("name") and f.name != null:
 					target_call.function.name += f.name
-				if f.has("arguments"):
-					target_call.function.arguments += f.arguments
+				if f.has("arguments") and f.arguments != null:
+					target_call.function.arguments += f.arguments # 确保此处累加的是有效的字符串
 	
 	return ui_update

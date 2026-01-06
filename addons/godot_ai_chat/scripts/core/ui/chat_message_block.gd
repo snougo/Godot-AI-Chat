@@ -75,9 +75,10 @@ func finish_stream() -> void:
 		pending_buffer = ""
 	
 	# 如果打字机还在跑，让它瞬间跑完
-	if typing_active and is_instance_valid(current_typing_node):
-		current_typing_node.visible_characters = -1
-		typing_active = false
+	_finish_typing()
+	#if typing_active and is_instance_valid(current_typing_node):
+		#current_typing_node.visible_characters = -1
+		#typing_active = false
 
 
 func set_error(text: String) -> void:
@@ -140,7 +141,6 @@ func show_tool_call(_tool_call: Dictionary) -> void:
 	args_label.name = "ArgsLabel"
 	args_label.bbcode_enabled = true
 	args_label.fit_content = true
-	#args_label.add_theme_font_size_override("normal_font_size", 20)
 	vbox.add_child(args_label)
 	
 	_update_args_display(args_label, _tool_call)
@@ -150,8 +150,6 @@ func show_tool_call(_tool_call: Dictionary) -> void:
 	# [重要] 重置 last_ui_node，确保工具调用后的普通文本会创建新的 RichTextLabel
 	last_ui_node = null
 
-
-# 在 chat_message_block.gd 中添加此方法，替换之前报错的部分
 
 func display_image(data: PackedByteArray, mime: String) -> void:
 	if data.is_empty(): return
@@ -218,7 +216,6 @@ func _set_title(_role: String, _model_name: String) -> void:
 			if is_folded(): expand()
 
 
-
 # 更新流式工具调用参数
 func _update_tool_call_ui(call_id: String, tool_call: Dictionary) -> void:
 	var panel = content_container.get_node_or_null("Tool_" + call_id)
@@ -230,7 +227,7 @@ func _update_tool_call_ui(call_id: String, tool_call: Dictionary) -> void:
 
 # 解析并格式化参数显示
 func _update_args_display(label: RichTextLabel, tool_call: Dictionary) -> void:
-	var args_str = ""
+	var args_str := ""
 	if tool_call.has("function"):
 		args_str = tool_call.function.get("arguments", "")
 	else:
@@ -238,15 +235,21 @@ func _update_args_display(label: RichTextLabel, tool_call: Dictionary) -> void:
 	
 	label.clear()
 	label.push_color(Color(0.7, 0.7, 0.7))
+	
 	if args_str.strip_edges().begins_with("{"):
-		# 尝试美化 JSON，如果失败则原样显示
-		var parsed = JSON.parse_string(args_str)
-		if parsed != null:
-			label.add_text(JSON.stringify(parsed, "  "))
+		# [核心修复] 使用 JSON 实例解析，避免 parse_string 在流式传输不完整时报红字
+		var json := JSON.new()
+		var err: Error = json.parse(args_str)
+		
+		if err == OK:
+			# 只有当 JSON 完整闭合时，才进行格式化美化
+			label.add_text(JSON.stringify(json.data, "  "))
 		else:
+			# 在流式传输过程中（JSON 未闭合），直接显示原始字符串，静默失败
 			label.add_text(args_str)
 	else:
 		label.add_text(args_str)
+	
 	label.pop()
 
 
@@ -344,6 +347,9 @@ func _parse_fence_line(line: String, instant: bool) -> void:
 		# 尝试匹配代码块开始
 		var match_start = re_code_start.search(line)
 		if match_start:
+			# [修复] 状态切换前确保显示完整
+			_finish_typing()
+			
 			# 是代码块开始 -> 切换状态，创建编辑器，消耗该行
 			current_state = ParseState.CODE
 			var lang = match_start.get_string(1)
@@ -375,6 +381,9 @@ func _append_content(text: String, instant: bool) -> void:
 # --- 具体的 UI 操作 ---
 
 func _create_code_block(lang: String) -> void:
+	# [修复] 创建新块前，强制结束上一个打字机
+	_finish_typing()
+	
 	var code_edit = CodeEdit.new()
 	code_edit.editable = false
 	code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
@@ -415,7 +424,12 @@ func _append_to_code(text: String) -> void:
 
 func _append_to_text(text: String, instant: bool) -> void:
 	if not last_ui_node is RichTextLabel:
+		# [修复] 切换节点前，确保上一个节点显示完整
+		_finish_typing()
 		last_ui_node = _create_text_block("", instant)
+	
+	# [修复] 转义 BBCode 左括号，防止 "arr[0]" 被误解析导致内容消失
+	var safe_text = text.replace("[", "[lb]")
 	
 	if instant:
 		last_ui_node.text += text
@@ -452,6 +466,14 @@ func _trigger_typewriter(node: RichTextLabel) -> void:
 	if not typing_active:
 		typing_active = true
 		_typewriter_loop()
+
+
+# [修复] 强制结束打字机效果
+func _finish_typing() -> void:
+	if typing_active and is_instance_valid(current_typing_node):
+		current_typing_node.visible_characters = -1
+		typing_active = false
+
 
 func _typewriter_loop() -> void:
 	# 1. 安全检查

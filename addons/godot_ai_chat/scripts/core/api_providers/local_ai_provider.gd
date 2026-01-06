@@ -15,5 +15,10 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 	
 	return body
 
+
+func get_stream_parser_type() -> BaseLLMProvider.StreamParserType:
+	return BaseLLMProvider.StreamParserType.LOCAL_SSE
+
+
 # 如果本地服务获取模型列表的路径不同，也可以在这里重写
 # func get_request_url(...)

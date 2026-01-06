@@ -5,7 +5,8 @@ class_name BaseLLMProvider
 # 定义流式协议类型
 enum StreamParserType {
 	SSE,       # Server-Sent Events (OpenAI, Zhipu, etc.)
-	JSON_LIST  # JSON Array Stream (Gemini)
+	JSON_LIST,  # JSON Array Stream (Gemini)
+	LOCAL_SSE  # 针对本地服务的鲁棒性解析
 }
 
 
