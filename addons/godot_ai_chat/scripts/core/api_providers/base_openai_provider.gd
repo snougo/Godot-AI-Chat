@@ -131,7 +131,8 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 		ui_update["content_delta"] += text
 	
 	# 4. 提取工具 (Tool Calls - 流式拼装)
-	if delta.has("tool_calls"):
+	# [修复] 增加对 delta.tool_calls 是否为 null 的检查
+	if delta.has("tool_calls") and delta.tool_calls is Array:
 		for tc in delta.tool_calls:
 			var index = int(tc.get("index", 0))
 			
