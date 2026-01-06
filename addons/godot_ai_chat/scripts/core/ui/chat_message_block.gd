@@ -191,14 +191,32 @@ func display_image(data: PackedByteArray, mime: String) -> void:
 
 # --- 核心渲染逻辑 ---
 
-func _set_title(role: String, model_name: String) -> void:
-	set_meta("role", role)
-	match role:
-		ChatMessage.ROLE_USER: title = "🧑‍💻 You"
-		ChatMessage.ROLE_ASSISTANT: title = "🤖 Assistant" + ("/" + model_name if not model_name.is_empty() else "")
-		ChatMessage.ROLE_TOOL: title = "⚙️ Tool Output"
-		ChatMessage.ROLE_SYSTEM: title = "🔧 System"
-		_: title = role.capitalize()
+func _set_title(_role: String, _model_name: String) -> void:
+	set_meta("role", _role)
+	match _role:
+		ChatMessage.ROLE_USER: 
+			title = "🧑‍💻 You"
+			# 确保其他角色默认展开，防止复用时状态残留
+			if is_folded(): expand() 
+		
+		ChatMessage.ROLE_ASSISTANT: 
+			title = "🤖 Assistant" + ("/" + _model_name if not _model_name.is_empty() else "")
+			if is_folded(): expand()
+		
+		ChatMessage.ROLE_TOOL: 
+			title = "⚙️ Tool Output"
+			# [优化] 默认折叠工具输出，节省 UI 空间
+			if not is_folded(): fold()
+		
+		ChatMessage.ROLE_SYSTEM: 
+			title = "🔧 System"
+			# [优化] 系统消息通常也可以默认折叠
+			if not is_folded(): fold()
+		
+		_: 
+			title = _role.capitalize()
+			if is_folded(): expand()
+
 
 
 # 更新流式工具调用参数
