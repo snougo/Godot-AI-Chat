@@ -43,6 +43,8 @@ func _update_provider_config() -> bool:
 	match settings.api_provider:
 		"OpenAI-Compatible":
 			current_provider = BaseOpenAIProvider.new()
+		"Local-AI-Service":
+			current_provider = LocalAIProvider.new()
 		"ZhipuAI":
 			current_provider = ZhipuAIProvider.new()
 		"Google Gemini":
