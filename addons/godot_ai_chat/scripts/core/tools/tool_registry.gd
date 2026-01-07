@@ -18,7 +18,8 @@ static func load_default_tools() -> void:
 		"get_image_tool.gd",
 		"write_notebook_tool.gd",
 		#"create_script_tool.gd", #暂时禁用脚本创建工具
-		"todo_list_tool.gd"
+		"todo_list_tool.gd",
+		"tavily_web_search_tool.gd"
 	]
 	
 	print("[ToolRegistry] Loading tools...")

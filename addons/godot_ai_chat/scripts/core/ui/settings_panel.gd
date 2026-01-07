@@ -20,6 +20,7 @@ var settings_resource: PluginSettings
 @onready var api_provider_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer/APIProviderLabel
 @onready var base_url_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer2/BaseUrlLabel
 @onready var api_key_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer3/APIKeyLabel
+@onready var tavily_api_key_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer7/TavilyAPIKeyLabel
 @onready var max_chat_turns_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer4/MaxChatTurnsLabel
 @onready var timeout_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer5/TimeoutLabel
 @onready var temperature_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureLabel
@@ -29,6 +30,7 @@ var settings_resource: PluginSettings
 @onready var api_provider_options: OptionButton = $Panel/MarginContainer/VBoxContainer/HBoxContainer/APIProviderOptions
 @onready var base_url_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer2/BaseUrlInput
 @onready var api_key_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer3/APIKeyInput
+@onready var tavily_api_key_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer7/TavilyAPIKeyInput
 @onready var max_chat_turns_value: SpinBox = $Panel/MarginContainer/VBoxContainer/HBoxContainer4/MaxChatTurnsValue
 @onready var timeout_value: SpinBox = $Panel/MarginContainer/VBoxContainer/HBoxContainer5/TimeoutValue
 @onready var temperature_value: HSlider = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureValue
@@ -45,6 +47,8 @@ func _ready() -> void:
 	base_url_input.placeholder_text = "LM Studio: http://127.0.0.1:1234"
 	api_key_label.text = "API Key(optional):"
 	api_key_label.tooltip_text = "When using LM Studio or Ollama, You don't need to provide an API Key."
+	tavily_api_key_label.text = "Tavily API Key(optional):"
+	tavily_api_key_label.tooltip_text = "Web Search need API Key to work."
 	max_chat_turns_label.text = "Max Chat Turns:"
 	timeout_label.text = "Timeout (sec):"
 	temperature_label.text = "Temperature:"
@@ -109,10 +113,11 @@ func _populate_ui_from_resource() -> void:
 	# 填充其他输入控件
 	base_url_input.text = settings_resource.api_base_url
 	api_key_input.text = settings_resource.api_key
+	tavily_api_key_input.text = settings_resource.tavily_api_key
 	max_chat_turns_value.value = settings_resource.max_chat_turns
 	timeout_value.value = settings_resource.network_timeout
 	temperature_value.value = settings_resource.temperature
-	_on_temperature_value_changed(settings_resource.temperature) # 更新温度标签显示
+	self._on_temperature_value_changed(settings_resource.temperature) # 更新温度标签显示
 	system_prompt_input.text = settings_resource.system_prompt
 
 
@@ -135,6 +140,7 @@ func _on_save_button_pressed():
 	settings_resource.api_provider = api_provider_options.get_item_text(api_provider_options.selected)
 	settings_resource.api_base_url = base_url_input.text
 	settings_resource.api_key = api_key_input.text
+	settings_resource.tavily_api_key = tavily_api_key_input.text
 	settings_resource.max_chat_turns = int(max_chat_turns_value.value)
 	settings_resource.network_timeout = int(timeout_value.value)
 	settings_resource.temperature = temperature_value.value

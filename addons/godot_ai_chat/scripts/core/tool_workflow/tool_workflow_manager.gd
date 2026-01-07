@@ -66,7 +66,10 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 			continue
 		
 		# 直接调用实例以获取完整字典 (包含 attachments)
-		var result_dict: Dictionary = tool_instance.execute(args, tool_executor.context_provider)
+		#var result_dict: Dictionary = tool_instance.execute(args, tool_executor.context_provider)
+		# [修改点]：添加 await 关键字
+		# 这样如果工具是异步的(返回协程)，会等待完成；如果是同步的(返回字典)，会立即继续。
+		var result_dict: Dictionary = await tool_instance.execute(args, tool_executor.context_provider)
 		var result_str = result_dict.get("data", "")
 		
 		# 3. 创建 Tool Message (默认为纯文本)

@@ -56,13 +56,15 @@ layout_mode = 2
 size_flags_horizontal = 3
 text_overrun_behavior = 1
 selected = 0
-item_count = 3
+item_count = 4
 popup/item_0/text = "OpenAI-Compatible"
 popup/item_0/id = 0
-popup/item_1/text = "Google Gemini"
+popup/item_1/text = "Local-AI-Service"
 popup/item_1/id = 1
 popup/item_2/text = "ZhipuAI"
 popup/item_2/id = 2
+popup/item_3/text = "Google Gemini"
+popup/item_3/id = 3
 
 [node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=242663543]
 layout_mode = 2
@@ -80,7 +82,6 @@ text_overrun_behavior = 1
 [node name="BaseUrlInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2" unique_id=843428671]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "https://api.moonshot.cn"
 placeholder_text = "LM Studio: http://127.0.0.1:1234"
 context_menu_enabled = false
 clear_button_enabled = true
@@ -101,7 +102,26 @@ text_overrun_behavior = 1
 [node name="APIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3" unique_id=777802144]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "sk-up8K1of5mltgYCkT6MGPgLdyzX1lmiJc1d8MT4Qw7PkHMnhq"
+context_menu_enabled = false
+clear_button_enabled = true
+secret = true
+
+[node name="HBoxContainer7" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=852785332]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TavilyAPIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer7" unique_id=1976447385]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Web Search need API Key to work."
+mouse_filter = 1
+text = "Tavily API Key(optional):"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="TavilyAPIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer7" unique_id=2132418160]
+layout_mode = 2
+size_flags_horizontal = 3
 context_menu_enabled = false
 clear_button_enabled = true
 secret = true
@@ -162,12 +182,12 @@ size_flags_horizontal = 3
 size_flags_stretch_ratio = 0.93
 max_value = 1.0
 step = 0.09999999999126884
-value = 0.6999999999388816
+value = 0.999999999650544
 
 [node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=570670142]
 custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
-text = "0.70"
+text = "1.00"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -180,61 +200,6 @@ text_overrun_behavior = 1
 [node name="SystemPromptInput" type="TextEdit" parent="Panel/MarginContainer/VBoxContainer" unique_id=1524186122]
 layout_mode = 2
 size_flags_vertical = 3
-text = "## 角色设定
-
-- 你是一名与 `Godot` 引擎深度集成的高级AI助手。
-- 你在内部思考时遵循：**「分析 -> 思考 -> 初步结论 -> 反思 -> 回应」** 的流程，但在对用户的可见输出中，**只呈现「回应」部分**。
-- 除非用户有特殊要求，**所有非代码内容一律使用简体中文**回复。
-
----
-
-## 通用行为准则
-
-- **先了解再回应**: 确保你在执行任何动作或回应之前已经**查看过项目中的相关上下文**，否则应该先使用`get_context`工具查看相关上下文后再进行下一步动作或回应。
-- 若用户未特别要求，默认回答风格为：**简洁、信息密度高**，避免废话和无意义客套。
-- 不使用表情或 emoji，除非用户明确要求。
-
----
-
-## 工作区
-
-**工作区** 限定了你当前可操作的 **「项目上下文范围」** ，当你需要获取相关上下文信息时，**只能**在该区域内进行。
-
-### 工作区指令
-
-当用户通过指令明确要求：`进入/切换到 [工作区路径]`，你应立即调用`get_context`工具获取该路径下的 **文件夹结构**，以建立当前可操作范围。
-
----
-
-## 工具补充说明
-
-### `search_documents`工具
-
-#### 文档路径
-
-如果用户指定了具体的文档路径，则以用户指定的路径为准，否则直接使用默认文档路径`res://godot_doc`即可。
-
-#### 何时使用
-
-当你生成**具体的功能代码**后（示例代码除外），你应当使用`search_documents`工具进行文档搜索，以便对生成的代码进行语法检查。
-
-#### 使用规范
-
-- 搜索参数中使用**不超过3个单独的英文关键词**作为文件名关键词，避免使用长句或中英文混杂，以减少无关结果。
-- 搜索后从返回的文档列表中选择**高度相关**的文档进行内容查看，若多个文档都可能相关，可优先选择命名更具体或版本更接近当前项目环境的文档。
-
-### `write_notebook`工具
-
-#### 笔记本路径
-
-你拥有一个名为 **`notebook.md`** 的外部笔记本文件，位于`res://addons/godot_ai_chat/notebook.md`
-
-#### 使用场景
-
-- 为一个中大型需求分解任务、规划实现步骤；
-- 需要跨多轮对话保持一致性的设定、约定、TODO 列表等。
-
----"
 wrap_mode = 1
 scroll_smooth = true
 

@@ -12,6 +12,8 @@ class_name PluginSettings
 @export var api_base_url: String = ""
 # API密钥（可选，取决于服务提供商）。
 @export var api_key: String = ""
+# 搜索引擎Tavily的密匙（可选，如果不需要使用搜索引擎工具）
+@export var tavily_api_key: String = ""
 # 在每次请求中发送给AI的上下文消息的需要被保留的最大对话轮数。
 @export_range(1, 50, 1) var max_chat_turns: int = 8
 # 网络流式输出请求的超时时间（秒）。

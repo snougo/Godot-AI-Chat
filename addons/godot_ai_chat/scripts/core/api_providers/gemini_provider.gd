@@ -17,8 +17,8 @@ func get_request_url(_base_url: String, _model_name: String, _api_key: String, _
 		return _base_url.path_join("v1beta/models")
 	
 	var action: String = "streamGenerateContent" if _stream else "generateContent"
-	var clean_model_name = _model_name.trim_prefix("models/")
-	var url = _base_url.path_join("v1beta/models").path_join(clean_model_name)
+	var clean_model_name: String = _model_name.trim_prefix("models/")
+	var url: String = _base_url.path_join("v1beta/models").path_join(clean_model_name)
 	return "%s:%s" % [url, action]
 
 
@@ -38,16 +38,16 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 		if msg.role == ChatMessage.ROLE_ASSISTANT:
 			role = "model"
 			
-			# [架构修复] 移除互斥逻辑，同时支持文本和工具
+			# 移除互斥逻辑，同时支持文本和工具
 			if not msg.content.is_empty():
 				parts.append({"text": msg.content})
 			
 			if not msg.tool_calls.is_empty():
 				for call in msg.tool_calls:
 					var func_def = call.get("function", {})
-					var args = JSON.parse_string(func_def.get("arguments", "{}"))
+					var args := JSON.parse_string(func_def.get("arguments", "{}"))
 					
-					var part = {
+					var part := {
 						"functionCall": {
 							"name": func_def.get("name", ""),
 							"args": args if args else {}
@@ -125,7 +125,7 @@ func parse_non_stream_response(_body_bytes: PackedByteArray) -> Dictionary:
 	
 	if json is Dictionary:
 		# 复用流式解析逻辑
-		var dummy_msg = ChatMessage.new()
+		var dummy_msg := ChatMessage.new()
 		process_stream_chunk(dummy_msg, json)
 		return {
 			"content": dummy_msg.content,
@@ -138,7 +138,7 @@ func parse_non_stream_response(_body_bytes: PackedByteArray) -> Dictionary:
 
 # [核心重构] 实现 Gemini 流式完整对象合并
 func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> Dictionary:
-	var ui_update = { "content_delta": "" }
+	var ui_update := { "content_delta": "" }
 	
 	# 1. 提取 Usage
 	if _chunk_data.has("usageMetadata"):
@@ -164,7 +164,7 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 		# 3. 工具 (一次性完整)
 		if part.has("functionCall"):
 			var fc = part.functionCall
-			var tool_call = {
+			var tool_call := {
 				"id": "call_" + str(Time.get_ticks_msec()), # 伪造 ID
 				"type": "function",
 				"function": {
