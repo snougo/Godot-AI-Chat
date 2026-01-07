@@ -5,8 +5,6 @@ extends EditorPlugin
 const CHAT_HUB_SCENE_PATH = "res://addons/godot_ai_chat/ui/chat_hub.tscn"
 # 对话历史存档文件夹
 const ARCHIVE_DIR = "res://addons/godot_ai_chat/chat_archives/"
-# 笔记本文件路径
-const NOTEBOOK_PATH = "res://addons/godot_ai_chat/notebook.md"
 
 # 插件主实例
 var chat_hub_instance: Control = null
@@ -67,14 +65,6 @@ func _initialize_plugin_file_environment() -> void:
 		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
 		need_scan = true
 	
-	# 确保笔记本文件存在
-	if not FileAccess.file_exists(NOTEBOOK_PATH):
-		var notebook_file: FileAccess = FileAccess.open(NOTEBOOK_PATH, FileAccess.WRITE)
-		if notebook_file:
-			notebook_file.store_string("# AI Notebook\n\nThis file is used by the AI to store notes and plans.\n")
-			notebook_file.close()
-		need_scan = true
-
 	# 确保插件配置文件存在
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
 	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
