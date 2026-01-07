@@ -31,7 +31,8 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 		var msg_dict: Dictionary = msg.to_api_dict()
 		
 		# --- 多模态图片支持 ---
-		if not msg.image_data.is_empty():
+		# [修复] 仅非 Tool 类型的消息支持多模态 (OpenAI 限制 Tool 消息内容必须为 String)
+		if not msg.image_data.is_empty() and msg.role != "tool":
 			var content_array = []
 			
 			# 1. 如果有文本内容，添加为 text 类型块
