@@ -7,11 +7,11 @@ class_name LocalAIProvider
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
 	var body = super.build_request_body(_model_name, _messages, _temperature, _stream, _tool_definitions)
 	
-	# 策略：如果发现本地服务在处理多模态或工具调用时报错，
-	# 我们可以在这里对 body 进行二次加工。
-	# 例如：某些本地服务不支持 stream_options 中的 include_usage
-	if body.has("stream_options"):
-		body.erase("stream_options")
+	# [修复] 恢复 stream_options 以支持 Token Usage 统计
+	# 现在的本地服务 (LM Studio 0.3+, Ollama 等) 大多已支持此参数
+	# 如果某些旧版本服务报错，用户应更新服务版本
+	# if body.has("stream_options"):
+	#     body.erase("stream_options")
 	
 	return body
 
