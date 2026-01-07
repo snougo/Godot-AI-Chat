@@ -22,7 +22,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"path": {
 				"type": "string",
-				"description": "Required. The full path to the notebook file (e.g. 'res://path/to/workspace/notebook.md')."
+				"description": "Required. The full path to the notebook file (e.g. 'res://current workspace path/notebook.md')."
 			}
 		},
 		"required": ["mode", "path"]

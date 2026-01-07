@@ -6,7 +6,7 @@ const DEFAULT_FILE_PATH: String = "res://addons/godot_ai_chat/TODO.md"
 
 func _init() -> void:
 	name = "todo_list"
-	description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. Supports optional file path."
+	description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. The file path must be 'res://the_current_workspace_path/TODO.md'."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -24,7 +24,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"path": {
 				"type": "string",
-				"description": "Optional relative path to the `TODO.md` file (e.g., 'res://The current workspace path/TODO.md')."
+				"description": "Optional relative path to the `TODO.md` file (e.g., 'res://the_current_workspace_path/TODO.md')."
 			}
 		},
 		"required": ["action"]
