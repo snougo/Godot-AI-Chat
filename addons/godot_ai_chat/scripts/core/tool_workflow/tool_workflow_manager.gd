@@ -38,53 +38,6 @@ func start(trigger_msg: ChatMessage) -> void:
 	_execute_tool_calls(trigger_msg)
 
 
-#func _execute_tool_calls(msg: ChatMessage) -> void:
-	## 遍历执行所有工具
-	#for call in msg.tool_calls:
-		#var call_id = call.get("id", "")
-		#var func_def = call.get("function", {})
-		#var tool_name = func_def.get("name", "")
-		#var raw_args_str = func_def.get("arguments", "{}")
-		#
-		#print("[Workflow] Executing tool: %s" % tool_name)
-		#
-		## [核心修复] 1. 清洗参数字符串，去除尾部垃圾 (解决 Expected 'EOF')
-		#var clean_args_str = _sanitize_json_arguments(raw_args_str)
-		#
-		## [核心修复] 2. 将清洗后的字符串写回原始消息 (解决 HTTP 400)
-		## 这一步至关重要！如果不修改 msg，发回给服务器的依然是带垃圾的脏数据。
-		#func_def["arguments"] = clean_args_str
-		#
-		## 3. 解析清洗后的参数
-		#var args = JSON.parse_string(clean_args_str)
-		#if args == null: args = {}
-		#
-		## 4. 执行工具
-		#var tool_instance = ToolRegistry.get_tool(tool_name)
-		#if not tool_instance:
-			#push_error("[Workflow] Tool not found: " + tool_name)
-			#continue
-		#
-		#var result_dict = tool_instance.execute(args, tool_executor.context_provider)
-		#var result_str = result_dict.get("data", "")
-		#
-		## 创建 Tool Message
-		#var tool_msg = ChatMessage.new(ChatMessage.ROLE_TOOL, result_str, tool_name)
-		#tool_msg.tool_call_id = call_id
-		#
-		## 处理图片附件
-		#if result_dict.has("attachments"):
-			#var att = result_dict.attachments
-			#tool_msg.image_data = att.get("image_data", [])
-			#tool_msg.image_mime = att.get("mime", "image/png")
-		#
-		#workflow_messages.append(tool_msg)
-		#emit_signal("tool_msg_generated", tool_msg)
-	#
-	## 执行完一轮后，请求 AI 下一步
-	#_request_next_step()
-
-
 func _execute_tool_calls(_msg: ChatMessage) -> void:
 	# 收集本轮产生的所有消息
 	var generated_tool_msgs: Array[ChatMessage] = []
@@ -116,19 +69,33 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 		var result_dict: Dictionary = tool_instance.execute(args, tool_executor.context_provider)
 		var result_str = result_dict.get("data", "")
 		
-		# 3. 创建 Tool Message (必须是纯文本)
+		# 3. 创建 Tool Message (默认为纯文本)
 		var tool_msg := ChatMessage.new(ChatMessage.ROLE_TOOL, result_str, tool_name)
 		tool_msg.tool_call_id = call_id
-		generated_tool_msgs.append(tool_msg)
 		
-		# 4. 处理图片附件 -> 转换为额外的 User 消息
+		# 4. 处理图片附件
 		if result_dict.has("attachments"):
 			var att = result_dict.attachments
 			if att.has("image_data") and not att.image_data.is_empty():
-				var image_msg := ChatMessage.new(ChatMessage.ROLE_USER, "Image content from tool '%s':" % tool_name)
-				image_msg.image_data = att.get("image_data", [])
-				image_msg.image_mime = att.get("mime", "image/png")
-				generated_image_msgs.append(image_msg)
+				# [修复] 区分 Provider 类型
+				# Gemini 支持在 Tool 消息中直接嵌入图片 (多模态)
+				# OpenAI/Local 兼容性较差，需要转换为额外的 User 消息
+				var is_gemini := false
+				if network_manager.current_provider:
+					is_gemini = network_manager.current_provider is GeminiProvider
+				
+				if is_gemini:
+					# Gemini 模式：直接嵌入 Tool 消息
+					tool_msg.image_data = att.get("image_data", [])
+					tool_msg.image_mime = att.get("mime", "image/png")
+				else:
+					# OpenAI/Local 模式：转换为额外的 User 消息
+					var image_msg := ChatMessage.new(ChatMessage.ROLE_USER, "Image content from tool '%s':" % tool_name)
+					image_msg.image_data = att.get("image_data", [])
+					image_msg.image_mime = att.get("mime", "image/png")
+					generated_image_msgs.append(image_msg)
+		
+		generated_tool_msgs.append(tool_msg)
 	
 	# 5. 按顺序添加消息：先 Tool 后 User
 	# OpenAI 要求 Tool Messages 必须紧跟在 Assistant Message 之后，中间不能插队
@@ -136,7 +103,7 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 	for tm in generated_tool_msgs:
 		emit_signal("tool_msg_generated", tm)
 	
-	# 随后追加图片消息 (作为补充信息)
+	# 随后追加图片消息 (仅在非 Gemini 模式下会有内容)
 	workflow_messages.append_array(generated_image_msgs)
 	for im in generated_image_msgs:
 		emit_signal("tool_msg_generated", im)
