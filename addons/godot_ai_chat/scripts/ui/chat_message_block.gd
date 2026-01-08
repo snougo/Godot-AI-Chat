@@ -31,10 +31,12 @@ var _pending_buffer: String = ""
 ## 记录上一个创建的 UI 节点，用于连续追加内容
 var _last_ui_node: Control = null
 
-## 正则匹配：代码块开始 (锚定行首)
-var _re_code_start: RegEx = RegEx.create_from_string("^```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
-## 正则匹配：代码块结束 (锚定行首)
-var _re_code_end: RegEx = RegEx.create_from_string("^```\\s*$")
+## 正则匹配：代码块开始 (锚定行首，但是允许行首出现空格)
+#var _re_code_start: RegEx = RegEx.create_from_string("^```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
+var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
+## 正则匹配：代码块结束 (锚定行首，但是允许行首出现空格)
+#var _re_code_end: RegEx = RegEx.create_from_string("^```\\s*$")
+var _re_code_end: RegEx = RegEx.create_from_string("^\\s*```\\s*$")
 
 ## 打字机状态
 var _typing_active: bool = false
@@ -291,41 +293,81 @@ func _clear_content() -> void:
 
 
 ## 智能分块处理逻辑
+## 核心职责：在流式传输中检测 Markdown 代码块标记（```），解决缩进导致的解析错误
 func _process_smart_chunk(_incoming_text: String, _instant: bool) -> void:
 	_pending_buffer += _incoming_text
 	
 	while true:
+		# 1. 查找缓冲区中是否存在代码块标记
 		var _fence_idx: int = _pending_buffer.find("```")
 		
 		if _fence_idx != -1:
-			var _is_line_start: bool = (_fence_idx == 0) or (_pending_buffer[_fence_idx - 1] == '\n')
+			# 2. 回溯检查：判断 ``` 之前是否只有空白字符（空格/制表符）
+			# 这是为了支持缩进的代码块（例如 "  ```gdscript"）
+			var _line_start_idx: int = -1
+			var _is_valid_fence: bool = false
+			var _ptr: int = _fence_idx - 1
 			
-			if not _is_line_start:
+			while _ptr >= 0:
+				var _char: String = _pending_buffer[_ptr]
+				if _char == '\n':
+					# 找到上一个换行符，确认是新的一行
+					_line_start_idx = _ptr + 1
+					_is_valid_fence = true
+					break
+				elif _char == ' ' or _char == '\t':
+					# 允许空白字符，继续回溯
+					_ptr -= 1
+				else:
+					# 遇到非空白字符（如 "abc ```"），说明不是行首标记
+					_is_valid_fence = false
+					break
+			
+			if _ptr < 0: # 回溯到了 buffer 开头，说明是第一行且符合条件
+				_line_start_idx = 0
+				_is_valid_fence = true
+			
+			# 3. 分支处理：无效标记 vs 有效标记
+			if not _is_valid_fence:
+				# 情况 A: 标记前有杂质，视为普通文本
+				# 将 ``` 及其之前的部分作为文本追加，然后继续处理剩余部分
 				var _safe_len: int = _fence_idx + 3
 				var _safe_part: String = _pending_buffer.substr(0, _safe_len)
 				_append_content(_safe_part, _instant)
 				_pending_buffer = _pending_buffer.substr(_safe_len)
 				continue
 			
-			if _fence_idx > 0:
-				var _safe_part: String = _pending_buffer.substr(0, _fence_idx)
-				_append_content(_safe_part, _instant)
-				_pending_buffer = _pending_buffer.substr(_fence_idx)
+			# 情况 B: 是有效的代码块标记行（可能是开始或结束）
 			
+			# 4. 先把这一行之前的普通文本（如果有）刷新出去
+			if _line_start_idx > 0:
+				var _pre_fence_content: String = _pending_buffer.substr(0, _line_start_idx)
+				_append_content(_pre_fence_content, _instant)
+				_pending_buffer = _pending_buffer.substr(_line_start_idx)
+				# 注意：此时 buffer 已被截断，开头即为（缩进 + ```），无需更新 _fence_idx
+				# 直接进入下一步处理这一行
+			
+			# 5. 检查这一行是否完整（是否有换行符）
 			var _newline_pos: int = _pending_buffer.find("\n")
 			
 			if _newline_pos != -1:
+				# 提取完整的一行（包含缩进、``` 和可能的语言标识符）
 				var _line_with_fence: String = _pending_buffer.substr(0, _newline_pos)
-				_pending_buffer = _pending_buffer.substr(_newline_pos + 1)
+				_pending_buffer = _pending_buffer.substr(_newline_pos + 1) # 剩余部分留给下一次循环
 				
+				# 处理回车符兼容性
 				if _line_with_fence.ends_with("\r"):
 					_line_with_fence = _line_with_fence.left(-1)
 				
+				# 交给解析器判断是“开始”还是“结束”
 				_parse_fence_line(_line_with_fence, _instant)
 				continue
 			else:
+				# 这一行还没传输完整（例如只收到了 "  ```gds"），等待下一个 chunk
 				break
 		else:
+			# 6. 没有找到 ```，安全刷新缓冲区
+			# 需要保留末尾可能的半个标记（如 "`" 或 "``"），防止被切断
 			var _safe_len: int = _pending_buffer.length()
 			if _pending_buffer.ends_with("``"):
 				_safe_len -= 2
@@ -333,11 +375,13 @@ func _process_smart_chunk(_incoming_text: String, _instant: bool) -> void:
 				_safe_len -= 1
 			
 			if _safe_len < _pending_buffer.length():
+				# 有潜在的半个标记，只刷新前面的安全部分
 				if _safe_len > 0:
 					var _safe_part: String = _pending_buffer.left(_safe_len)
 					_append_content(_safe_part, _instant)
 					_pending_buffer = _pending_buffer.right(-_safe_len)
 			else:
+				# 没有潜在标记，全部刷新
 				if not _pending_buffer.is_empty():
 					_append_content(_pending_buffer, _instant)
 					_pending_buffer = ""
