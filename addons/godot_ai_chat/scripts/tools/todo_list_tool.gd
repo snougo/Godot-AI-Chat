@@ -1,12 +1,10 @@
 @tool
 extends AiTool
 
-const DEFAULT_FILE_PATH: String = "res://addons/godot_ai_chat/TODO.md"
-
 
 func _init() -> void:
 	name = "todo_list"
-	description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. The file path must be 'res://the_current_workspace_path/TODO.md'."
+	description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. Only supports res:// paths."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -24,10 +22,10 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"path": {
 				"type": "string",
-				"description": "Optional relative path to the `TODO.md` file (e.g., 'res://the_current_workspace_path/TODO.md')."
+				"description": "Required. The full path to the `TODO.md` file (e.g., 'res://current_workspace/TODO.md')."
 			}
 		},
-		"required": ["action"]
+		"required": ["action", "path"]
 	}
 
 
@@ -36,27 +34,40 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 	var content: String = _args.get("content", "")
 	var target_path: String = _args.get("path", "")
 	
+	# 1. 基础参数检查
 	if target_path.is_empty():
-		target_path = DEFAULT_FILE_PATH
+		return {"success": false, "data": "Error: 'path' parameter is required."}
 	
-	# [新增] 安全检查：仅允许 .md 或 .txt 文件
-	var ext = target_path.get_extension().to_lower()
-	if ext != "md":
-		return {"success": false, "data": "Security Error: 'todo_list' tool only supports `.md` files. Invalid path: " + target_path}
+	# 2. 安全性检查
+	if not target_path.begins_with("res://"):
+		return {"success": false, "data": "Error: Path must start with 'res://'."}
+	if ".." in target_path:
+		return {"success": false, "data": "Error: Path traversal ('..') is not allowed."}
+	if target_path.get_extension().to_lower() != "md":
+		return {"success": false, "data": "Error: Only .md files are supported for TODO lists."}
 	
-	# 检查文件是否存在
+	# 3. 检查文件是否存在
 	if not FileAccess.file_exists(target_path):
-		# 如果是默认文件，或者操作是 'add'，则尝试创建文件
-		if target_path == DEFAULT_FILE_PATH or action == "add":
+		# 如果操作是 'add' 或 'list'，则允许创建新文件
+		if action == "add" or action == "list":
+			# 确保目录存在
+			var base_dir = target_path.get_base_dir()
+			if not DirAccess.dir_exists_absolute(base_dir):
+				return {"success": false, "data": "Error: Directory does not exist: " + base_dir}
+			
 			var file = FileAccess.open(target_path, FileAccess.WRITE)
 			if file:
 				file.store_string("# Project TODOs\n")
 				file.close()
 				ToolBox.refresh_editor_filesystem()
+				
+				# 如果是 list 操作，创建完直接返回空列表提示
+				if action == "list":
+					return {"success": true, "data": "Created new TODO list at %s. It is currently empty." % target_path}
 			else:
-				return {"success": false, "data": "Failed to create/access file at: " + target_path}
+				return {"success": false, "data": "Failed to create file at: " + target_path}
 		else:
-			# 如果是读取自定义路径且文件不存在，返回错误
+			# 对于 'complete'，文件必须存在
 			return {"success": false, "data": "File not found: " + target_path}
 	
 	match action:

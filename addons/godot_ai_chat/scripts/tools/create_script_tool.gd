@@ -1,10 +1,13 @@
 @tool
 extends AiTool
 
+# 定义允许的扩展名白名单，防止创建恶意文件
+const ALLOWED_EXTENSIONS = ["gd", "gdshader"]
+
 
 func _init() -> void:
 	name = "create_script"
-	description = "Create a new GDScript file with the specified content. The filename will be automatically suffixed with '-ai_create'."
+	description = "Create a new `.gd` or `.gdshader` file. By default, it will not overwrite existing files. Only supports res:// paths."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -13,11 +16,15 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "The target file path (e.g., 'res://xxxxxx/my_script.gd')."
+				"description": "The target file path, must be current workspace path."
 			},
 			"content": {
 				"type": "string",
-				"description": "The GDScript code content to write."
+				"description": "The content to write."
+			},
+			"overwrite": {
+				"type": "boolean",
+				"description": "Whether to overwrite the file if it already exists. Default is false."
 			}
 		},
 		"required": ["path", "content"]
@@ -27,48 +34,49 @@ func get_parameters_schema() -> Dictionary:
 func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
 	var path: String = _args.get("path", "")
 	var content: String = _args.get("content", "")
+	var overwrite: bool = _args.get("overwrite", false)
 	
+	# 1. 基础路径校验
 	if path.is_empty():
-		return {"success": false, "data": "Error: 'path' parameter is required."}
-	
+		return {"success": false, "data": "Error: 'path' is required."}
 	if not path.begins_with("res://"):
 		return {"success": false, "data": "Error: Path must start with 'res://'."}
 	
-	# 1. 处理文件名：添加 -ai_create 后缀
-	var extension: String = path.get_extension()
-	var base_path: String = path.get_basename()
+	# 2. 安全性检查：禁止路径遍历和敏感目录写入
+	if ".." in path:
+		return {"success": false, "data": "Error: Path traversal ('..') is not allowed."}
+	if "/.git/" in path or "/.import/" in path:
+		return {"success": false, "data": "Error: Writing to hidden/system directories is not allowed."}
 	
-	# 如果没后缀，默认 .gd
-	if extension.is_empty():
-		extension = "gd"
+	# 3. 扩展名白名单检查
+	var extension = path.get_extension().to_lower()
+	if extension not in ALLOWED_EXTENSIONS:
+		return {"success": false, "data": "Error: File extension '%s' is not allowed. Allowed: %s" % [extension, ALLOWED_EXTENSIONS]}
 	
-	# 防止重复添加后缀
-	if not base_path.ends_with("-ai_create"):
-		base_path += "-ai_create"
+	# 4. 防止意外覆盖
+	if FileAccess.file_exists(path) and not overwrite:
+		return {"success": false, "data": "Error: File '%s' already exists. Set 'overwrite' to true if you intend to replace it." % path}
 	
-	var final_path := base_path + "." + extension
-	
-	# 2. 确保目录存在
+	# 5. 自动创建目录
+	var base_dir = path.get_base_dir()
 	var dir_access = DirAccess.open("res://")
-	var base_dir: String = final_path.get_base_dir()
-	
 	if not dir_access.dir_exists(base_dir):
-		var err: Error = dir_access.make_dir_recursive(base_dir)
+		var err = dir_access.make_dir_recursive(base_dir)
 		if err != OK:
 			return {"success": false, "data": "Error: Failed to create directory " + base_dir}
 	
-	# 3. 写入文件
-	var file: FileAccess = FileAccess.open(final_path, FileAccess.WRITE)
+	# 6. 写入文件
+	var file = FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		return {"success": false, "data": "Error: Failed to open file for writing: " + str(FileAccess.get_open_error())}
+		return {"success": false, "data": "Error: Failed to open file: " + str(FileAccess.get_open_error())}
 	
 	file.store_string(content)
 	file.close()
 	
-	# 4. 刷新编辑器资源 (如果在编辑器中运行)
+	# 7. 刷新编辑器资源系统
 	if Engine.is_editor_hint():
-		var fs: EditorFileSystem = EditorInterface.get_resource_filesystem()
+		var fs = EditorInterface.get_resource_filesystem()
 		if fs:
 			fs.scan()
 	
-	return {"success": true, "data": "Script created successfully at: " + final_path}
+	return {"success": true, "data": "File created successfully at: " + path}

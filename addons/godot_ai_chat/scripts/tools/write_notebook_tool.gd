@@ -1,9 +1,10 @@
+@tool
 extends AiTool
 
 
 func _init() -> void:
 	name = "write_notebook"
-	description = "Useful for recording **analysis, thoughts, and documentation excerpts**. **STRICTLY PROHIBITED: Do not write code, scripts, or code blocks.** Use this for text-based reasoning only. **DO NOT use for tracking task status** (use todo_list for that)."
+	description = "Useful for recording **analysis, thoughts, and documentation excerpts**. Only supports res:// paths."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -34,15 +35,25 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 	var content = _args.get("content", "")
 	var target_path = _args.get("path", "")
 	
+	# 1. 基础参数检查
 	if target_path.is_empty():
-		return {"success": false, "data": "Path is required. Please specify the notebook file path (e.g., res://workspace/notebook.md)."}
+		return {"success": false, "data": "Error: Path is required. Please specify the notebook file path (e.g., res://workspace/notebook.md)."}
 	
-	# 安全检查：只允许 .md 扩展名
+	# 2. 安全性检查
+	if not target_path.begins_with("res://"):
+		return {"success": false, "data": "Error: Path must start with 'res://'."}
+	if ".." in target_path:
+		return {"success": false, "data": "Error: Path traversal ('..') is not allowed."}
 	if target_path.get_extension().to_lower() != "md":
 		return {"success": false, "data": "Security Error: Notebook tool only supports .md files."}
-
-	# 确保文件存在，如果不存在则创建（适用于所有模式）
+	
+	# 3. 确保文件存在，如果不存在则创建（适用于所有模式）
 	if not FileAccess.file_exists(target_path):
+		# 确保目录存在
+		var base_dir = target_path.get_base_dir()
+		if not DirAccess.dir_exists_absolute(base_dir):
+			return {"success": false, "data": "Error: Directory does not exist: " + base_dir}
+			
 		var file: FileAccess = FileAccess.open(target_path, FileAccess.WRITE)
 		if file:
 			file.store_string("# AI Notebook\n")
@@ -72,9 +83,11 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 					return {"success": false, "data": "Failed to open notebook for appending: " + str(FileAccess.get_open_error())}
 			
 			file.seek_end()
-			# 确保追加前有换行，除非文件是空的
+			
+			# 插入分隔符：换行 + 分割线 + 两个换行
+			# 只有当文件不为空时才添加分隔符，避免文件开头出现分割线
 			if file.get_length() > 0:
-				file.store_string("\n")
+				file.store_string("\n---\n\n")
 			
 			file.store_string(content)
 			file.close()
