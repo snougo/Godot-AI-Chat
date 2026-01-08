@@ -29,6 +29,10 @@ var current_typing_node: RichTextLabel = null
 # 工具调用展示节点
 var _tool_rtl: RichTextLabel = null
 
+# [新增] 思考内容 UI 引用
+var _reasoning_container: FoldableContainer = null
+var _reasoning_label: RichTextLabel = null
+
 
 func _ready() -> void:
 	if not content_container:
@@ -37,9 +41,15 @@ func _ready() -> void:
 
 # --- 公共接口 ---
 
-func set_content(role: String, content: String, model_name: String = "", tool_calls: Array = []) -> void:
+# [修改] 增加 _reasoning 参数
+func set_content(role: String, content: String, model_name: String = "", tool_calls: Array = [], _reasoning: String = "") -> void:
 	_set_title(role, model_name)
 	_clear_content()
+	
+	# [新增] 如果有思考内容，先显示思考内容
+	if not _reasoning.is_empty():
+		append_reasoning(_reasoning)
+	
 	# 静态加载时，直接一次性处理，并在最后强制换行确保闭合
 	_process_smart_chunk(content + "\n", true)
 	
@@ -57,6 +67,17 @@ func start_stream(role: String, model_name: String = "") -> void:
 func append_chunk(text: String) -> void:
 	if text.is_empty(): return
 	_process_smart_chunk(text, false)
+
+
+# [新增] 处理思考内容流式追加
+func append_reasoning(text: String) -> void:
+	if text.is_empty(): return
+	
+	if not is_instance_valid(_reasoning_container):
+		_create_reasoning_ui()
+	
+	if is_instance_valid(_reasoning_label):
+		_reasoning_label.text += text
 
 
 func finish_stream() -> void:
@@ -96,10 +117,14 @@ func show_tool_call(_tool_call: Dictionary) -> void:
 	# 检查是否已经存在该 ID 的展示（防止流式多次重复创建 UI 节点）
 	var call_id = _tool_call.get("id", "no-id")
 	
-	# 使用 meta 记录已显示的 call_id
+	# 预先净化 ID，确保与 Godot 节点命名规则一致
+	# 使用 String.validate_node_name() 确保名称合法
+	var safe_node_name = ("Tool_" + call_id).validate_node_name()
+	
 	var shown_calls = content_container.get_meta("shown_calls", [])
 	if call_id in shown_calls:
-		_update_tool_call_ui(call_id, _tool_call)
+		# 传递净化后的名称给更新函数
+		self._update_tool_call_ui(safe_node_name, _tool_call)
 		return
 	
 	shown_calls.append(call_id)
@@ -107,7 +132,8 @@ func show_tool_call(_tool_call: Dictionary) -> void:
 	
 	# 1. 创建外观容器 (PanelContainer)
 	var panel = PanelContainer.new()
-	panel.name = "Tool_" + call_id
+	#panel.name = "Tool_" + call_id
+	panel.name = safe_node_name
 	
 	# 设置背景样式，使其看起来像一个控制台或代码块
 	var style = StyleBoxFlat.new()
@@ -217,12 +243,16 @@ func _set_title(_role: String, _model_name: String) -> void:
 
 
 # 更新流式工具调用参数
-func _update_tool_call_ui(call_id: String, tool_call: Dictionary) -> void:
-	var panel = content_container.get_node_or_null("Tool_" + call_id)
+# 参数名从 call_id 改为 node_name 以示区分
+func _update_tool_call_ui(node_name: String, tool_call: Dictionary) -> void:
+	# 不再根据ID找到对应的 PanelContainer
+	# 而是直接使用净化后的名称查找，确保能找到节点
+	var panel = content_container.get_node_or_null(node_name)
 	if panel:
 		var args_label = panel.find_child("ArgsLabel", true, false)
 		if args_label:
-			_update_args_display(args_label, tool_call)
+			# 刷新参数显示
+			self._update_args_display(args_label, tool_call)
 
 
 # 解析并格式化参数显示
@@ -267,6 +297,8 @@ func _clear_content() -> void:
 	typing_active = false
 	current_typing_node = null
 	_tool_rtl = null
+	_reasoning_container = null
+	_reasoning_label = null
 
 
 # [核心逻辑] 智能分块处理
@@ -392,6 +424,35 @@ func _append_content(text: String, instant: bool) -> void:
 
 
 # --- 具体的 UI 操作 ---
+
+# [新增] 创建思考内容 UI 结构
+func _create_reasoning_ui() -> void:
+	_reasoning_container = FoldableContainer.new()
+	_reasoning_container.name = "ReasoningContainer"
+	_reasoning_container.set_title("🤔 Thinking Process")
+	_reasoning_container.fold() # 默认折叠
+	
+	# 插入到 content_container 的最前面 (索引 0)
+	content_container.add_child(_reasoning_container)
+	content_container.move_child(_reasoning_container, 0)
+	
+	# 使用 Margin 增加内边距
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	_reasoning_container.add_child(margin)
+	
+	_reasoning_label = RichTextLabel.new()
+	_reasoning_label.bbcode_enabled = false # 暂时使用纯文本防止注入
+	_reasoning_label.fit_content = true
+	_reasoning_label.selection_enabled = true
+	_reasoning_label.modulate = Color(0.6, 0.6, 0.6) # 灰色文本
+	margin.add_child(_reasoning_label)
+	
+	# [重要] 重置 last_ui_node，确保思考内容之后的正文会创建新的文本块
+	last_ui_node = null
+
 
 func _create_code_block(lang: String) -> void:
 	# [修复] 创建新块前，强制结束上一个打字机

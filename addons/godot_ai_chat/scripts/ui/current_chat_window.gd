@@ -63,6 +63,7 @@ func handle_stream_chunk(_raw_chunk: Dictionary, _provider: BaseLLMProvider) -> 
 	
 	# 3. 处理 UI 动画 (仅显示增量文本)
 	var content_delta = ui_update.get("content_delta", "")
+	var reasoning_delta = ui_update.get("reasoning_delta", "") # [新增]
 	
 	var last_block = self._get_last_block()
 	var is_assistant_block: bool = (last_block != null and last_block.get_role() == ChatMessage.ROLE_ASSISTANT)
@@ -74,6 +75,10 @@ func handle_stream_chunk(_raw_chunk: Dictionary, _provider: BaseLLMProvider) -> 
 	
 	if not content_delta.is_empty():
 		last_block.append_chunk(content_delta)
+	
+	# [新增] 处理思考内容增量
+	if not reasoning_delta.is_empty():
+		last_block.append_reasoning(reasoning_delta)
 	
 	# 4. 工具调用视觉反馈 (可选)
 	if not target_msg.tool_calls.is_empty():
@@ -105,13 +110,16 @@ func _refresh_display() -> void:
 	for msg in chat_history.messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM: continue
 		# 传入图片数据参数
-		self._add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime)
+		# [修改] 传入 reasoning_content
+		self._add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime, msg.reasoning_content)
 	self._scroll_to_bottom()
 
 
-func _add_block(_role: String, _content: String, _instant: bool, _tool_calls: Array = [], _image_data: PackedByteArray = [], _image_mime: String = "") -> void:
+# [修改] 增加 _reasoning 参数
+func _add_block(_role: String, _content: String, _instant: bool, _tool_calls: Array = [], _image_data: PackedByteArray = [], _image_mime: String = "", _reasoning: String = "") -> void:
 	var block: ChatMessageBlock = self._create_block()
-	block.set_content(_role, _content, current_model_name if _role == ChatMessage.ROLE_ASSISTANT else "", _tool_calls)
+	# [修改] 传递 _reasoning
+	block.set_content(_role, _content, current_model_name if _role == ChatMessage.ROLE_ASSISTANT else "", _tool_calls, _reasoning)
 	
 	# 如果有图片数据，调用显示方法
 	if not _image_data.is_empty():

@@ -20,6 +20,10 @@ const ROLE_TOOL = "tool"
 # 消息内容
 @export_multiline var content: String = ""
 
+# [新增] 思考内容 (Chain of Thought / Reasoning)
+# 用于存储 DeepSeek-R1 / Kimi 等模型输出的思维链内容
+@export_multiline var reasoning_content: String = ""
+
 # 图片内容
 @export var image_data: PackedByteArray = [] # 存储图片原始字节
 @export var image_mime: String = "image/png" # 默认为 PNG

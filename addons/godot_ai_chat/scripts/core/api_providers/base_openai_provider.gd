@@ -2,11 +2,16 @@
 extends BaseLLMProvider
 class_name BaseOpenAIProvider
 
+## OpenAI 兼容接口的基类实现。
 
+# --- Public Functions ---
+
+## 返回该 Provider 使用的流式解析协议
 func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.SSE
 
 
+## 获取 HTTP 请求头
 func get_request_headers(_api_key: String, _stream: bool) -> PackedStringArray:
 	var headers: PackedStringArray = ["Content-Type: application/json"]
 	headers.append("Accept-Encoding: identity")
@@ -20,10 +25,12 @@ func get_request_headers(_api_key: String, _stream: bool) -> PackedStringArray:
 	return headers
 
 
+## 获取请求的 URL
 func get_request_url(_base_url: String, _model_name: String, _api_key: String, _stream: bool) -> String:
 	return _base_url.path_join("v1/chat/completions")
 
 
+## 构建请求体 (Body)
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
 	var api_messages: Array[Dictionary] = []
 	
@@ -126,13 +133,15 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 		ui_update["content_delta"] = text
 	
 	# 3. 提取思考 (Reasoning - Kimi/DeepSeek)
+	# 独立解析 reasoning_content 字段
 	if delta.has("reasoning_content") and delta.reasoning_content is String:
-		var text = delta.reasoning_content
-		_target_msg.content += text
-		ui_update["content_delta"] += text
+		var r_text = delta.reasoning_content
+		_target_msg.reasoning_content += r_text
+		# 使用专用字段通知 UI，避免混入正文
+		ui_update["reasoning_delta"] = r_text
 	
 	# 4. 提取工具 (Tool Calls - 流式拼装)
-	# [修复] 增加对 delta.tool_calls 是否为 null 的检查
+	# 增加对 delta.tool_calls 是否为 null 的检查
 	if delta.has("tool_calls") and delta.tool_calls is Array:
 		for tc in delta.tool_calls:
 			var index = int(tc.get("index", 0))
