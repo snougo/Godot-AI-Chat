@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cus8b6v8lp2pt"]
 
-[ext_resource type="Script" uid="uid://0cnf6uj0s5kn" path="res://addons/godot_ai_chat/scripts/core/ui/chat_message_block.gd" id="1_vihku"]
+[ext_resource type="Script" uid="uid://0cnf6uj0s5kn" path="res://addons/godot_ai_chat/scripts/ui/chat_message_block.gd" id="1_vihku"]
 
 [node name="ChatMessageBlock" type="FoldableContainer"]
 anchors_preset = 15

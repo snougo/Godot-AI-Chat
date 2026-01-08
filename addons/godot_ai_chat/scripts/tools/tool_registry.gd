@@ -8,7 +8,7 @@ static var ai_tools: Dictionary = {}
 
 # 加载默认工具集
 static func load_default_tools() -> void:
-	var tools_dir: String = "res://addons/godot_ai_chat/scripts/core/tools/"
+	var tools_dir: String = "res://addons/godot_ai_chat/scripts/tools/"
 	
 	# 显式定义核心工具列表
 	var tool_scripts: Array[String] = [

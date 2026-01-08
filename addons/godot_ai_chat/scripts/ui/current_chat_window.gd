@@ -11,42 +11,42 @@ var chat_scroll_container: ScrollContainer
 
 # --- 资源 ---
 var chat_history: ChatMessageHistory
-var chat_message_block_scene = preload("res://addons/godot_ai_chat/ui/chat_message_block.tscn")
+var chat_message_block_scene: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
 
 var current_model_name: String = ""
 
 
-func load_history_resource(history: ChatMessageHistory) -> void:
-	chat_history = history
+func load_history_resource(_history: ChatMessageHistory) -> void:
+	chat_history = _history
 	_refresh_display()
 
 
-func append_user_message(text: String) -> void:
-	chat_history.add_user_message(text)
-	_add_block(ChatMessage.ROLE_USER, text, true)
+func append_user_message(_text: String) -> void:
+	chat_history.add_user_message(_text)
+	self._add_block(ChatMessage.ROLE_USER, _text, true)
 
 
-func append_error_message(text: String) -> void:
-	var block = _create_block()
-	block.set_error(text)
-	_scroll_to_bottom()
+func append_error_message(_text: String) -> void:
+	var block: ChatMessageBlock = self._create_block()
+	block.set_error(_text)
+	self._scroll_to_bottom()
 
 
-func append_tool_message(tool_name: String, result_text: String, tool_call_id: String, image_data: PackedByteArray = [], image_mime: String = "") -> void:
+func append_tool_message(_tool_name: String, _result_text: String, _tool_call_id: String, _image_data: PackedByteArray = [], _image_mime: String = "") -> void:
 	# 将图片数据也存入历史记录
-	var msg = ChatMessage.new(ChatMessage.ROLE_TOOL, result_text, tool_name)
-	msg.tool_call_id = tool_call_id
-	msg.image_data = image_data
-	msg.image_mime = image_mime
+	var msg := ChatMessage.new(ChatMessage.ROLE_TOOL, _result_text, _tool_name)
+	msg.tool_call_id = _tool_call_id
+	msg.image_data = _image_data
+	msg.image_mime = _image_mime
 	chat_history.add_message(msg)
 	
 	# UI 显示
-	_add_block(ChatMessage.ROLE_TOOL, result_text, true, [], image_data, image_mime)
-	_scroll_to_bottom()
+	self._add_block(ChatMessage.ROLE_TOOL, _result_text, true, [], _image_data, _image_mime)
+	self._scroll_to_bottom()
 
 
 # [核心重构] 极简的流式处理
-func handle_stream_chunk(raw_chunk: Dictionary, provider: BaseLLMProvider) -> void:
+func handle_stream_chunk(_raw_chunk: Dictionary, _provider: BaseLLMProvider) -> void:
 	# 1. 确保数据层有 Assistant 消息
 	var target_msg: ChatMessage = null
 	if not chat_history.messages.is_empty():
@@ -59,16 +59,16 @@ func handle_stream_chunk(raw_chunk: Dictionary, provider: BaseLLMProvider) -> vo
 		chat_history.add_message(target_msg)
 	
 	# 2. [关键] 委托 Provider 处理所有脏活（拼装、合并、解析）
-	var ui_update = provider.process_stream_chunk(target_msg, raw_chunk)
+	var ui_update: Dictionary = _provider.process_stream_chunk(target_msg, _raw_chunk)
 	
 	# 3. 处理 UI 动画 (仅显示增量文本)
 	var content_delta = ui_update.get("content_delta", "")
 	
-	var last_block = _get_last_block()
-	var is_assistant_block = (last_block != null and last_block.get_role() == ChatMessage.ROLE_ASSISTANT)
+	var last_block = self._get_last_block()
+	var is_assistant_block: bool = (last_block != null and last_block.get_role() == ChatMessage.ROLE_ASSISTANT)
 	
 	if not (is_assistant_block and last_block.visible):
-		var block = _create_block()
+		var block: ChatMessageBlock = self._create_block()
 		block.start_stream(ChatMessage.ROLE_ASSISTANT, current_model_name)
 		last_block = block
 	
@@ -87,16 +87,16 @@ func handle_stream_chunk(raw_chunk: Dictionary, provider: BaseLLMProvider) -> vo
 	if usage is Dictionary and not usage.is_empty():
 		update_token_usage(usage)
 	
-	_scroll_to_bottom()
+	self._scroll_to_bottom()
 
 
 func commit_agent_history(_new_messages: Array[ChatMessage]) -> void:
 	pass
 
 
-func update_token_usage(usage: Dictionary) -> void:
-	if not usage.is_empty():
-		emit_signal("token_usage_updated", usage)
+func update_token_usage(_usage: Dictionary) -> void:
+	if not _usage.is_empty():
+		emit_signal("token_usage_updated", _usage)
 
 
 func _refresh_display() -> void:
@@ -105,29 +105,30 @@ func _refresh_display() -> void:
 	for msg in chat_history.messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM: continue
 		# 传入图片数据参数
-		_add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime)
-	_scroll_to_bottom()
+		self._add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime)
+	self._scroll_to_bottom()
 
 
-func _add_block(role: String, content: String, instant: bool, tool_calls: Array = [], image_data: PackedByteArray = [], image_mime: String = "") -> void:
-	var block = _create_block()
-	block.set_content(role, content, current_model_name if role == ChatMessage.ROLE_ASSISTANT else "", tool_calls)
+func _add_block(_role: String, _content: String, _instant: bool, _tool_calls: Array = [], _image_data: PackedByteArray = [], _image_mime: String = "") -> void:
+	var block: ChatMessageBlock = self._create_block()
+	block.set_content(_role, _content, current_model_name if _role == ChatMessage.ROLE_ASSISTANT else "", _tool_calls)
 	
 	# 如果有图片数据，调用显示方法
-	if not image_data.is_empty():
-		block.display_image(image_data, image_mime)
+	if not _image_data.is_empty():
+		block.display_image(_image_data, _image_mime)
 	
-	_scroll_to_bottom()
+	self._scroll_to_bottom()
 
 
 func _create_block() -> ChatMessageBlock:
-	var block = chat_message_block_scene.instantiate()
+	var block: ChatMessageBlock = chat_message_block_scene.instantiate()
 	chat_list_container.add_child(block)
 	return block
 
 
 func _get_last_block() -> ChatMessageBlock:
-	if chat_list_container.get_child_count() == 0: return null
+	if chat_list_container.get_child_count() == 0:
+		return null
 	return chat_list_container.get_child(chat_list_container.get_child_count() - 1) as ChatMessageBlock
 
 

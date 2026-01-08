@@ -280,8 +280,21 @@ func _process_smart_chunk(incoming_text: String, instant: bool) -> void:
 		var fence_idx = pending_buffer.find("```")
 		
 		if fence_idx != -1:
-			# A. 发现了完整的标记
+			# 判断是否是行首：只有位于行首（或Buffer首）的 ``` 才是有效的 Markdown 标记
+			var is_line_start = (fence_idx == 0) or (pending_buffer[fence_idx - 1] == '\n')
 			
+			if not is_line_start:
+				# 如果不是行首，说明是行内出现的 ```（如代码注释），应视为普通文本
+				# 将直到 ``` 结束的部分全部作为安全内容输出，以推进循环，避免死循环
+				var safe_len = fence_idx + 3 # +3 是为了包含 ``` 本身
+				var safe_part = pending_buffer.substr(0, safe_len)
+				_append_content(safe_part, instant)
+				
+				# 从缓冲区移除已处理部分，继续下一轮搜索
+				pending_buffer = pending_buffer.substr(safe_len)
+				continue
+			
+			# A. 发现了完整的标记 (且确认位于行首)
 			# A1. 先把反引号之前的内容（安全区）渲染出来
 			if fence_idx > 0:
 				var safe_part = pending_buffer.substr(0, fence_idx)

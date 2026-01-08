@@ -2,7 +2,7 @@
 extends EditorPlugin
 
 # 主场景路径
-const CHAT_HUB_SCENE_PATH = "res://addons/godot_ai_chat/ui/chat_hub.tscn"
+const CHAT_HUB_SCENE_PATH = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
 # 对话历史存档文件夹
 const ARCHIVE_DIR = "res://addons/godot_ai_chat/chat_archives/"
 
