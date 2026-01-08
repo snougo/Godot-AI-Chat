@@ -2,22 +2,21 @@
 extends BaseOpenAIProvider
 class_name LocalAIProvider
 
+## 针对本地服务（LM Studio/Ollama）的提供商实现。
+
+# --- Public Functions ---
+
+## 返回该 Provider 使用的流式解析协议
+func get_stream_parser_type() -> BaseLLMProvider.StreamParserType:
+	return BaseLLMProvider.StreamParserType.LOCAL_SSE
+
+
 # 针对本地服务（LM Studio/Ollama）构建请求体
 # 这里可以根据本地服务的特殊报错进行针对性调整
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
-	var body = super.build_request_body(_model_name, _messages, _temperature, _stream, _tool_definitions)
-	
-	# [修复] 恢复 stream_options 以支持 Token Usage 统计
-	# 现在的本地服务 (LM Studio 0.3+, Ollama 等) 大多已支持此参数
-	# 如果某些旧版本服务报错，用户应更新服务版本
-	# if body.has("stream_options"):
-	#     body.erase("stream_options")
+	var body: Dictionary = super.build_request_body(_model_name, _messages, _temperature, _stream, _tool_definitions)
 	
 	return body
-
-
-func get_stream_parser_type() -> BaseLLMProvider.StreamParserType:
-	return BaseLLMProvider.StreamParserType.LOCAL_SSE
 
 
 # 如果本地服务获取模型列表的路径不同，也可以在这里重写

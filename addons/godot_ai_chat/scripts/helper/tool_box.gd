@@ -1,117 +1,119 @@
-extends RefCounted
 class_name ToolBox
+extends RefCounted
 
+## 插件的通用工具箱，包含设置管理、Token 估算、文件系统刷新等辅助功能。
 
-# 插件设置资源文件的固定路径。
-const SETTINGS_PATH = "res://addons/godot_ai_chat/plugin_settings.tres"
+# --- Constants ---
 
+## 插件设置资源文件的固定路径
+const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
-#==============================================================================
-# ## 公共函数 ##
-#==============================================================================
+# --- Public Functions ---
 
+## 获取插件设置资源。如果文件不存在，则创建一个默认设置文件。
 static func get_plugin_settings() -> PluginSettings:
-	var plugin_settings: PluginSettings
+	var _plugin_settings: PluginSettings
 	
 	if ResourceLoader.exists(SETTINGS_PATH):
-		# 如果设置文件存在，则直接加载。
-		# 使用 CACHE_MODE_IGNORE 可以确保每次都从磁盘读取最新的设置，
-		# 这对于用户在编辑器中修改设置后能立即生效非常重要。
-		plugin_settings = ResourceLoader.load(SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
+		# 使用 CACHE_MODE_IGNORE 确保读取最新设置
+		_plugin_settings = ResourceLoader.load(SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:
-		# 如果文件不存在，则创建一个新的默认设置对象并保存。
-		plugin_settings = PluginSettings.new()
-		var err: Error = ResourceSaver.save(plugin_settings, SETTINGS_PATH)
-		if err == OK:
-			# [新增修复] 强制通知编辑器文件系统有新文件，生成UID并纳入索引
+		_plugin_settings = PluginSettings.new()
+		var _err: Error = ResourceSaver.save(_plugin_settings, SETTINGS_PATH)
+		if _err == OK:
 			update_editor_filesystem(SETTINGS_PATH)
 		else:
-			push_error("[Godot AI Chat] Failed to create settings file: %s" % error_string(err))
+			push_error("[Godot AI Chat] Failed to create settings file: %s" % error_string(_err))
 	
-	return plugin_settings
+	return _plugin_settings
 
 
-static func estimate_tokens_for_messages(messages: Array) -> int:
+## 估算消息列表的 Token 消耗
+static func estimate_tokens_for_messages(_messages: Array) -> int:
 	# 定义不同字符类型的权重
-	# 一个中文字符通常算作 1-2 个 token，我们取一个较高的平均值 1.5
-	const CHINESE_CHAR_WEIGHT: float = 1.5
-	# 对于英文、数字、空格和标点，我们使用一个较低的权重。
-	# 经验值表明，大约 3.5 - 4 个这类字符等于 1 个 token。
-	const OTHER_CHAR_WEIGHT: float = 1.0 / 3.8
+	const _CHINESE_CHAR_WEIGHT: float = 1.5
+	const _OTHER_CHAR_WEIGHT: float = 1.0 / 3.8
 	
-	var total_text: String = ""
-	for message in messages:
-		if message.has("content") and message.content is String:
-			total_text += message.content
+	var _total_text: String = ""
+	for _message in _messages:
+		if _message is Dictionary:
+			if _message.has("content") and _message.content is String:
+				_total_text += _message.content
+		elif _message is ChatMessage:
+			_total_text += _message.content
 	
-	if total_text.is_empty():
+	if _total_text.is_empty():
 		return 0
-	var estimated_tokens: float = 0.0
-	# 使用正则表达式来匹配所有的中文字符
-	# Unicode 范围 \u4e00-\u9fff 覆盖了绝大多数常用汉字
-	var chinese_regex: RegEx = RegEx.create_from_string("[\u4e00-\u9fff]")
-	# 1. 计算所有中文字符的 token 消耗
-	var chinese_matches: Array[RegExMatch] = chinese_regex.search_all(total_text)
-	estimated_tokens += chinese_matches.size() * CHINESE_CHAR_WEIGHT
-	# 2. 将所有中文字符从原文本中移除，剩下的就是英文、数字、符号等
-	var non_chinese_text: String = chinese_regex.sub(total_text, "", true)
-	# 3. 计算剩余字符的 token 消耗
-	estimated_tokens += non_chinese_text.length() * OTHER_CHAR_WEIGHT
-	# 向上取整，确保结果是整数且不会低估
-	return int(ceil(estimated_tokens))
+		
+	var _estimated_tokens: float = 0.0
+	var _chinese_regex: RegEx = RegEx.create_from_string("[\u4e00-\u9fff]")
+	
+	# 1. 计算中文字符
+	var _chinese_matches: Array[RegExMatch] = _chinese_regex.search_all(_total_text)
+	_estimated_tokens += _chinese_matches.size() * _CHINESE_CHAR_WEIGHT
+	
+	# 2. 计算非中文字符
+	var _non_chinese_text: String = _chinese_regex.sub(_total_text, "", true)
+	_estimated_tokens += _non_chinese_text.length() * _OTHER_CHAR_WEIGHT
+	
+	return int(ceil(_estimated_tokens))
 
 
-# 用于结构化打印聊天历史上下文的调试函数
-static func print_structured_context(title: String, messages: Array, context_info: Dictionary = {}) -> void:
-	print("\n--- [调试] 上下文报告: %s ---" % title)
+## 用于结构化打印聊天历史上下文的调试函数
+static func print_structured_context(_title: String, _messages: Array, _context_info: Dictionary = {}) -> void:
+	print("\n--- [调试] 上下文报告: %s ---" % _title)
 	
-	if not context_info.is_empty():
-		for key in context_info:
-			print("    - %s: %s" % [key, str(context_info[key])])
+	if not _context_info.is_empty():
+		for _key in _context_info:
+			print("    - %s: %s" % [_key, str(_context_info[_key])])
 	
-	print("    - 消息总数: %d" % messages.size())
+	print("    - 消息总数: %d" % _messages.size())
 	print("--- 上下文内容 (角色 | 内容片段) ---")
 	
-	if messages.is_empty():
+	if _messages.is_empty():
 		print("    [上下文为空]")
 	else:
-		for i in range(messages.size()):
-			var msg: Dictionary = messages[i]
-			var role = msg.get("role", "NO_ROLE")
-			var content = str(msg.get("content", "[NO_CONTENT]"))
+		for _i in range(_messages.size()):
+			var _msg: Variant = _messages[_i]
+			var _role: String = "NO_ROLE"
+			var _content: String = "[NO_CONTENT]"
 			
-			var snippet = content.replace("\n", "\\n")
-			if snippet.length() > 100:
-				snippet = snippet.left(100) + "..."
+			if _msg is Dictionary:
+				_role = _msg.get("role", "NO_ROLE")
+				_content = str(_msg.get("content", "[NO_CONTENT]"))
+			elif _msg is ChatMessage:
+				_role = _msg.role
+				_content = _msg.content
+			
+			var _snippet: String = _content.replace("\n", "\\n")
+			if _snippet.length() > 100:
+				_snippet = _snippet.left(100) + "..."
 				
-			print("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [i, role, snippet])
+			print("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [_i, _role, _snippet])
 	
 	print("--- 报告结束 ---\n")
 
 
-# 更新指定文件的编辑器文件系统状态
-static func update_editor_filesystem(_path) -> void:
+## 更新指定文件的编辑器文件系统状态
+static func update_editor_filesystem(_path: String) -> void:
 	if Engine.is_editor_hint():
-		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-		if editor_filesystem:
-			editor_filesystem.update_file(_path)
-			print(editor_filesystem.get_file_type(_path))
+		var _editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+		if _editor_filesystem:
+			_editor_filesystem.update_file(_path)
 
 
-# 触发编辑器文件系统的完全扫描
+## 触发编辑器文件系统的完全扫描
 static func refresh_editor_filesystem() -> void:
 	if Engine.is_editor_hint():
-		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-		if editor_filesystem:
-			editor_filesystem.scan()
+		var _editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+		if _editor_filesystem:
+			_editor_filesystem.scan()
 
 
-# 用于从AI响应中移除<think>...</think>标签块的通用函数
-static func remove_think_tags(text: String) -> String:
-	if text.is_empty():
+## 从 AI 响应中移除 <think>...</think> 标签块
+static func remove_think_tags(_text: String) -> String:
+	if _text.is_empty():
 		return ""
-	# 使用 RegEx 移除 <think> 标签及其内部的所有内容（包括换行符）
-	var think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
-	var cleaned_text: String = think_regex.sub(text, "", true)
-	# 移除可能留下的前后多余的空白
-	return cleaned_text.strip_edges()
+	var _think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
+	var _cleaned_text: String = _think_regex.sub(_text, "", true)
+	return _cleaned_text.strip_edges()

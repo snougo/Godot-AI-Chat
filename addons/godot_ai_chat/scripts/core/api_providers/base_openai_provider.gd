@@ -1,6 +1,6 @@
 @tool
-extends BaseLLMProvider
 class_name BaseOpenAIProvider
+extends BaseLLMProvider
 
 ## OpenAI 兼容接口的基类实现。
 
@@ -13,16 +13,16 @@ func get_stream_parser_type() -> StreamParserType:
 
 ## 获取 HTTP 请求头
 func get_request_headers(_api_key: String, _stream: bool) -> PackedStringArray:
-	var headers: PackedStringArray = ["Content-Type: application/json"]
-	headers.append("Accept-Encoding: identity")
+	var _headers: PackedStringArray = ["Content-Type: application/json"]
+	_headers.append("Accept-Encoding: identity")
 	
 	if _stream:
-		headers.append("Accept: text/event-stream")
+		_headers.append("Accept: text/event-stream")
 	
 	if not _api_key.is_empty():
-		headers.append("Authorization: Bearer " + _api_key)
+		_headers.append("Authorization: Bearer " + _api_key)
 	
-	return headers
+	return _headers
 
 
 ## 获取请求的 URL
@@ -32,139 +32,141 @@ func get_request_url(_base_url: String, _model_name: String, _api_key: String, _
 
 ## 构建请求体 (Body)
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
-	var api_messages: Array[Dictionary] = []
+	var _api_messages: Array[Dictionary] = []
 	
-	for msg in _messages:
-		var msg_dict: Dictionary = msg.to_api_dict()
+	for _msg in _messages:
+		var _msg_dict: Dictionary = _msg.to_api_dict()
 		
 		# --- 多模态图片支持 ---
 		# [修复] 仅非 Tool 类型的消息支持多模态 (OpenAI 限制 Tool 消息内容必须为 String)
-		if not msg.image_data.is_empty() and msg.role != "tool":
-			var content_array = []
+		if not _msg.image_data.is_empty() and _msg.role != "tool":
+			var _content_array: Array = []
 			
 			# 1. 如果有文本内容，添加为 text 类型块
-			if not msg.content.is_empty():
-				content_array.append({
+			if not _msg.content.is_empty():
+				_content_array.append({
 					"type": "text",
-					"text": msg.content
+					"text": _msg.content
 				})
 			
 			# 2. 添加图片块 (使用 Data URL 格式)
-			var base64_str = Marshalls.raw_to_base64(msg.image_data)
-			content_array.append({
+			var _base64_str: String = Marshalls.raw_to_base64(_msg.image_data)
+			_content_array.append({
 				"type": "image_url",
 				"image_url": {
-					"url": "data:%s;base64,%s" % [msg.image_mime, base64_str]
+					"url": "data:%s;base64,%s" % [_msg.image_mime, _base64_str]
 				}
 			})
 			
 			# 覆盖原有的 String content
-			msg_dict["content"] = content_array
+			_msg_dict["content"] = _content_array
 		
-		api_messages.append(msg_dict)
+		_api_messages.append(_msg_dict)
 	
-	var body: Dictionary = {
+	var _body: Dictionary = {
 		"model": _model_name,
-		"messages": api_messages,
+		"messages": _api_messages,
 		"temperature": _temperature,
 		"stream": _stream
 	}
 	
 	if not _tool_definitions.is_empty():
-		var tools_list: Array = []
-		for tool_def in _tool_definitions:
-			tools_list.append({
+		var _tools_list: Array = []
+		for _tool_def in _tool_definitions:
+			_tools_list.append({
 				"type": "function",
-				"function": tool_def
+				"function": _tool_def
 			})
-		body["tools"] = tools_list
-		body["tool_choice"] = "auto"
+		_body["tools"] = _tools_list
+		_body["tool_choice"] = "auto"
 	
 	if _stream:
-		body["stream_options"] = {"include_usage": true}
+		_body["stream_options"] = {"include_usage": true}
 	
-	return body
+	return _body
 
 
-
+## 解析模型列表响应
 func parse_model_list_response(_body_bytes: PackedByteArray) -> Array[String]:
-	var json = JSON.parse_string(_body_bytes.get_string_from_utf8())
-	var list: Array[String] = []
+	var _json: Variant = JSON.parse_string(_body_bytes.get_string_from_utf8())
+	var _list: Array[String] = []
 	
-	if json is Dictionary and json.has("data"):
-		for item in json.data:
-			if item.has("id"):
-				list.append(item.id)
+	if _json is Dictionary and _json.has("data"):
+		for _item in _json.data:
+			if _item.has("id"):
+				_list.append(_item.id)
 	
-	return list
+	return _list
 
 
+## 解析非流式响应 (完整 Body)
 func parse_non_stream_response(_body_bytes: PackedByteArray) -> Dictionary:
-	var json = JSON.parse_string(_body_bytes.get_string_from_utf8())
+	var _json: Variant = JSON.parse_string(_body_bytes.get_string_from_utf8())
 	
-	if json is Dictionary and json.has("choices") and not json.choices.is_empty():
-		var msg = json.choices[0].get("message", {})
+	if _json is Dictionary and _json.has("choices") and not _json.choices.is_empty():
+		var _msg: Dictionary = _json.choices[0].get("message", {})
 		return {
-			"content": msg.get("content", ""),
-			"tool_calls": msg.get("tool_calls", []),
-			"role": msg.get("role", "assistant")
+			"content": _msg.get("content", ""),
+			"tool_calls": _msg.get("tool_calls", []),
+			"role": _msg.get("role", "assistant")
 		}
 	
 	return {"error": "Unknown response format"}
 
 
-# [核心重构] 实现流式碎片拼装逻辑
+## 实现流式碎片拼装逻辑
+# 接收原始网络数据(_chunk_data)，直接修改目标消息对象(_target_msg)的数据层
 func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> Dictionary:
-	var ui_update = { "content_delta": "" }
+	var _ui_update: Dictionary = { "content_delta": "" }
 	
 	# 1. 提取 Usage
 	if _chunk_data.has("usage"):
-		ui_update["usage"] = _chunk_data["usage"]
+		_ui_update["usage"] = _chunk_data["usage"]
 	
 	if not _chunk_data.has("choices") or _chunk_data.choices.is_empty():
-		return ui_update
+		return _ui_update
 	
-	var delta = _chunk_data.choices[0].get("delta", {})
+	var _delta: Dictionary = _chunk_data.choices[0].get("delta", {})
 	
 	# 2. 提取文本 (Text)
-	if delta.has("content") and delta.content is String:
-		var text = delta.content
-		_target_msg.content += text
-		ui_update["content_delta"] = text
+	if _delta.has("content") and _delta.content is String:
+		var _text: String = _delta.content
+		_target_msg.content += _text
+		_ui_update["content_delta"] = _text
 	
 	# 3. 提取思考 (Reasoning - Kimi/DeepSeek)
 	# 独立解析 reasoning_content 字段
-	if delta.has("reasoning_content") and delta.reasoning_content is String:
-		var r_text = delta.reasoning_content
-		_target_msg.reasoning_content += r_text
+	if _delta.has("reasoning_content") and _delta.reasoning_content is String:
+		var _r_text: String = _delta.reasoning_content
+		_target_msg.reasoning_content += _r_text
 		# 使用专用字段通知 UI，避免混入正文
-		ui_update["reasoning_delta"] = r_text
+		_ui_update["reasoning_delta"] = _r_text
 	
 	# 4. 提取工具 (Tool Calls - 流式拼装)
 	# 增加对 delta.tool_calls 是否为 null 的检查
-	if delta.has("tool_calls") and delta.tool_calls is Array:
-		for tc in delta.tool_calls:
-			var index = int(tc.get("index", 0))
+	if _delta.has("tool_calls") and _delta.tool_calls is Array:
+		for _tc in _delta.tool_calls:
+			var _index: int = int(_tc.get("index", 0))
 			
 			# 自动扩容数组
-			while _target_msg.tool_calls.size() <= index:
+			while _target_msg.tool_calls.size() <= _index:
 				_target_msg.tool_calls.append({
 					"id": "",
 					"type": "function",
 					"function": { "name": "", "arguments": "" }
 				})
 			
-			var target_call = _target_msg.tool_calls[index]
+			var _target_call: Dictionary = _target_msg.tool_calls[_index]
 			
 			# 增量合并
-			if tc.has("id") and tc.id != null:
-				target_call["id"] = tc.id
+			if _tc.has("id") and _tc.id != null:
+				_target_call["id"] = _tc.id
 			
-			if tc.has("function"):
-				var f = tc.function
-				if f.has("name") and f.name != null:
-					target_call.function.name += f.name
-				if f.has("arguments") and f.arguments != null:
-					target_call.function.arguments += f.arguments # 确保此处累加的是有效的字符串
+			if _tc.has("function"):
+				var _f: Dictionary = _tc.function
+				if _f.has("name") and _f.name != null:
+					_target_call.function.name += _f.name
+				if _f.has("arguments") and _f.arguments != null:
+					_target_call.function.arguments += _f.arguments # 确保此处累加的是有效的字符串
 	
-	return ui_update
+	return _ui_update

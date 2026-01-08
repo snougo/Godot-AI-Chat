@@ -1,95 +1,102 @@
 @tool
-extends BaseLLMProvider
 class_name GeminiProvider
+extends BaseLLMProvider
 
+## Google Gemini API 的服务提供商实现。
 
+# --- Public Functions ---
+
+## 返回该 Provider 使用的流式解析协议
 func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.JSON_LIST
 
 
+## 获取 HTTP 请求头
 func get_request_headers(_api_key: String, _stream: bool) -> PackedStringArray:
 	# Gemini 推荐将 key 放在 header 中
 	return ["Content-Type: application/json", "x-goog-api-key: %s" % _api_key]
 
 
+## 获取请求的 URL
 func get_request_url(_base_url: String, _model_name: String, _api_key: String, _stream: bool) -> String:
 	if _model_name.is_empty():
 		return _base_url.path_join("v1beta/models")
 	
-	var action: String = "streamGenerateContent" if _stream else "generateContent"
-	var clean_model_name: String = _model_name.trim_prefix("models/")
-	var url: String = _base_url.path_join("v1beta/models").path_join(clean_model_name)
-	return "%s:%s" % [url, action]
+	var _action: String = "streamGenerateContent" if _stream else "generateContent"
+	var _clean_model_name: String = _model_name.trim_prefix("models/")
+	var _url: String = _base_url.path_join("v1beta/models").path_join(_clean_model_name)
+	return "%s:%s" % [_url, _action]
 
 
+## 构建请求体 (Body)
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
-	var gemini_contents: Array = []
-	var system_instruction: Dictionary = {}
+	var _gemini_contents: Array = []
+	var _system_instruction: Dictionary = {}
 	
 	# 1. 转换消息 (OpenAI Role -> Gemini Role)
-	for msg in _messages:
-		if msg.role == ChatMessage.ROLE_SYSTEM:
-			system_instruction = {"parts": [{"text": msg.content}]}
+	for _msg in _messages:
+		if _msg.role == ChatMessage.ROLE_SYSTEM:
+			_system_instruction = {"parts": [{"text": _msg.content}]}
 			continue
 		
-		var role := "user"
-		var parts := []
+		var _role: String = "user"
+		var _parts: Array = []
 		
-		if msg.role == ChatMessage.ROLE_ASSISTANT:
-			role = "model"
+		if _msg.role == ChatMessage.ROLE_ASSISTANT:
+			_role = "model"
 			
 			# 移除互斥逻辑，同时支持文本和工具
-			if not msg.content.is_empty():
-				parts.append({"text": msg.content})
+			if not _msg.content.is_empty():
+				_parts.append({"text": _msg.content})
 			
-			if not msg.tool_calls.is_empty():
-				for call in msg.tool_calls:
-					var func_def = call.get("function", {})
-					var args := JSON.parse_string(func_def.get("arguments", "{}"))
+			if not _msg.tool_calls.is_empty():
+				for _call in _msg.tool_calls:
+					var _func_def: Dictionary = _call.get("function", {})
+					var _args: Variant = JSON.parse_string(_func_def.get("arguments", "{}"))
 					
-					var part := {
+					var _part: Dictionary = {
 						"functionCall": {
-							"name": func_def.get("name", ""),
-							"args": args if args else {}
+							"name": _func_def.get("name", ""),
+							"args": _args if _args else {}
 						}
 					}
 					# 签名附着
-					if msg.gemini_thought_signature:
-						part["thoughtSignature"] = msg.gemini_thought_signature
+					if _msg.gemini_thought_signature:
+						_part["thoughtSignature"] = _msg.gemini_thought_signature
 					
-					parts.append(part)
+					_parts.append(_part)
 			
-			if parts.is_empty():
-				parts.append({"text": ""})
+			if _parts.is_empty():
+				_parts.append({"text": ""})
 		
-		elif msg.role == ChatMessage.ROLE_TOOL:
-			role = "function"
-			parts.append({
+		elif _msg.role == ChatMessage.ROLE_TOOL:
+			_role = "function"
+			_parts.append({
 				"functionResponse": {
-					"name": msg.name,
+					"name": _msg.name,
 					"response": {
-						"content": msg.content 
+						"content": _msg.content 
 					}
 				}
 			})
 		else:
 			# User 消息
-			parts.append({"text": msg.content})
+			_parts.append({"text": _msg.content})
 		
 		# --- 多模态图片支持 ---
-		if not msg.image_data.is_empty():
-			parts.append({
+		if not _msg.image_data.is_empty():
+			_parts.append({
 				"inline_data": {
-					"mime_type": msg.image_mime,
-					"data": Marshalls.raw_to_base64(msg.image_data)
+					"mime_type": _msg.image_mime,
+					"data": Marshalls.raw_to_base64(_msg.image_data)
 				}
 			})
 		
-		if not parts.is_empty():
-			gemini_contents.append({"role": role, "parts": parts})
+		if not _parts.is_empty():
+			_gemini_contents.append({"role": _role, "parts": _parts})
 	
-	var body = {
-		"contents": gemini_contents,
+	var _body: Dictionary = {
+		"contents": _gemini_contents,
 		"generationConfig": {"temperature": _temperature},
 		"safetySettings": [
 			{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
@@ -100,91 +107,94 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 	}
 	
 	if not _tool_definitions.is_empty():
-		body["tools"] = [{"functionDeclarations": _tool_definitions}]
+		_body["tools"] = [{"functionDeclarations": _tool_definitions}]
 	
-	if not system_instruction.is_empty():
-		body["systemInstruction"] = system_instruction
+	if not _system_instruction.is_empty():
+		_body["systemInstruction"] = _system_instruction
 	
-	return body
+	return _body
 
 
+## 解析模型列表响应
 func parse_model_list_response(_body_bytes: PackedByteArray) -> Array[String]:
-	var json = JSON.parse_string(_body_bytes.get_string_from_utf8())
-	var list: Array[String] = []
+	var _json: Variant = JSON.parse_string(_body_bytes.get_string_from_utf8())
+	var _list: Array[String] = []
 	
-	if json is Dictionary and json.has("models"):
-		for item in json.models:
-			if item.has("name"):
-				list.append(item.name.replace("models/", ""))
+	if _json is Dictionary and _json.has("models"):
+		for _item in _json.models:
+			if _item.has("name"):
+				_list.append(_item.name.replace("models/", ""))
 	
-	return list
+	return _list
 
 
+## 解析非流式响应 (完整 Body)
 func parse_non_stream_response(_body_bytes: PackedByteArray) -> Dictionary:
-	var json = JSON.parse_string(_body_bytes.get_string_from_utf8())
+	var _json: Variant = JSON.parse_string(_body_bytes.get_string_from_utf8())
 	
-	if json is Dictionary:
+	if _json is Dictionary:
 		# 复用流式解析逻辑
-		var dummy_msg := ChatMessage.new()
-		process_stream_chunk(dummy_msg, json)
+		var _dummy_msg: ChatMessage = ChatMessage.new()
+		process_stream_chunk(_dummy_msg, _json)
 		return {
-			"content": dummy_msg.content,
-			"tool_calls": dummy_msg.tool_calls,
+			"content": _dummy_msg.content,
+			"tool_calls": _dummy_msg.tool_calls,
 			"role": "assistant"
 		}
 	
 	return {"error": "Invalid Gemini response"}
 
 
-# [核心重构] 实现 Gemini 流式完整对象合并
+## 实现 Gemini 流式完整对象合并
+# 接收原始网络数据(_chunk_data)，直接修改目标消息对象(_target_msg)的数据层
 func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> Dictionary:
-	var ui_update := { "content_delta": "" }
+	var _ui_update: Dictionary = { "content_delta": "" }
 	
 	# 1. 提取 Usage
 	if _chunk_data.has("usageMetadata"):
-		var meta = _chunk_data.usageMetadata
-		ui_update["usage"] = {
-			"prompt_tokens": meta.get("promptTokenCount", 0),
-			"completion_tokens": meta.get("candidatesTokenCount", 0)
+		var _meta: Dictionary = _chunk_data.usageMetadata
+		_ui_update["usage"] = {
+			"prompt_tokens": _meta.get("promptTokenCount", 0),
+			"completion_tokens": _meta.get("candidatesTokenCount", 0)
 		}
 	
 	if not _chunk_data.has("candidates") or _chunk_data.candidates.is_empty():
-		return ui_update
+		return _ui_update
 	
-	var candidate = _chunk_data.candidates[0]
-	var parts = candidate.get("content", {}).get("parts", [])
+	var _candidate: Dictionary = _chunk_data.candidates[0]
+	var _parts: Array = _candidate.get("content", {}).get("parts", [])
 	
-	for part in parts:
+	for _part in _parts:
 		# 2. 文本
-		if part.has("text"):
-			var text = part.text
-			_target_msg.content += text
-			ui_update["content_delta"] += text
+		if _part.has("text"):
+			var _text: String = _part.text
+			_target_msg.content += _text
+			_ui_update["content_delta"] += _text
 		
 		# 3. 工具 (一次性完整)
-		if part.has("functionCall"):
-			var fc = part.functionCall
-			var tool_call := {
+		if _part.has("functionCall"):
+			var _fc: Dictionary = _part.functionCall
+			var _tool_call: Dictionary = {
 				"id": "call_" + str(Time.get_ticks_msec()), # 伪造 ID
 				"type": "function",
 				"function": {
-					"name": fc.get("name", ""),
-					"arguments": JSON.stringify(fc.get("args", {}))
+					"name": _fc.get("name", ""),
+					"arguments": JSON.stringify(_fc.get("args", {}))
 				}
 			}
 			
 			# 简单的查重 (防止 Gemini 流发多次相同的 call)
-			var exists := false
-			for ex in _target_msg.tool_calls:
-				if ex.function.name == tool_call.function.name and ex.function.arguments == tool_call.function.arguments:
-					exists = true
+			var _exists: bool = false
+			for _ex in _target_msg.tool_calls:
+				if _ex.function.name == _tool_call.function.name and _ex.function.arguments == _tool_call.function.arguments:
+					_exists = true
 					break
 			
-			if not exists:
-				_target_msg.tool_calls.append(tool_call)
+			if not _exists:
+				_target_msg.tool_calls.append(_tool_call)
 			
 			# 签名
-			if part.has("thoughtSignature"):
-				_target_msg.gemini_thought_signature = part.thoughtSignature
+			if _part.has("thoughtSignature"):
+				_target_msg.gemini_thought_signature = _part.thoughtSignature
 	
-	return ui_update
+	return _ui_update
