@@ -3,8 +3,8 @@ extends AiTool
 
 
 func _init() -> void:
-	name = "todo_list"
-	description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. Only supports res:// paths."
+	tool_name = "todo_list"
+	tool_description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. Only supports res:// paths."
 
 
 func get_parameters_schema() -> Dictionary:

@@ -10,8 +10,8 @@ const EXTENSION_MAP = {
 
 
 func _init():
-	name = "get_context"
-	description = "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, text-based files and image-meta info."
+	tool_name = "get_context"
+	tool_description = "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, text-based files and image-meta info."
 
 
 func get_parameters_schema() -> Dictionary:

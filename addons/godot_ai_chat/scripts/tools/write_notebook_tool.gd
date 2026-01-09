@@ -3,8 +3,8 @@ extends AiTool
 
 
 func _init() -> void:
-	name = "write_notebook"
-	description = "Useful for recording **analysis, thoughts, and documentation excerpts**. Only supports res:// paths."
+	tool_name = "write_notebook"
+	tool_description = "Useful for recording **analysis, thoughts, and documentation excerpts**. Only supports res:// paths."
 
 
 func get_parameters_schema() -> Dictionary:

@@ -82,7 +82,18 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 		
 		# 支持异步执行
 		var _result_dict: Dictionary = await _tool_instance.execute(_args, tool_executor.context_provider)
-		var _result_str: String = _result_dict.get("data", "")
+		#var _result_str: String = _result_dict.get("data", "")
+		
+		# 处理非字符串类型的data
+		var _data_val: Variant = _result_dict.get("data", "")
+		var _result_str: String = ""
+		
+		if _data_val is Dictionary or _data_val is Array:
+			# 如果是字典或数组，转为带缩进的 JSON 字符串，方便 AI 阅读
+			_result_str = JSON.stringify(_data_val, "\t")
+		else:
+			# 其他类型转为普通字符串
+			_result_str = str(_data_val)
 		
 		# 3. 创建 Tool Message
 		var _tool_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, _result_str, _tool_name)

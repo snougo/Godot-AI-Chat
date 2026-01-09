@@ -2,8 +2,8 @@ extends AiTool
 
 
 func _init():
-	name = "get_current_date"
-	description = "Get the current system date in YYYY-MM-DD format. Use this to compare with your knowledge cutoff date to decide if you need to search for newer documents."
+	tool_name = "get_current_date"
+	tool_description = "Get the current system date in YYYY-MM-DD format. Use this to compare with your knowledge cutoff date to decide if you need to search for newer documents."
 
 
 func get_parameters_schema() -> Dictionary:

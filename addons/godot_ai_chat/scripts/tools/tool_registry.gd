@@ -17,7 +17,13 @@ static func load_default_tools() -> void:
 		"search_documents_tool.gd",
 		"get_image_tool.gd",
 		"write_notebook_tool.gd",
-		#"create_script_tool.gd", #暂时禁用脚本创建工具
+		#"scene_tool/create_scene_tool.gd",
+		"get_current_editor_content_tool.gd",
+		"scene_tool/scene_get_node_info_tool.gd",
+		"scene_tool/scene_add_node_tool.gd",
+		"scene_tool/scene_set_property_tool.gd",
+		"script_tool/create_script_tool.gd",
+		"script_tool/fill_empty_script_tool.gd",
 		"todo_list_tool.gd",
 		"tavily_web_search_tool.gd"
 	]
@@ -50,13 +56,13 @@ static func load_default_tools() -> void:
 			
 			if is_valid_tool:
 				# 尝试获取名称，处理某些情况下 script.new() 后属性未初始化的问题
-				var t_name: String = tool_instance.name if "name" in tool_instance else ""
+				var t_name: String = tool_instance.tool_name if "tool_name" in tool_instance else ""
 				if t_name.is_empty() and tool_instance.has_method("get_tool_name"): # 备用方案
 					t_name = tool_instance.call("get_tool_name")
 				
 				# 如果还没名字，尝试直接 get 属性 (针对纯 GDScript 实例)
 				if t_name.is_empty():
-					t_name = tool_instance.get("name")
+					t_name = tool_instance.get("tool_name")
 				
 				if t_name and not t_name.is_empty():
 					register_tool(tool_instance)
@@ -66,7 +72,7 @@ static func load_default_tools() -> void:
 
 # 注册一个工具实例
 static func register_tool(_tool: Object) -> void:
-	var tool_name: String = _tool.name
+	var tool_name: String = _tool.tool_name
 	if tool_name == null or tool_name.is_empty():
 		push_error("[ToolRegistry] Cannot register tool with empty name.")
 		return
@@ -97,8 +103,8 @@ static func get_all_tool_definitions(_for_gemini: bool = false) -> Array:
 			schema = convert_schema_to_gemini(schema)
 			
 		definitions.append({
-			"name": tool.name,
-			"description": tool.description,
+			"name": tool.tool_name,
+			"description": tool.tool_description,
 			"parameters": schema
 		})
 	

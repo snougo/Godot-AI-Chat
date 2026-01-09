@@ -5,8 +5,8 @@ const LOCAL_DOC_PATH = "res://godot_doc"
 
 
 func _init():
-	name = "search_documents"
-	description = "Search for Godot documentation. Supports multiple keywords and fuzzy matching. Returns Built-in API structure (ClassDB) directly, and lists relevant local documentation files (paths only) from '%s' for further reading." % LOCAL_DOC_PATH
+	tool_name = "search_documents"
+	tool_description = "Search for Godot documentation. Supports multiple keywords and fuzzy matching. Returns Built-in API structure (ClassDB) directly, and lists relevant local documentation files (paths only) from '%s' for further reading." % LOCAL_DOC_PATH
 
 
 func get_parameters_schema() -> Dictionary:

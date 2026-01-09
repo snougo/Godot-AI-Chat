@@ -2,8 +2,8 @@
 extends AiTool
 
 func _init():
-	name = "tavily_web_search"
-	description = "Search the internet for real-time information using Tavily API. Use this when you need up-to-date knowledge."
+	tool_name = "tavily_web_search"
+	tool_description = "Search the internet for real-time information using Tavily API. Use this when you need up-to-date knowledge."
 
 func get_parameters_schema() -> Dictionary:
 	return {

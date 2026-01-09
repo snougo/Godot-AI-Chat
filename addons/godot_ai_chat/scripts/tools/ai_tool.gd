@@ -3,9 +3,9 @@ extends RefCounted
 class_name AiTool
 
 # 工具的唯一标识符
-var name: String = ""
+var tool_name: String = ""
 # 工具的描述，提供给 AI 阅读
-var description: String = ""
+var tool_description: String = ""
 
 
 # [必须重写] 返回工具参数的 JSON Schema (OpenAI 格式)
