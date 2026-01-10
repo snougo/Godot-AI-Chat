@@ -2,7 +2,7 @@
 extends AiTool
 class_name BaseSceneTool
 
-const PROPERTY_BLACKLIST = ["script", "type"]
+const PROPERTY_BLACKLIST = ["scale"]
 
 
 func apply_properties(node: Node, props: Dictionary) -> void:

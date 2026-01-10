@@ -38,6 +38,7 @@ enum UIState {
 # --- @onready Vars ---
 
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
+@onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTrunDisplay
 @onready var _current_token_cost: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenCost
 @onready var _user_input: TextEdit = $TabContainer/Chat/VBoxContainer/UserInput
 @onready var _new_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/NewChatButton
@@ -60,7 +61,7 @@ var current_state: UIState = UIState.IDLE
 ## 缓存的模型列表
 var model_list: Array[String] = []
 ## 用于判断是否为首次运行或初始化阶段
-var is_first_init: bool = true
+var is_first_init: bool = false
 
 # --- Built-in Functions ---
 
@@ -166,12 +167,12 @@ func update_model_list(_model_names: Array[String]) -> void:
 
 ## 当获取模型列表请求失败时调用
 func get_model_list_request_failed(_error_message: String) -> void:
-	if not is_first_init:
+	if is_first_init:
 		update_ui_state(UIState.ERROR, _error_message)
 	else:
 		_status_label.text = _error_message
 		_status_label.modulate = Color.RED
-		is_first_init = false
+		is_first_init = true
 
 
 ## 根据文件名同步下拉选择框
@@ -187,6 +188,18 @@ func select_archive_by_name(_archive_name: String) -> void:
 ## 清空用户输入框
 func clear_user_input() -> void:
 	_user_input.clear()
+
+
+## 更新对话轮数显示
+func update_turn_display(_current_turns: int, _max_turns: int) -> void:
+	if _chat_turn_display:
+		_chat_turn_display.text = "Turns: %d / %d" % [_current_turns, _max_turns]
+		
+		# 当达到或超过最大轮数时，改变颜色示警（例如橙色）
+		if _current_turns >= _max_turns:
+			_chat_turn_display.modulate = Color(1, 0.6, 0.2)
+		else:
+			_chat_turn_display.modulate = Color.WHITE
 
 
 ## 更新 UI 界面的 Token 数据

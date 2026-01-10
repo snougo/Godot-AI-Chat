@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "todo_list"
-	tool_description = "Access a TODO.md file. Use 'add' to append, 'complete' to mark done, and 'list' to read. Only supports res:// paths."
+	tool_description = "Writes tasks item and planned execution steps to the `TODO.md` file in the current workspace."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -18,11 +18,11 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"content": {
 				"type": "string",
-				"description": "The text content. Required for 'add' (new task text) and 'complete' (text to match existing task)."
+				"description": "The to-do item or execution step. **Add each to-do item or execution step separately**."
 			},
 			"path": {
 				"type": "string",
-				"description": "Required. The full path to the `TODO.md` file (e.g., 'res://current_workspace/TODO.md')."
+				"description": "Required. The full path to current workspace's `TODO.md` file."
 			}
 		},
 		"required": ["action", "path"]
@@ -88,6 +88,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 				
 				file.store_string(line)
 				file.close()
+				ToolBox.update_editor_filesystem(target_path)
 				ToolBox.refresh_editor_filesystem()
 				return {"success": true, "data": "Added to %s: %s" % [target_path, content]}
 			else:
@@ -115,6 +116,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 				var file_write: FileAccess = FileAccess.open(target_path, FileAccess.WRITE)
 				file_write.store_string("\n".join(new_lines))
 				file_write.close()
+				ToolBox.update_editor_filesystem(target_path)
 				ToolBox.refresh_editor_filesystem()
 				return {"success": true, "data": "Marked %d task(s) as completed in %s." % [updated_count, target_path]}
 			else:

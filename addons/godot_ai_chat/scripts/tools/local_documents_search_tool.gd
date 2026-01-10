@@ -5,8 +5,8 @@ const LOCAL_DOC_PATH = "res://godot_doc"
 
 
 func _init():
-	tool_name = "search_documents"
-	tool_description = "Search for Godot documentation. Supports multiple keywords and fuzzy matching. Returns Built-in API structure (ClassDB) directly, and lists relevant local documentation files (paths only) from '%s' for further reading." % LOCAL_DOC_PATH
+	tool_name = "local_documents_search"
+	tool_description = "Search for local Godot documentation."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -15,7 +15,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"keywords": {
 				"type": "string",
-				"description": "The keyword(s) to search for (e.g., 'Node Sprite2D', 'nav mesh')."
+				"description": "The keyword(s) to search for (e.g., 'Node Sprite2D', 'nav mesh'). Supports multiple keywords and fuzzy matching."
 			}
 		},
 		"required": ["keywords"]

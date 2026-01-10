@@ -1,9 +1,11 @@
 @tool
 extends AiTool
 
+
 func _init():
-	tool_name = "tavily_web_search"
-	tool_description = "Search the internet for real-time information using Tavily API. Use this when you need up-to-date knowledge."
+	tool_name = "web_search"
+	tool_description = "Search the internet for real-time information. Use this when you need more than loacl documents knowledge."
+
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -16,6 +18,7 @@ func get_parameters_schema() -> Dictionary:
 		},
 		"required": ["query"]
 	}
+
 
 func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
 	var query = _args.get("query", "")

@@ -15,6 +15,12 @@ bg_color = Color(0, 0.2535977, 0.58258927, 1)
 [sub_resource type="LabelSettings" id="LabelSettings_2kdn8"]
 font_size = 30
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_w6mml"]
+bg_color = Color(0.070537165, 0.13036937, 0.26785713, 1)
+
+[sub_resource type="LabelSettings" id="LabelSettings_qjs14"]
+font_size = 30
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cf2p2"]
 bg_color = Color(0.40740654, 0.15687086, 0.44705883, 1)
 
@@ -66,16 +72,27 @@ theme_override_constants/separation = 10
 [node name="StatusLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=2121040211]
 custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBoxFlat_a7m7s")
 text = "Ready"
 label_settings = SubResource("LabelSettings_2kdn8")
 vertical_alignment = 1
 autowrap_mode = 3
 
+[node name="ChatTrunDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("StyleBoxFlat_w6mml")
+text = "0/12"
+label_settings = SubResource("LabelSettings_qjs14")
+vertical_alignment = 1
+autowrap_mode = 3
+
 [node name="CurrentTokenCost" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_cf2p2")
-text = "Token Cost: 0"
+text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
 label_settings = SubResource("LabelSettings_yewlv")
 vertical_alignment = 1
 text_overrun_behavior = 1
@@ -112,7 +129,7 @@ text_overrun_behavior = 1
 selected = 0
 fit_to_longest_item = false
 item_count = 1
-popup/item_0/text = "chat_2026-01-01_23-52-42.tres"
+popup/item_0/text = "chat_2026-01-10_20-09-43.tres"
 popup/item_0/id = 0
 
 [node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=388608477]

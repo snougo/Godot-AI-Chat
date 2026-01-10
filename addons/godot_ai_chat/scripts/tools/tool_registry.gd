@@ -14,18 +14,20 @@ static func load_default_tools() -> void:
 	var tool_scripts: Array[String] = [
 		"get_context_tool.gd",
 		"get_current_date_tool.gd",
-		"search_documents_tool.gd",
+		"local_documents_search_tool.gd",
 		"get_image_tool.gd",
-		"write_notebook_tool.gd",
+		"notebook_tool.gd",
+		"scene_tool/open_scene_tool.gd",
+		"scene_tool/get_current_active_scene_tool.gd",
+		"scene_tool/get_node_property_tool.gd",
 		#"scene_tool/create_scene_tool.gd",
-		"get_current_editor_content_tool.gd",
-		"scene_tool/scene_get_node_info_tool.gd",
-		"scene_tool/scene_add_node_tool.gd",
-		"scene_tool/scene_set_property_tool.gd",
-		"script_tool/create_script_tool.gd",
+		"scene_tool/add_new_node_tool.gd",
+		"scene_tool/set_node_property_tool.gd",
+		"script_tool/get_current_active_script_tool.gd",
+		"script_tool/create_empty_script_tool.gd",
 		"script_tool/fill_empty_script_tool.gd",
 		"todo_list_tool.gd",
-		"tavily_web_search_tool.gd"
+		"web_search_tool.gd"
 	]
 	
 	print("[ToolRegistry] Loading tools...")

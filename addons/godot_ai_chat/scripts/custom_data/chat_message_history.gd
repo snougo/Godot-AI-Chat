@@ -49,43 +49,105 @@ func get_last_message() -> ChatMessage:
 	return messages.back()
 
 
+## 获取当前对话轮数
+## 逻辑：获取结构化分组，且只统计那些“已完成闭环”（包含模型回复）的轮次
+func get_turn_count() -> int:
+	var _turns: Array = _group_messages_into_turns()
+	var _valid_turns_count: int = 0
+	
+	for _turn in _turns:
+		# 检查该轮次是否包含 Assistant 或 Tool 消息
+		var _has_response: bool = false
+		for _msg in _turn:
+			if _msg.role == ChatMessage.ROLE_ASSISTANT or _msg.role == ChatMessage.ROLE_TOOL:
+				_has_response = true
+				break
+		
+		if _has_response:
+			_valid_turns_count += 1
+			
+	return _valid_turns_count
+
+
 ## 截断历史记录（用于 Context Window 管理）
 ## [param _max_turns]: 最大保留的对话轮数
 ## [param _system_prompt]: 可选的系统提示词
 ## [return]: 截断后的 ChatMessage 数组
 func get_truncated_messages(_max_turns: int, _system_prompt: String = "") -> Array[ChatMessage]:
-	var _conversation_turns: Array[Array] = []
+	# 1. 获取结构化的轮次列表
+	var _conversation_turns: Array = _group_messages_into_turns()
+	
+	# 2. 执行截断
+	var _truncated_turns: Array = _conversation_turns
+	if _conversation_turns.size() > _max_turns:
+		_truncated_turns = _conversation_turns.slice(_conversation_turns.size() - _max_turns)
+	
+	# 3. 扁平化组装结果
+	var _result: Array[ChatMessage] = []
+	
+	# 3.1 插入 System Prompt (总是放在最前)
+	if not _system_prompt.is_empty():
+		_result.append(ChatMessage.new(ChatMessage.ROLE_SYSTEM, _system_prompt))
+	
+	# 3.2 展开所有保留的轮次
+	for _turn in _truncated_turns:
+		_result.append_array(_turn)
+
+	# 4. [新增] 尾部安全清洗 (Sanitization)
+	# 目的：处理中断导致的脏数据，防止 API 报错 (400 Bad Request)。
+	# 逻辑：如果上下文以 "Assistant 发起工具调用" 结尾，但后面没有跟着 "Tool 结果"，
+	#       说明调用链中断了。这种 "悬空" 的 Assistant 消息必须移除，否则 API 会拒绝请求。
+	#       注意：如果以 "Tool" 结尾，是安全的（保留它以告知模型之前的操作结果）。
+	while not _result.is_empty():
+		var _last: ChatMessage = _result.back()
+		if _last.role == ChatMessage.ROLE_ASSISTANT and not _last.tool_calls.is_empty():
+			# 这是一个悬空的工具调用请求，移除它
+			_result.pop_back()
+			# 继续循环，以防前面还有连续的悬空请求（虽然罕见）
+		else:
+			# 遇到正常的文本回复、User 消息或 Tool 结果消息，停止清洗
+			break
+	
+	return _result
+
+# --- Private Functions ---
+
+## 核心逻辑：将扁平消息列表按“轮”进行分组
+## 规则 1: 一轮由 User 消息开始
+## 规则 2: 连续的 User 消息会被合并到同一轮（视为补充或重试），直到出现 Assistant/Tool 消息
+## 规则 3: 只有当一轮已经包含了 Assistant/Tool 消息后，新的 User 消息才会开启新的一轮
+## 返回类型：Array[Array[ChatMessage]]
+func _group_messages_into_turns() -> Array:
+	var _turns: Array = []
 	var _current_turn: Array[ChatMessage] = []
+	var _current_turn_has_response: bool = false
 	
 	for _msg in messages:
+		# System 消息独立于轮次之外处理
 		if _msg.role == ChatMessage.ROLE_SYSTEM: 
 			continue
 		
 		if _msg.role == ChatMessage.ROLE_USER:
-			if not _current_turn.is_empty():
-				_conversation_turns.append(_current_turn)
-			_current_turn = [_msg]
+			# 关键判读：如果当前轮次已经有了回复，说明上一轮对话已闭环，User 开启新的一轮
+			if _current_turn_has_response:
+				_turns.append(_current_turn)
+				_current_turn = []
+				_current_turn_has_response = false
+			
+			# 否则（当前轮次还没回复），这被视为连续的 User 输入（重试或补充），
+			# 继续追加到当前轮次，不视为新轮次。
+			_current_turn.append(_msg)
+			
 		else:
+			# Assistant 或 Tool 消息，归属于当前轮
+			# 如果没有 User 开头（_current_turn 为空），则丢弃（孤立回复）
 			if not _current_turn.is_empty():
 				_current_turn.append(_msg)
+				# 标记当前轮次已收到回复
+				_current_turn_has_response = true
 	
+	# 处理最后一轮
 	if not _current_turn.is_empty():
-		_conversation_turns.append(_current_turn)
+		_turns.append(_current_turn)
 	
-	# 截断
-	var _truncated_turns: Array[Array] = _conversation_turns
-	if _conversation_turns.size() > _max_turns:
-		_truncated_turns = _conversation_turns.slice(_conversation_turns.size() - _max_turns)
-	
-	# 组装结果
-	var _result: Array[ChatMessage] = []
-	
-	# 1. 插入 System Prompt
-	if not _system_prompt.is_empty():
-		_result.append(ChatMessage.new(ChatMessage.ROLE_SYSTEM, _system_prompt))
-	
-	# 2. 插入对话
-	for _turn in _truncated_turns:
-		_result.append_array(_turn)
-	
-	return _result
+	return _turns

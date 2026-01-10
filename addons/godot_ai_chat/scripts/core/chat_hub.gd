@@ -54,6 +54,7 @@ func _ready() -> void:
 	_chat_ui.reconnect_button_pressed.connect(_network_manager.get_model_list)
 	_chat_ui.load_chat_button_pressed.connect(_load_chat_history)
 	_chat_ui.settings_save_button_pressed.connect(_network_manager.get_model_list)
+	_chat_ui.settings_save_button_pressed.connect(_update_turn_info)
 	_chat_ui.save_as_markdown_button_pressed.connect(_export_markdown)
 	
 	# 模型与设置
@@ -140,6 +141,11 @@ func _create_new_chat_history() -> void:
 		
 		if not _new_history.changed.is_connected(_auto_save_history):
 			_new_history.changed.connect(_auto_save_history)
+		
+		if not _new_history.changed.is_connected(_update_turn_info):
+			_new_history.changed.connect(_update_turn_info)
+		
+		_update_turn_info() # 立即刷新一次
 
 
 ## 自动保存回调
@@ -172,8 +178,26 @@ func _load_chat_history(_filename: String) -> void:
 		
 		if not _chat_history.changed.is_connected(_auto_save_history):
 			_chat_history.changed.connect(_auto_save_history)
+		
+		if not _chat_history.changed.is_connected(_update_turn_info):
+			_chat_history.changed.connect(_update_turn_info)
+		
+		_update_turn_info() # 立即刷新一次
 	else:
 		_chat_ui.show_confirmation("Error: Invalid resource type.")
+
+
+## 更新 UI 上的轮数显示
+func _update_turn_info() -> void:
+	var _settings: PluginSettings = ToolBox.get_plugin_settings()
+	var _history: ChatMessageHistory = _current_chat_window.chat_history
+	
+	if _history and _settings:
+		var _count: int = _history.get_turn_count()
+		_chat_ui.update_turn_display(_count, _settings.max_chat_turns)
+	elif _settings:
+		_chat_ui.update_turn_display(0, _settings.max_chat_turns)
+
 
 # --- Signal Callbacks ---
 

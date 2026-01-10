@@ -3,8 +3,8 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "scene_add_node"
-	tool_description = "Add a new node or instantiate a scene as a child of an existing node in the current scene."
+	tool_name = "add_new_node"
+	tool_description = "Add a new node or a scene instance in the current open scene in Godot Editor."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -20,15 +20,18 @@ func get_parameters_schema() -> Dictionary:
 
 
 func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
-	if not Engine.is_editor_hint(): return {"success": false, "data": "Editor only."}
+	if not Engine.is_editor_hint():
+		return {"success": false, "data": "Editor only."}
 	
-	var root = EditorInterface.get_edited_scene_root()
-	if not root: return {"success": false, "data": "No active scene."}
+	var root := EditorInterface.get_edited_scene_root()
+	if not root:
+		return {"success": false, "data": "No active scene."}
 	
 	var parent_path = args.get("parent_path", ".")
 	var parent = root if parent_path == "." else root.get_node_or_null(parent_path)
 	
-	if not parent: return {"success": false, "data": "Parent node not found: %s" % parent_path}
+	if not parent:
+		return {"success": false, "data": "Parent node not found: %s" % parent_path}
 	
 	var node_name = args.get("node_name", "NewNode")
 	if parent.has_node(node_name):

@@ -6,7 +6,7 @@ const ALLOWED_EXTENSIONS = ["png", "jpg", "jpeg"]
 
 func _init() -> void:
 	tool_name = "get_image_content"
-	tool_description = "Reads an image file from the specified path and sends it to the model for analysis. Only supports res:// paths."
+	tool_description = "Reads an image file from the specified path."
 
 
 func get_parameters_schema() -> Dictionary:

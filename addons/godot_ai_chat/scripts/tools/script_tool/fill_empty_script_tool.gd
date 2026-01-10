@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "fill_empty_script"
-	tool_description = "Fills an existing EMPTY script file with code. MUST run 'create_script' first. Opens the file in the editor and sets the text to an 'unsaved' state."
+	tool_description = "Only for filling a new empty script file with code content."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -13,7 +13,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "The path to the target script (e.g., 'res://scripts/my_script.gd')."
+				"description": "The path to the empty script (e.g., 'res://scripts/my_script.gd')."
 			},
 			"code_content": {
 				"type": "string",
@@ -61,6 +61,7 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 			"data": "Error: The script is not empty in the editor. To prevent losing your unsaved changes, this tool will not proceed."
 		}
 			
+	
 	# 5. 写入内容
 	# 直接设置文本，触发脏标记(*)，但不保存
 	base_editor.text = content

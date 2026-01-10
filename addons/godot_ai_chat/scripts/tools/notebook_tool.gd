@@ -3,8 +3,8 @@ extends AiTool
 
 
 func _init() -> void:
-	tool_name = "write_notebook"
-	tool_description = "Useful for recording **analysis, thoughts, and documentation excerpts**. Only supports res:// paths."
+	tool_name = "notebook"
+	tool_description = "Records to-do items, task details, and document excerpts."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -53,7 +53,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 		var base_dir = target_path.get_base_dir()
 		if not DirAccess.dir_exists_absolute(base_dir):
 			return {"success": false, "data": "Error: Directory does not exist: " + base_dir}
-			
+		
 		var file: FileAccess = FileAccess.open(target_path, FileAccess.WRITE)
 		if file:
 			file.store_string("# AI Notebook\n")
@@ -91,6 +91,8 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 			
 			file.store_string(content)
 			file.close()
+			ToolBox.update_editor_filesystem(target_path)
+			ToolBox.refresh_editor_filesystem()
 			result_msg = "Content appended to notebook at " + target_path
 	
 	return {"success": true, "data": result_msg}

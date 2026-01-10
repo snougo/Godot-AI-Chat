@@ -94,6 +94,19 @@ static func print_structured_context(_title: String, _messages: Array, _context_
 	print("--- 报告结束 ---\n")
 
 
+## 检查文件是否已在 ScriptEditor 中打开
+static func is_file_open_in_script_editor(_path: String) -> bool:
+	var _script_editor: ScriptEditor = EditorInterface.get_script_editor()
+	if not _script_editor:
+		return false
+	
+	# 遍历打开的编辑器实例，检查元数据中的文件路径
+	for _editor in _script_editor.get_open_script_editors():
+		if _editor.has_meta("_edit_res_path") and _editor.get_meta("_edit_res_path") == _path:
+			return true
+	return false
+
+
 ## 更新指定文件的编辑器文件系统状态
 static func update_editor_filesystem(_path: String) -> void:
 	if Engine.is_editor_hint():

@@ -4,14 +4,14 @@ extends AiTool
 const EXTENSION_MAP = {
 	"scene_tree": ["tscn"],
 	"gdscript": ["gd", "gdshader"],
-	"text-based_file": ["txt", "md", "json", "xml", "yml", "yaml", "toml", "cfg", "ini", "log", "tres", "remap"],
+	"text-based_file": ["txt", "md", "json", "cfg", "tres"],
 	"image-meta": ["png", "jpg", "jpeg", "bmp", "tga", "exr"]
 }
 
 
 func _init():
 	tool_name = "get_context"
-	tool_description = "Retrieve context information from the Godot project. Use this to read folder structures, script content, scene trees, text-based files and image-meta info."
+	tool_description = "Retrieve context information in current workspace."
 
 
 func get_parameters_schema() -> Dictionary:

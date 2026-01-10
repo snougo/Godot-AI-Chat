@@ -6,8 +6,8 @@ const ALLOWED_EXTENSIONS = ["gd", "gdshader"]
 
 
 func _init() -> void:
-	tool_name = "create_script"
-	tool_description = "Create a new EMPTY `.gd` or `.gdshader` file. Fails if the file already exists. Only supports res:// paths."
+	tool_name = "create_empty_script"
+	tool_description = "Create a new empty `.gd` or `.gdshader` file."
 
 
 func get_parameters_schema() -> Dictionary:
