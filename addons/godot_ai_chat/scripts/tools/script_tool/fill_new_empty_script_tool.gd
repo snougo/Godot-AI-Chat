@@ -1,9 +1,17 @@
 @tool
 extends AiTool
 
+const PATH_BLACKLIST = [
+	"/.git/", 
+	"/.import/", 
+	"/.godot/",
+	"/android/", 
+	"/addons/"
+]
+
 
 func _init() -> void:
-	tool_name = "fill_empty_script"
+	tool_name = "fill_new_empty_script"
 	tool_description = "Only for filling a new empty script file with code content."
 
 
@@ -28,7 +36,15 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	var path = args.get("path", "")
 	var content = args.get("code_content", "")
 	
-	# 1. 基础检查：文件必须存在
+	# 黑名单路径检查
+	for blocked_pattern in PATH_BLACKLIST:
+		if blocked_pattern in path:
+			return {
+				"success": false, 
+				"data": "Error: The path contains a blacklisted pattern '%s'. Modifying scripts in this location is not allowed." % blocked_pattern
+			}
+	
+	# 基础检查：文件必须存在
 	if not FileAccess.file_exists(path):
 		return {"success": false, "data": "Error: File not found: " + path + ". Please use 'create_script' tool first."}
 	
@@ -38,11 +54,11 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	
 	var script = res as Script
 	
-	# 2. 确保在编辑器中打开并激活
+	# 确保在编辑器中打开并激活
 	# 这一步至关重要，它确保我们即将操作的是正确的编辑器 tab
 	EditorInterface.edit_resource(script)
 	
-	# 3. 获取编辑器控件
+	# 获取编辑器控件
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
 	var current_editor: ScriptEditorBase = script_editor.get_current_editor() # 返回 ScriptEditorBase
 	
@@ -53,7 +69,7 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	if not base_editor:
 		return {"success": false, "data": "Error: Could not access text editor control."}
 	
-	# 4. 安全检查：检查【编辑器内的实时内容】是否为空
+	# 安全检查：检查【编辑器内的实时内容】是否为空
 	# 优先检查编辑器状态而不是磁盘状态 (script.source_code)，防止覆盖用户已输入但未保存的代码
 	if base_editor.text.strip_edges().length() > 0:
 		return {
@@ -62,7 +78,7 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 		}
 			
 	
-	# 5. 写入内容
+	# 写入内容
 	# 直接设置文本，触发脏标记(*)，但不保存
 	base_editor.text = content
 	

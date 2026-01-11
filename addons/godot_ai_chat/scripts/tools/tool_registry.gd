@@ -20,12 +20,12 @@ static func load_default_tools() -> void:
 		"scene_tool/open_scene_tool.gd",
 		"scene_tool/get_current_active_scene_tool.gd",
 		"scene_tool/get_node_property_tool.gd",
-		#"scene_tool/create_scene_tool.gd",
+		"scene_tool/create_new_scene_tool.gd",
 		"scene_tool/add_new_node_tool.gd",
 		"scene_tool/set_node_property_tool.gd",
 		"script_tool/get_current_active_script_tool.gd",
-		"script_tool/create_empty_script_tool.gd",
-		"script_tool/fill_empty_script_tool.gd",
+		"script_tool/create_new_empty_script_tool.gd",
+		"script_tool/fill_new_empty_script_tool.gd",
 		"todo_list_tool.gd",
 		"web_search_tool.gd"
 	]

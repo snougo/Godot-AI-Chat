@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "notebook"
-	tool_description = "Records to-do items, task details, and document excerpts."
+	tool_description = "Records task details, and document excerpts."
 
 
 func get_parameters_schema() -> Dictionary:

@@ -13,7 +13,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"parent_path": { "type": "string", "description": "Path to the parent node. Use '.' for root." },
 			"node_name": { "type": "string", "description": "Name for the new node." },
-			"node_type": { "type": "string", "description": "Godot ClassName (e.g. 'Node3D') OR a 'res://' path to a .tscn file." }
+			"node_type": { "type": "string", "description": "Godot ClassName (e.g. 'Node3D') OR a 'res://' path to a .tscn file." },
+			"properties": { 
+				"type": "object", 
+				"description": "Optional dictionary of properties to set (e.g. {'position': [10, 0, 0], 'visible': false})." 
+			}
 		},
 		"required": ["parent_path", "node_name", "node_type"]
 	}
@@ -60,6 +64,11 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		new_node.name = node_name
 		parent.add_child(new_node)
 		new_node.owner = root # 确保保存
+		
+		# 应用属性
+		var properties = args.get("properties", {})
+		if properties is Dictionary and not properties.is_empty():
+			apply_properties(new_node, properties)
 		
 		# 标记未保存
 		var undo_redo = EditorInterface.get_editor_undo_redo()

@@ -3,7 +3,7 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "get_current_scene_node_property"
+	tool_name = "get_node_property"
 	tool_description = "Retrieves the class, children, and editable properties of a node in the currently active scene (or a specified .tscn file). Returns values formatted for easy re-use with 'set_node_property'."
 
 
@@ -70,7 +70,7 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 		if p.usage & PROPERTY_USAGE_EDITOR:
 			var raw_val = node.get(p.name)
 			info["properties"][p.name] = {
-				"type": _get_type_name(p.type),
+				"type": get_type_name(p.type),
 				"value": _serialize_value(raw_val)
 			}
 	
@@ -103,21 +103,3 @@ func _serialize_value(val: Variant) -> Variant:
 			return "<Object: %s>" % val.get_class()
 		_:
 			return val # Return basic types (int, float, bool, string, array, dict) as is
-
-
-func _get_type_name(type_int: int) -> String:
-	match type_int:
-		TYPE_BOOL: return "bool"
-		TYPE_INT: return "int"
-		TYPE_FLOAT: return "float"
-		TYPE_STRING: return "String"
-		TYPE_VECTOR2: return "Vector2"
-		TYPE_VECTOR2I: return "Vector2i"
-		TYPE_RECT2: return "Rect2"
-		TYPE_VECTOR3: return "Vector3"
-		TYPE_VECTOR3I: return "Vector3i"
-		TYPE_COLOR: return "Color"
-		TYPE_OBJECT: return "Resource/Object"
-		TYPE_ARRAY: return "Array"
-		TYPE_DICTIONARY: return "Dictionary"
-		_: return "Variant"

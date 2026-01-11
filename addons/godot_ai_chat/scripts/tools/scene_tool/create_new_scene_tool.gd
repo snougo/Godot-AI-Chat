@@ -1,9 +1,18 @@
 @tool
 extends BaseSceneTool
 
+# 路径黑名单
+const PATH_BLACKLIST = [
+	"/.git/", 
+	"/.import/", 
+	"/.godot/",
+	"/android/", 
+	"/addons/"
+]
+
 
 func _init() -> void:
-	tool_name = "create_scene"
+	tool_name = "create_new_scene"
 	tool_description = "Safely create a `.tscn` scene file. Supports built-in classes and .tscn instantiation."
 
 
@@ -28,6 +37,11 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	# 路径和文件格式检查
 	if not scene_path.begins_with("res://") or not scene_path.ends_with(".tscn"):
 		return {"success": false, "data": "Invalid scene_path. Must start with 'res://' and end with '.tscn'."}
+	
+	# 黑名单路径检查
+	for blocked_path in PATH_BLACKLIST:
+		if scene_path.contains(blocked_path):
+			return {"success": false, "data": "Security Error: Saving to restricted directory '%s' is not allowed." % blocked_path}
 	
 	# 同名文件检查
 	if FileAccess.file_exists(scene_path):
@@ -79,9 +93,8 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		if not json_props_str.is_empty():
 			var json := JSON.new()
 			if json.parse(json_props_str) == OK and json.data is Dictionary:
-				for key in json.data:
-					if key in PROPERTY_BLACKLIST: continue
-					new_node.set(key, convert_value(new_node, key, json.data[key]))
+				# 使用 BaseSceneTool 的批量应用方法，它会自动处理类型转换
+				apply_properties(new_node, json.data)
 		
 		if node_stack.is_empty():
 			root_node = new_node
@@ -106,19 +119,17 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		DirAccess.make_dir_recursive_absolute(scene_path.get_base_dir())
 	
 	var err = ResourceSaver.save(packed_scene, scene_path)
-	# 无论保存成功与否，都要清理内存中临时的节点
-	# 注意：PackedScene.pack(root_node) 并不会释放 root_node，它只是把数据复制进去了。
-	# 所以我们需要手动释放 root_node。
 	if is_instance_valid(root_node):
 		root_node.free()
 	
 	if err == OK:
-		# 成功分支
 		if Engine.is_editor_hint():
-			EditorInterface.get_resource_filesystem().scan()
+			# 使用 update_file 强制更新该文件的元数据，解决 UID 识别错误
+			EditorInterface.get_resource_filesystem().update_file(scene_path)
+			# 保留 scan 以确保可能的新建目录被识别
+			#EditorInterface.get_resource_filesystem().scan()
 		return {"success": true, "data": "Scene created at %s" % scene_path}
 	else:
-		# 失败分支
 		return {"success": false, "data": "Save Failed: %d" % err}
 
 
