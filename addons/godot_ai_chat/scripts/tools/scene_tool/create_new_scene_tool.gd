@@ -1,14 +1,8 @@
 @tool
 extends BaseSceneTool
 
-# 路径黑名单
-const PATH_BLACKLIST = [
-	"/.git/", 
-	"/.import/", 
-	"/.godot/",
-	"/android/", 
-	"/addons/"
-]
+# 定义允许的扩展名白名单
+const ALLOWED_EXTENSIONS = ["tscn"]
 
 
 func _init() -> void:
@@ -20,7 +14,7 @@ func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
-			"scene_path": { "type": "string", "description": "The full 'res://' path where the .tscn file should be saved." },
+			"scene_path": { "type": "string", "description": "The full path where the scene file should be saved." },
 			"tree_structure": {
 				"type": "string",
 				"description": "Markdown-Header style tree. Use '#' count for hierarchy depth.\nFormat: # NodeName (ClassName_OR_Path) {json}\nExample:\n# Main (Node3D)\n## Player (res://player.tscn) {\"position\": [10, 0, 0]}\n### Camera (Camera3D)\n## Floor (StaticBody3D)"
@@ -34,14 +28,17 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	var scene_path: String = args.get("scene_path", "")
 	var tree_text: String = args.get("tree_structure", "")
 	
-	# 路径和文件格式检查
-	if not scene_path.begins_with("res://") or not scene_path.ends_with(".tscn"):
-		return {"success": false, "data": "Invalid scene_path. Must start with 'res://' and end with '.tscn'."}
-	
-	# 黑名单路径检查
-	for blocked_path in PATH_BLACKLIST:
-		if scene_path.contains(blocked_path):
-			return {"success": false, "data": "Security Error: Saving to restricted directory '%s' is not allowed." % blocked_path}
+	# 调用AiTool基类方法进行安全检查
+	# 如果通过路径安全检查，则返回一个空字符串
+	# 如果安全检查失败，则返回对应的错误信息
+	var security_error = validate_path_safety(scene_path)
+	if not security_error.is_empty():
+		return {"success": false, "data": security_error}
+
+	# 格式白名单检查逻辑
+	var extension = scene_path.get_extension().to_lower()
+	if extension not in ALLOWED_EXTENSIONS:
+		return {"success": false, "data": "Invalid scene_path extension. Allowed: %s" % ", ".join(ALLOWED_EXTENSIONS)}
 	
 	# 同名文件检查
 	if FileAccess.file_exists(scene_path):
@@ -93,7 +90,6 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		if not json_props_str.is_empty():
 			var json := JSON.new()
 			if json.parse(json_props_str) == OK and json.data is Dictionary:
-				# 使用 BaseSceneTool 的批量应用方法，它会自动处理类型转换
 				apply_properties(new_node, json.data)
 		
 		if node_stack.is_empty():
@@ -124,10 +120,7 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	
 	if err == OK:
 		if Engine.is_editor_hint():
-			# 使用 update_file 强制更新该文件的元数据，解决 UID 识别错误
 			EditorInterface.get_resource_filesystem().update_file(scene_path)
-			# 保留 scan 以确保可能的新建目录被识别
-			#EditorInterface.get_resource_filesystem().scan()
 		return {"success": true, "data": "Scene created at %s" % scene_path}
 	else:
 		return {"success": false, "data": "Save Failed: %d" % err}

@@ -10,8 +10,8 @@ const BLACKLIST_PATHS: Array[String] = [
 
 
 func _init():
-	tool_name = "open_scene"
-	tool_description = "Open a scene file in the Godot Editor."
+	tool_name = "open_or_switch_scene"
+	tool_description = "Open or Switch a scene file in the Godot Editor."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -20,7 +20,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "The full path to the scene file (e.g., res://scenes/main.tscn)."
+				"description": "The full path to the scene file (e.g., res://path/main.tscn)."
 			}
 		},
 		"required": ["path"]

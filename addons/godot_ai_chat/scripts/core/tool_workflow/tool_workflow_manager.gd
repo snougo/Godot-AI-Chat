@@ -75,33 +75,39 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 			_args = {}
 		
 		# 2. 执行工具
-		var _tool_instance: AiTool = ToolRegistry.get_tool(_tool_name)
-		if not _tool_instance:
-			push_error("[Workflow] Tool not found: " + _tool_name)
-			continue
-		
-		# 支持异步执行
-		var _result_dict: Dictionary = await _tool_instance.execute(_args, tool_executor.context_provider)
-		#var _result_str: String = _result_dict.get("data", "")
-		
-		# 处理非字符串类型的data
-		var _data_val: Variant = _result_dict.get("data", "")
 		var _result_str: String = ""
+		var _attachments: Dictionary = {}
 		
-		if _data_val is Dictionary or _data_val is Array:
-			# 如果是字典或数组，转为带缩进的 JSON 字符串，方便 AI 阅读
-			_result_str = JSON.stringify(_data_val, "\t")
+		var _tool_instance: AiTool = ToolRegistry.get_tool(_tool_name)
+		
+		if not _tool_instance:
+			# 工具不存在时，不跳过，而是返回错误信息给 LLM，保证对话链完整
+			_result_str = "[SYSTEM ERROR] Tool '%s' not found. Execution failed." % _tool_name
+			push_error("[Workflow] " + _result_str)
 		else:
-			# 其他类型转为普通字符串
-			_result_str = str(_data_val)
+			# 支持异步执行
+			var _result_dict: Dictionary = await _tool_instance.execute(_args, tool_executor.context_provider)
+			
+			# 处理非字符串类型的data
+			var _data_val: Variant = _result_dict.get("data", "")
+			
+			if _data_val is Dictionary or _data_val is Array:
+				# 如果是字典或数组，转为带缩进的 JSON 字符串，方便 AI 阅读
+				_result_str = JSON.stringify(_data_val, "\t")
+			else:
+				# 其他类型转为普通字符串
+				_result_str = str(_data_val)
+			
+			if _result_dict.has("attachments"):
+				_attachments = _result_dict.attachments
 		
 		# 3. 创建 Tool Message
 		var _tool_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, _result_str, _tool_name)
 		_tool_msg.tool_call_id = _call_id
 		
 		# 4. 处理图片附件
-		if _result_dict.has("attachments"):
-			var _att: Dictionary = _result_dict.attachments
+		if not _attachments.is_empty():
+			var _att: Dictionary = _attachments
 			if _att.has("image_data") and not _att.image_data.is_empty():
 				var _is_gemini: bool = false
 				if network_manager.current_provider:
@@ -147,13 +153,38 @@ func _request_next_step() -> void:
 	network_manager.start_chat_stream(_context)
 
 
-## 清洗 JSON 字符串，去除尾部垃圾数据
+## 清洗 JSON 字符串，去除 Markdown 包裹及尾部垃圾数据
 func _sanitize_json_arguments(_json_str: String) -> String:
 	_json_str = _json_str.strip_edges()
 	
+	# --- 1. 尝试剥离 Markdown 代码块 ---
+	# 许多模型喜欢用 ```json ... ``` 包裹参数
+	if _json_str.begins_with("```"):
+		var _newline_index: int = _json_str.find("\n")
+		if _newline_index != -1:
+			# 提取从第一行换行符之后的内容
+			var _content: String = _json_str.substr(_newline_index + 1)
+			
+			# 去除尾部的空白和 ``` 标记
+			_content = _content.strip_edges()
+			if _content.ends_with("```"):
+				_content = _content.substr(0, _content.length() - 3)
+			
+			# 如果剥离后的内容能解析成功，直接返回
+			_content = _content.strip_edges()
+			if JSON.parse_string(_content) != null:
+				return _content
+			
+			# 如果剥离后解析失败（比如内部还有截断），则让它继续走下面的截断修复逻辑，
+			# 但使用已经剥离了外壳的 _content 作为基础
+			_json_str = _content
+	
+	# --- 2. 尝试直接解析 ---
 	if JSON.parse_string(_json_str) != null:
 		return _json_str
 	
+	# --- 3. 截断修复逻辑 ---
+	# 处理因 token 限制导致的 JSON 截断问题
 	var _end_idx: int = _json_str.rfind("}")
 	while _end_idx != -1:
 		var _candidate: String = _json_str.substr(0, _end_idx + 1)
@@ -161,7 +192,9 @@ func _sanitize_json_arguments(_json_str: String) -> String:
 			return _candidate
 		_end_idx = _json_str.rfind("}", _end_idx - 1)
 	
+	# 如果所有尝试都失败，返回空 JSON 对象防止崩溃
 	return "{}"
+
 
 # --- Signal Callbacks ---
 

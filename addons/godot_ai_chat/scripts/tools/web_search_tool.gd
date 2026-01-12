@@ -4,7 +4,7 @@ extends AiTool
 
 func _init():
 	tool_name = "web_search"
-	tool_description = "Search the internet for real-time information. Use this when you need more than loacl documents knowledge."
+	tool_description = "Search the internet for more information. Use this when you need more than API documents knowledge."
 
 
 func get_parameters_schema() -> Dictionary:

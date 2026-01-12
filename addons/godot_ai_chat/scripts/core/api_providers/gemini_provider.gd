@@ -175,7 +175,7 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 		if _part.has("functionCall"):
 			var _fc: Dictionary = _part.functionCall
 			var _tool_call: Dictionary = {
-				"id": "call_" + str(Time.get_ticks_msec()), # 伪造 ID
+				"id": "call_" + str(Time.get_ticks_msec()), # 生成唯一 ID
 				"type": "function",
 				"function": {
 					"name": _fc.get("name", ""),
@@ -183,15 +183,8 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 				}
 			}
 			
-			# 简单的查重 (防止 Gemini 流发多次相同的 call)
-			var _exists: bool = false
-			for _ex in _target_msg.tool_calls:
-				if _ex.function.name == _tool_call.function.name and _ex.function.arguments == _tool_call.function.arguments:
-					_exists = true
-					break
-			
-			if not _exists:
-				_target_msg.tool_calls.append(_tool_call)
+			# 移除所有去重逻辑，直接信任并添加模型返回的调用
+			_target_msg.tool_calls.append(_tool_call)
 			
 			# 签名
 			if _part.has("thoughtSignature"):

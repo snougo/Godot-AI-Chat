@@ -14,10 +14,11 @@ static func load_default_tools() -> void:
 	var tool_scripts: Array[String] = [
 		"get_context_tool.gd",
 		"get_current_date_tool.gd",
-		"local_documents_search_tool.gd",
+		"api_documents_search_tool.gd",
 		"get_image_tool.gd",
 		"notebook_tool.gd",
-		"scene_tool/open_scene_tool.gd",
+		"create_folder_tool.gd",
+		"scene_tool/open_or_switch_scene_tool.gd",
 		"scene_tool/get_current_active_scene_tool.gd",
 		"scene_tool/get_node_property_tool.gd",
 		"scene_tool/create_new_scene_tool.gd",
@@ -26,6 +27,7 @@ static func load_default_tools() -> void:
 		"script_tool/get_current_active_script_tool.gd",
 		"script_tool/create_new_empty_script_tool.gd",
 		"script_tool/fill_new_empty_script_tool.gd",
+		"script_tool/replace_script_code_tool.gd",
 		"todo_list_tool.gd",
 		"web_search_tool.gd"
 	]

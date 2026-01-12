@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "notebook"
-	tool_description = "Records task details, and document excerpts."
+	tool_description = "Record plain-text task details or temporary document excerpts."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -18,12 +18,12 @@ func get_parameters_schema() -> Dictionary:
 			"mode": {
 				"type": "string",
 				"enum": ["append", "read"],
-				"description": "The operation mode. 'append': add new context to end (default); 'read': read `notebook.md` content.",
+				"description": "The operation mode. 'append': add new context to end (default); 'read': read `Notebook.md` content.",
 				"default": "append"
 			},
 			"path": {
 				"type": "string",
-				"description": "Required. The full path to the notebook file (e.g. 'res://current workspace path/notebook.md')."
+				"description": "Required. The full path to the current workspace `Notebook.md` file (e.g. 'res://current_workspace_path/Notebook.md')."
 			}
 		},
 		"required": ["mode", "path"]
@@ -37,7 +37,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 	
 	# 1. 基础参数检查
 	if target_path.is_empty():
-		return {"success": false, "data": "Error: Path is required. Please specify the notebook file path (e.g., res://workspace/notebook.md)."}
+		return {"success": false, "data": "Error: Path is required. Please specify the notebook file path (e.g., res://current_workspace_path/Notebook.md)."}
 	
 	# 2. 安全性检查
 	if not target_path.begins_with("res://"):
@@ -58,7 +58,8 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 		if file:
 			file.store_string("# AI Notebook\n")
 			file.close()
-			ToolBox.refresh_editor_filesystem() # 刷新文件系统以便编辑器能看到新文件
+			ToolBox.update_editor_filesystem(target_path)
+			ToolBox.refresh_editor_filesystem()
 		else:
 			return {"success": false, "data": "Failed to create notebook at: " + target_path + " Error: " + str(FileAccess.get_open_error())}
 	
