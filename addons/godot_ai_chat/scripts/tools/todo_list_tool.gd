@@ -59,7 +59,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 			if file:
 				file.store_string("# Project TODOs\n")
 				file.close()
-				ToolBox.update_editor_filesystem(target_path)
+				#ToolBox.update_editor_filesystem(target_path)
 				ToolBox.refresh_editor_filesystem()
 				
 				# 如果是 list 操作，创建完直接返回空列表提示
@@ -90,7 +90,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 				file.store_string(line)
 				file.close()
 				ToolBox.update_editor_filesystem(target_path)
-				ToolBox.refresh_editor_filesystem()
+				#ToolBox.refresh_editor_filesystem()
 				return {"success": true, "data": "Added to %s: %s" % [target_path, content]}
 			else:
 				return {"success": false, "data": "Failed to open file for writing: " + target_path}
@@ -118,7 +118,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 				file_write.store_string("\n".join(new_lines))
 				file_write.close()
 				ToolBox.update_editor_filesystem(target_path)
-				ToolBox.refresh_editor_filesystem()
+				#ToolBox.refresh_editor_filesystem()
 				return {"success": true, "data": "Marked %d task(s) as completed in %s." % [updated_count, target_path]}
 			else:
 				return {"success": false, "data": "No open task found containing '%s' in %s." % [content, target_path]}

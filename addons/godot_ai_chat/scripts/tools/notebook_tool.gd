@@ -58,7 +58,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 		if file:
 			file.store_string("# AI Notebook\n")
 			file.close()
-			ToolBox.update_editor_filesystem(target_path)
+			#ToolBox.update_editor_filesystem(target_path)
 			ToolBox.refresh_editor_filesystem()
 		else:
 			return {"success": false, "data": "Failed to create notebook at: " + target_path + " Error: " + str(FileAccess.get_open_error())}
@@ -93,7 +93,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 			file.store_string(content)
 			file.close()
 			ToolBox.update_editor_filesystem(target_path)
-			ToolBox.refresh_editor_filesystem()
+			#ToolBox.refresh_editor_filesystem()
 			result_msg = "Content appended to notebook at " + target_path
 	
 	return {"success": true, "data": result_msg}

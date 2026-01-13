@@ -15,7 +15,15 @@ var context_provider: ContextProvider = ContextProvider.new()
 ## [param _execution_data]: 包含工具名和参数的字典 { "tool_name": String, "arguments": Dictionary }
 func execute_tool(_execution_data: Dictionary) -> String:
 	var _tool_name: String = _execution_data.get("tool_name", "")
-	var _args: Dictionary = _execution_data.get("arguments", {})
+	var _raw_args: Dictionary = _execution_data.get("arguments", {})
+	
+	# 修复：容错处理，确保 _args 始终为字典
+	var _args: Dictionary = {}
+	if _raw_args is Dictionary:
+		_args = _raw_args
+	else:
+		# 如果模型传入了字符串或其他垃圾数据，视为无参数
+		_args = {}
 	
 	if _tool_name.is_empty():
 		return "[SYSTEM ERROR] Tool name missing in execution data."

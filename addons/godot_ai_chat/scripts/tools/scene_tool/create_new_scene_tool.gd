@@ -25,30 +25,35 @@ func get_parameters_schema() -> Dictionary:
 
 
 func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
-	var scene_path: String = args.get("scene_path", "")
+	var new_scene_path: String = args.get("scene_path", "")
 	var tree_text: String = args.get("tree_structure", "")
 	
 	# 调用AiTool基类方法进行安全检查
 	# 如果通过路径安全检查，则返回一个空字符串
 	# 如果安全检查失败，则返回对应的错误信息
-	var security_error = validate_path_safety(scene_path)
+	var security_error = validate_path_safety(new_scene_path)
 	if not security_error.is_empty():
 		return {"success": false, "data": security_error}
 
 	# 格式白名单检查逻辑
-	var extension = scene_path.get_extension().to_lower()
+	var extension = new_scene_path.get_extension().to_lower()
 	if extension not in ALLOWED_EXTENSIONS:
 		return {"success": false, "data": "Invalid scene_path extension. Allowed: %s" % ", ".join(ALLOWED_EXTENSIONS)}
 	
 	# 同名文件检查
-	if FileAccess.file_exists(scene_path):
-		return {"success": false, "data": "File already exists: %s" % scene_path}
+	if FileAccess.file_exists(new_scene_path):
+		return {"success": false, "data": "File already exists: %s" % new_scene_path}
 	
 	var root_node: Node = null
 	var node_stack: Array = [] 
 	var lines: PackedStringArray = tree_text.split("\n")
 	var regex := RegEx.new()
-	regex.compile("^([a-zA-Z0-9_]+)\\s*\\(([^)]+)\\)\\s*(?:(\\{.*\\}))?$")
+	#regex.compile("^([a-zA-Z0-9_]+)\\s*\\(([^)]+)\\)\\s*(?:(\\{.*\\}))?$")
+	
+	# 修复后正则：
+	# 1. 节点名允许除 '(' 以外的任意字符
+	# 2. 类型定义部分允许更宽泛的字符 (.+)
+	regex.compile("^([^\\(]+)\\s*\\((.+)\\)\\s*(?:(\\{.*\\}))?$")
 	
 	for line in lines:
 		var stripped_line: String = line.strip_edges()
@@ -66,9 +71,9 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 			_cleanup_nodes(root_node)
 			return {"success": false, "data": "Parse error: '%s'" % line}
 		
-		var node_name: String = match_result.get_string(1)
-		var type_str: String = match_result.get_string(2)
-		var json_props_str: String = match_result.get_string(3)
+		var node_name: String = match_result.get_string(1).strip_edges()
+		var type_str: String = match_result.get_string(2).strip_edges()
+		var json_props_str: String = match_result.get_string(3).strip_edges()
 		
 		var new_node: Node = null
 		if type_str.begins_with("res://"):
@@ -111,17 +116,20 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	var packed_scene = PackedScene.new()
 	packed_scene.pack(root_node)
 	
-	if not DirAccess.dir_exists_absolute(scene_path.get_base_dir()):
-		DirAccess.make_dir_recursive_absolute(scene_path.get_base_dir())
+	var base_dir: String = new_scene_path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(base_dir):
+		if is_instance_valid(root_node):
+			root_node.free()
+		return {"success": false, "data": "Directory not found: %s. Please use 'create_folder' tool first." % base_dir}
 	
-	var err = ResourceSaver.save(packed_scene, scene_path)
+	var err = ResourceSaver.save(packed_scene, new_scene_path)
+	
 	if is_instance_valid(root_node):
 		root_node.free()
 	
 	if err == OK:
-		if Engine.is_editor_hint():
-			EditorInterface.get_resource_filesystem().update_file(scene_path)
-		return {"success": true, "data": "Scene created at %s" % scene_path}
+		ToolBox.update_editor_filesystem(new_scene_path)
+		return {"success": true, "data": "Scene created at %s" % new_scene_path}
 	else:
 		return {"success": false, "data": "Save Failed: %d" % err}
 

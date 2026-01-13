@@ -3,7 +3,7 @@ extends BaseScriptTool
 
 
 func _init() -> void:
-	tool_name = "fill_new_empty_script"
+	tool_name = "fill_empty_script"
 	tool_description = "Only for filling a new empty script file with code content."
 
 

@@ -45,7 +45,7 @@ func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
 	
 	var err: Error = dir.make_dir_recursive(path)
 	if err == OK:
-		ToolBox.update_editor_filesystem(path)
+		#ToolBox.update_editor_filesystem(path)
 		ToolBox.refresh_editor_filesystem()
 		return {"success": true, "data": "Successfully created folder: %s" % path}
 	else:
