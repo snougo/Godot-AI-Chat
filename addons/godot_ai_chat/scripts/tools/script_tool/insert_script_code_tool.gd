@@ -1,11 +1,9 @@
 @tool
 extends BaseScriptTool
 
-
 func _init() -> void:
 	tool_name = "insert_script_code"
-	tool_description = "Inserts new code at a specific line. 1. INSERT: Use 'insert_after_line' and 'new_code'. 2. READ: Use 'read_from_line' to inspect context before inserting."
-
+	tool_description = "Inserts new code relative to a specific anchor within a logical slice. Locates the slice, finds the 'anchor_code', and inserts 'new_code' before or after it."
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -17,39 +15,46 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"new_code": {
 				"type": "string",
-				"description": "The GDScript code to insert. Required for INSERT mode."
+				"description": "The GDScript code to insert."
 			},
-			"insert_after_line": {
+			"slice_index": {
 				"type": "integer",
-				"description": "The 1-based line number AFTER which the new code will be inserted. Use 0 to insert at the very beginning of the file."
+				"description": "The 0-based index of the logical slice (e.g., function block) to search in."
 			},
-			"read_from_line": {
-				"type": "integer",
-				"description": "Start reading from this line. Returns a logical code block to help you decide where to insert."
+			"anchor_code": {
+				"type": "string",
+				"description": "The EXACT code snippet in the slice to use as a reference point."
+			},
+			"insert_position": {
+				"type": "string",
+				"enum": ["after", "before"],
+				"description": "Insert 'after' (default) or 'before' the anchor code."
 			}
 		},
-		"required": ["path"]
+		"required": ["path", "new_code", "slice_index", "anchor_code"]
 	}
-
 
 func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
 	var path = args.get("path", "")
-	var new_code = args.get("new_code", null)
-	var insert_after_line = args.get("insert_after_line", -1)
-	var read_from_line = args.get("read_from_line", -1)
+	var new_code = args.get("new_code", "")
+	var slice_index = args.get("slice_index", -1)
+	var anchor_code = args.get("anchor_code", "")
+	var insert_pos = args.get("insert_position", "after")
 	
 	# --- 1. 安全与基本检查 ---
 	var security_error = validate_path_safety(path)
 	if not security_error.is_empty():
 		return {"success": false, "data": security_error}
 	
-	var ext_error = validate_file_extension(path)
-	if not ext_error.is_empty():
-		return {"success": false, "data": ext_error}
-	
 	if not FileAccess.file_exists(path):
 		return {"success": false, "data": "File not found: " + path}
 	
+	if slice_index < 0:
+		return {"success": false, "data": "Invalid slice_index. Must be >= 0."}
+		
+	if anchor_code.strip_edges().is_empty():
+		return {"success": false, "data": "anchor_code cannot be empty."}
+
 	# --- 2. 加载编辑器 ---
 	var res = load(path)
 	if not res is Script:
@@ -61,99 +66,154 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	if not current_editor:
 		return {"success": false, "data": "Could not access script editor."}
 	var base_editor = current_editor.get_base_editor()
-	var total_lines = base_editor.get_line_count()
 	
-	# --- 3. 确定操作模式 ---
+	# --- 3. 切片定位 ---
+	var slices = _parse_script_to_slices(base_editor)
+	if slice_index >= slices.size():
+		return {"success": false, "data": "slice_index %d out of bounds. Total slices: %d" % [slice_index, slices.size()]}
 	
-	# INSERT 模式
-	if new_code != null and insert_after_line >= 0:
-		return _handle_insertion(base_editor, int(insert_after_line), new_code)
+	var target_slice = slices[slice_index]
 	
-	# READ 模式 (默认行为或显式调用)
+	# --- 4. 寻找锚点 ---
+	var anchor_match = _find_code_in_slice(base_editor, target_slice, anchor_code)
+	
+	if not anchor_match.found:
+		var msg = "Could not find 'anchor_code' in slice %d.\n" % slice_index
+		msg += "Slice Context (Lines %d-%d):\n%s\n...\n" % [target_slice.start_line + 1, target_slice.end_line + 1, _get_preview_lines(base_editor, target_slice, 5)]
+		msg += "ACTION: Verify 'anchor_code' exists in this slice."
+		return {"success": false, "data": msg}
+	
+	# --- 5. 计算插入行号 ---
+	var insertion_line_index = -1
+	
+	if insert_pos == "before":
+		# 插在锚点开始行的上方
+		insertion_line_index = anchor_match.start_line
 	else:
-		# 如果没传 read_from_line，默认为 1
-		var start_read = 1
-		if read_from_line > 0:
-			start_read = read_from_line
-			
-		return _handle_reading(base_editor, start_read, total_lines)
-
-
-# --- 处理插入逻辑 ---
-func _handle_insertion(editor: Control, insert_after_line: int, new_code: String) -> Dictionary:
-	var total = editor.get_line_count()
+		# 插在锚点结束行的下方
+		# 注意：insert_text(..., line, col) 是在指定行的上方插入？
+		# 让我们复习一下 Godot 的 TextEdit/CodeEdit API
+		# insert_text_at_caret 比较常用，但我们要指定位置。
+		# insert_text(text, line, col)
+		# 如果要在第 N 行后面插，通常是在第 N+1 行开头插。
+		insertion_line_index = anchor_match.end_line + 1
 	
-	# 范围检查 (允许 insert_after_line = 0，表示插在开头)
-	if insert_after_line > total:
-		return {
-			"success": false, 
-			"data": "Error: 'insert_after_line' (%d) exceeds file length (%d)." % [insert_after_line, total]
-		}
+	# --- 6. 执行插入 ---
+	if base_editor.has_method("begin_complex_operation"):
+		base_editor.begin_complex_operation()
 	
-	# 确保新代码末尾有换行，保持格式整洁
+	# 确保新代码格式（自动补齐换行）
 	if not new_code.ends_with("\n"):
 		new_code += "\n"
 	
-	if editor.has_method("begin_complex_operation"):
-		editor.begin_complex_operation()
+	# 补齐缩进：尝试读取锚点行的缩进
+	var indent = _get_indentation(base_editor.get_line(anchor_match.start_line))
+	# 为新代码的每一行添加相同缩进（如果新代码没自带缩进的话）
+	# 这里简单处理：给第一行加缩进？不，最好给每一行加。
+	# 但通常 LLM 生成的代码可能已经包含了部分缩进，或者完全没有。
+	# 策略：如果 new_code 的第一行没有缩进，则给所有行加上锚点的缩进。
+	new_code = _apply_indentation(new_code, indent)
 	
-	# insert_text 的第二个参数是行号 (0-based)
-	# 如果 insert_after_line 是 5，意味着插在第 5 行之后，即第 6 行的位置 (index 5)
-	# 如果 insert_after_line 是 0，意味着插在第 0 行之前，即 index 0
-	var insert_pos_index = insert_after_line
+	base_editor.insert_text(new_code, insertion_line_index, 0)
 	
-	editor.insert_text(new_code, insert_pos_index, 0)
-	
-	if editor.has_method("end_complex_operation"):
-		editor.end_complex_operation()
-		
-	return {"success": true, "data": "Successfully inserted code after line %d." % insert_after_line}
-
-
-# --- 处理阅读逻辑 (复用 replace 工具的智能切片算法) ---
-func _handle_reading(editor: Control, read_from_line: int, total_lines: int) -> Dictionary:
-	var start_idx = read_from_line - 1
-	if start_idx < 0: start_idx = 0
-	
-	if start_idx >= total_lines:
-		return {"success": false, "data": "End of file reached. Total lines: %d" % total_lines}
-		
-	var slice_data = _get_logical_block_slice(editor, start_idx, total_lines)
-	
-	var msg = "Reading script context for insertion.\n"
-	msg += "--------------------------------------------------\n"
-	msg += slice_data["text"]
-	msg += "--------------------------------------------------\n"
-	msg += "ACTION: Call again with 'insert_after_line' and 'new_code' to insert.\n"
-	
-	if slice_data["next_line"] <= total_lines:
-		msg += "To READ MORE: Call with 'read_from_line=%d'." % slice_data["next_line"]
-	else:
-		msg += "End of file reached."
-	
-	return {"success": false, "data": msg}
-
-
-# --- 辅助算法：智能切片 (逻辑块) ---
-func _get_logical_block_slice(editor: Control, from_line: int, total_lines: int) -> Dictionary:
-	var result_text = ""
-	var current_line = from_line
-	var block_content_started = false
-	
-	while current_line < total_lines:
-		var line_content = editor.get_line(current_line)
-		var is_top_level_func = line_content.begins_with("func ") 
-		
-		if is_top_level_func and block_content_started:
-			break
-		
-		if not line_content.strip_edges().is_empty() and not line_content.strip_edges().begins_with("#"):
-			block_content_started = true
-			
-		result_text += "%4d | %s\n" % [current_line + 1, line_content]
-		current_line += 1
+	if base_editor.has_method("end_complex_operation"):
+		base_editor.end_complex_operation()
 	
 	return {
-		"text": result_text,
-		"next_line": current_line + 1
+		"success": true, 
+		"data": "Successfully inserted code %s slice %d (Line %d)." % [insert_pos, slice_index, insertion_line_index + 1]
 	}
+
+
+# --- 辅助逻辑 (复用自 disable_script_tool，保持一致性) ---
+
+func _parse_script_to_slices(editor: Control) -> Array:
+	var slices = []
+	var total_lines = editor.get_line_count()
+	var current_start = 0
+	
+	for i in range(total_lines):
+		var line = editor.get_line(i).strip_edges()
+		if line.begins_with("func ") and i > 0:
+			slices.append({"start_line": current_start, "end_line": i - 1})
+			current_start = i
+	
+	if current_start < total_lines:
+		slices.append({"start_line": current_start, "end_line": total_lines - 1})
+	return slices
+
+func _find_code_in_slice(editor: Control, slice: Dictionary, code_to_find: String) -> Dictionary:
+	var slice_start = slice.start_line
+	var slice_end = slice.end_line
+	
+	var find_lines = []
+	for line in code_to_find.split("\n"):
+		if not line.strip_edges().is_empty():
+			find_lines.append(line.strip_edges())
+	
+	if find_lines.is_empty():
+		return {"found": false}
+	
+	for i in range(slice_start, slice_end + 1):
+		var match_cursor = 0
+		var current_file_line = i
+		var possible_start = -1
+		var possible_end = -1
+		var mismatch = false
+		
+		while match_cursor < find_lines.size() and current_file_line <= slice_end:
+			var file_line_content = editor.get_line(current_file_line).strip_edges()
+			if file_line_content.is_empty():
+				current_file_line += 1
+				continue
+			if file_line_content == find_lines[match_cursor]:
+				if match_cursor == 0: possible_start = current_file_line
+				possible_end = current_file_line
+				match_cursor += 1
+				current_file_line += 1
+			else:
+				mismatch = true
+				break
+		
+		if not mismatch and match_cursor == find_lines.size():
+			return {"found": true, "start_line": possible_start, "end_line": possible_end}
+			
+	return {"found": false}
+
+func _get_preview_lines(editor: Control, slice: Dictionary, count: int) -> String:
+	var txt = ""
+	var limit = min(slice.end_line, slice.start_line + count)
+	for i in range(slice.start_line, limit + 1):
+		txt += editor.get_line(i) + "\n"
+	return txt
+
+# 获取一行的缩进字符串（Tab 或空格）
+func _get_indentation(line: String) -> String:
+	var indent = ""
+	for char in line:
+		if char == " " or char == "\t":
+			indent += char
+		else:
+			break
+	return indent
+
+# 智能应用缩进
+func _apply_indentation(code: String, indent: String) -> String:
+	if indent.is_empty():
+		return code
+		
+	var lines = code.split("\n")
+	# 检查第一行是否有缩进
+	if lines[0].begins_with(" ") or lines[0].begins_with("\t"):
+		# 假设 LLM 已经处理好了缩进，不做修改
+		return code
+	
+	var indented_code = ""
+	for i in range(lines.size()):
+		var line = lines[i]
+		if i == lines.size() - 1 and line.is_empty():
+			# 最后一行如果是空的，不需要缩进（通常是 ends_with("\n") 导致的空串）
+			continue
+		indented_code += indent + line + "\n"
+	
+	return indented_code
