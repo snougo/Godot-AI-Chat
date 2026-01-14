@@ -1,6 +1,7 @@
 @tool
 extends AiTool
 
+
 func _init() -> void:
 	tool_name = "get_current_active_script"
 	tool_description = "Reads active script content. EXECUTE FIRST to get 'slice_index' for editing tools."
@@ -75,6 +76,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 		"data": markdown_content
 	}
 
+
 # --- 辅助逻辑 ---
 
 func _parse_script_to_slices(code: String) -> Array:
@@ -82,12 +84,33 @@ func _parse_script_to_slices(code: String) -> Array:
 	var slices = []
 	var current_start = 0
 	
+	# 使用 Regex 匹配函数定义
+	var func_regex = RegEx.new()
+	func_regex.compile("^\\s*(static\\s+)?func\\s+")
+	
 	for i in range(lines.size()):
-		var line = lines[i].strip_edges()
-		# 当遇到 func 且不是第一行时，切分
-		if line.begins_with("func ") and i > 0:
-			slices.append({"start_line": current_start, "end_line": i - 1})
-			current_start = i
+		var line = lines[i]
+		
+		if func_regex.search(line):
+			# 找到 func 行，尝试向上回溯以包含相关注释
+			var split_idx = i
+			var k = i - 1
+			
+			# 向上查找连续的注释行
+			while k >= current_start:
+				var prev_line = lines[k].strip_edges()
+				if prev_line.begins_with("#"):
+					split_idx = k # 将切分点上移至注释行
+					k -= 1
+				else:
+					# 遇到非注释行（空行或代码），停止回溯
+					break
+			
+			# 只有当切分点大于 current_start 时才切分
+			# 避免文件开头的 func 导致切出空片
+			if split_idx > current_start:
+				slices.append({"start_line": current_start, "end_line": split_idx - 1})
+				current_start = split_idx
 	
 	# 添加最后一个块
 	if current_start < lines.size():
