@@ -65,8 +65,15 @@ func to_api_dict() -> Dictionary:
 	
 	# 1. 处理 Content
 	# OpenAI 规定：如果 assistant 消息有 tool_calls，content 可以为 null
+	#if role == ROLE_ASSISTANT and not tool_calls.is_empty() and content.is_empty():
+		#_dict["content"] = null
+	#else:
+		#_dict["content"] = content
+	
+	# [修复] 强制使用空字符串 "" 而非 null。
+	# 许多兼容 API (DeepSeek, Azure) 收到 null 会直接报 400。
 	if role == ROLE_ASSISTANT and not tool_calls.is_empty() and content.is_empty():
-		_dict["content"] = null
+		_dict["content"] = "" 
 	else:
 		_dict["content"] = content
 	

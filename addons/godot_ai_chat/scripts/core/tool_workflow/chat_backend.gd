@@ -83,7 +83,8 @@ func _start_tool_workflow(_trigger_msg: ChatMessage) -> void:
 	var _settings: PluginSettings = ToolBox.get_plugin_settings()
 	var _truncated_history: Array[ChatMessage] = current_chat_window.chat_history.get_truncated_messages(
 		_settings.max_chat_turns,
-		_settings.system_prompt
+		_settings.system_prompt,
+		false
 	)
 	
 	current_workflow = ToolWorkflowManager.new(network_manager, tool_executor, _truncated_history)

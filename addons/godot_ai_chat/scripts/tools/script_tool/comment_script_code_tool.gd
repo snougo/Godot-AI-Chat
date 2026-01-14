@@ -2,8 +2,9 @@
 extends BaseScriptTool
 
 func _init() -> void:
-	tool_name = "disable_script_code"
-	tool_description = "Safely comments out a block of code within a specific script slice (logical block). Uses 'slice_index' to locate the area and 'original_code' to verify and pinpoint the lines."
+	tool_name = "comment_script_code"
+	tool_description = "Comments out code. REQUIRES 'slice_index' and exact code from 'get_current_active_script'."
+
 
 func get_parameters_schema() -> Dictionary:
 	return {

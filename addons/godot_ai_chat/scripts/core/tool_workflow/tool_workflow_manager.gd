@@ -57,17 +57,38 @@ func start(_trigger_msg: ChatMessage) -> void:
 func _execute_tool_calls(_msg: ChatMessage) -> void:
 	var _generated_tool_msgs: Array[ChatMessage] = []
 	var _generated_image_msgs: Array[ChatMessage] = []
-
-	for _call in _msg.tool_calls:
+	
+	#for _call in _msg.tool_calls:
+		#var _call_id: String = _call.get("id", "")
+		#var _func_def: Dictionary = _call.get("function", {})
+		#var _tool_name: String = _func_def.get("name", "")
+		#var _raw_args_str: String = _func_def.get("arguments", "{}")
+		
+		#print("[Workflow] Executing tool: %s" % _tool_name)
+	
+	# [修复] 使用索引遍历，以便直接修改字典（引用类型），解决 ID 缺失问题
+	for i in range(_msg.tool_calls.size()):
+		var _call: Dictionary = _msg.tool_calls[i]
+		
 		var _call_id: String = _call.get("id", "")
+		
+		# [修复] ID 完整性检查
+		# 部分模型流式输出时可能丢失 ID，或者 Godot 解析流时未能捕获。
+		# 如果 ID 为空，手动生成一个默认 ID 并回填到 Assistant 消息中。
+		if _call_id.is_empty():
+			_call_id = "call_%d_%d" % [Time.get_ticks_msec(), i]
+			_call["id"] = _call_id
+			print("[Workflow] Fixed missing tool_call_id: %s" % _call_id)
+		
 		var _func_def: Dictionary = _call.get("function", {})
 		var _tool_name: String = _func_def.get("name", "")
 		var _raw_args_str: String = _func_def.get("arguments", "{}")
 		
-		print("[Workflow] Executing tool: %s" % _tool_name)
+		print("[Workflow] Executing tool: %s (ID: %s)" % [_tool_name, _call_id])
 		
 		# 1. 清洗参数
 		var _clean_args_str: String = _sanitize_json_arguments(_raw_args_str)
+		# 更新原始消息中的参数字符串，保证历史记录整洁
 		_func_def["arguments"] = _clean_args_str
 		
 		var _args: Variant = JSON.parse_string(_clean_args_str)
@@ -119,6 +140,7 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 					_tool_msg.image_mime = _att.get("mime", "image/png")
 				else:
 					# OpenAI/Local 模式：转换为额外的 User 消息
+					# 注意：OpenAI 不允许 Tool Message 包含图片，必须另起一个 User 消息
 					var _image_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, "Image content from tool '%s':" % _tool_name)
 					_image_msg.image_data = _att.get("image_data", PackedByteArray())
 					_image_msg.image_mime = _att.get("mime", "image/png")

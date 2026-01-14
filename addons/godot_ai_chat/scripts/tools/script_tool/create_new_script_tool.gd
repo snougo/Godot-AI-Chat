@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "create_new_script"
-	tool_description = "Create a new empty `.gd` or `.gdshader` file."
+	tool_description = "Creates a new empty script. NEXT STEP: Use 'fill_empty_script' to add content."
 
 
 func get_parameters_schema() -> Dictionary:

@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "get_current_active_scene"
-	tool_description = "Get the file name and tree structure of the active scene in the Scene Editor."
+	tool_description = "Retrieves the scene tree. EXECUTE FIRST to get 'node_path' for add/get/set node tools."
 
 
 func get_parameters_schema() -> Dictionary:

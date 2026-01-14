@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "todo_list"
-	tool_description = "Manage tasks in the current workspace `TODO.md` file by adding, completing, or listing task items and execution steps."
+	tool_description = "Manage task lists in 'TODO.md'. Use STRICTLY for actionable items and progress tracking."
 
 
 func get_parameters_schema() -> Dictionary:

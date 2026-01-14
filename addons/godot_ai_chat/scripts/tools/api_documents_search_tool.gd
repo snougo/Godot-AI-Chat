@@ -6,7 +6,7 @@ const LOCAL_DOC_PATH = "res://godot_doc"
 
 func _init():
 	tool_name = "api_documents_search"
-	tool_description = "Search for Godot API Documentation."
+	tool_description = "Searches Godot ClassDB and local docs. Use this for engine API questions."
 
 
 func get_parameters_schema() -> Dictionary:

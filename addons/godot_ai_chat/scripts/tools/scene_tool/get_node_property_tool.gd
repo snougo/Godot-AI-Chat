@@ -4,7 +4,7 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "get_node_property"
-	tool_description = "Retrieves the class, children, and editable properties of a node in the currently active scene (or a specified .tscn file). Returns values formatted for easy re-use with 'set_node_property'."
+	tool_description = "Reads node properties. REQUIRES 'node_path' from 'get_current_active_scene'."
 
 
 func get_parameters_schema() -> Dictionary:

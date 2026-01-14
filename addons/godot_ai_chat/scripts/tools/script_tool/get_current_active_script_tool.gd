@@ -3,7 +3,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "get_current_active_script"
-	tool_description = "Get the file name and source code of the currently active script in Script Editor."
+	tool_description = "Reads active script content. EXECUTE FIRST to get 'slice_index' for editing tools."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -22,31 +22,78 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 	
 	var current_script: Script = script_editor.get_current_script()
 	
-	if current_script:
-		var file_path = current_script.resource_path
-		var source_code = current_script.source_code
-		
-		# 尝试获取编辑器中未保存的最新文本
-		var current_editor = script_editor.get_current_editor()
-		if current_editor:
-			var base_editor = current_editor.get_base_editor()
-			if base_editor and "text" in base_editor:
-				source_code = base_editor.text
-		
-		# 构造 Markdown 格式的返回字符串
-		var file_name = file_path.get_file()
-		var extension = file_name.get_extension()
-		
-		# 根据后缀名确定 Markdown 代码块语言
-		var lang = "gdscript"
-		if extension == "gdshader":
-			lang = "glsl"
-			
-		var markdown_content = "### File: %s\n\n```%s\n%s\n```" % [file_name, lang, source_code]
-		
-		return {
-			"success": true, 
-			"data": markdown_content
-		}
+	if not current_script:
+		return {"success": false, "data": "No active script found in Script Editor."}
 	
-	return {"success": false, "data": "No active script found in Script Editor."}
+	var file_path = current_script.resource_path
+	var source_code = current_script.source_code
+	
+	# 尝试获取编辑器中未保存的最新文本
+	var current_editor = script_editor.get_current_editor()
+	if current_editor:
+		var base_editor = current_editor.get_base_editor()
+		if base_editor and "text" in base_editor:
+			source_code = base_editor.text
+	
+	# 构造 Markdown 格式的返回字符串
+	var file_name = file_path.get_file()
+	var extension = file_name.get_extension()
+	var lang = "gdscript"
+	if extension == "gdshader":
+		lang = "glsl"
+	
+	# 解析切片
+	var slices = _parse_script_to_slices(source_code)
+	# Godot 4 split 行为: "a\nb".split("\n") -> ["a", "b"]
+	var lines = source_code.split("\n")
+	
+	var markdown_content = "### File: %s\n" % file_name
+	markdown_content += "**Path:** `%s`\n" % file_path
+	markdown_content += "**Total Lines:** %d\n" % lines.size()
+	markdown_content += "**Total Slices:** %d\n\n" % slices.size()
+	markdown_content += "---\n\n"
+	
+	for i in range(slices.size()):
+		var slice = slices[i]
+		var start = slice.start_line
+		var end = slice.end_line
+		
+		markdown_content += "#### Slice %d (Lines %d-%d)\n" % [i, start + 1, end + 1]
+		markdown_content += "```%s\n" % lang
+		
+		for line_idx in range(start, end + 1):
+			if line_idx < lines.size():
+				# 格式： 行号 | 代码
+				# 行号补齐为3位
+				var line_num_str = str(line_idx + 1).pad_zeros(3)
+				markdown_content += "%s | %s\n" % [line_num_str, lines[line_idx]]
+				
+		markdown_content += "```\n\n"
+		
+	return {
+		"success": true, 
+		"data": markdown_content
+	}
+
+# --- 辅助逻辑 ---
+
+func _parse_script_to_slices(code: String) -> Array:
+	var lines = code.split("\n")
+	var slices = []
+	var current_start = 0
+	
+	for i in range(lines.size()):
+		var line = lines[i].strip_edges()
+		# 当遇到 func 且不是第一行时，切分
+		if line.begins_with("func ") and i > 0:
+			slices.append({"start_line": current_start, "end_line": i - 1})
+			current_start = i
+	
+	# 添加最后一个块
+	if current_start < lines.size():
+		slices.append({"start_line": current_start, "end_line": lines.size() - 1})
+	elif lines.size() == 0:
+		# 处理空文件情况
+		slices.append({"start_line": 0, "end_line": 0})
+	
+	return slices

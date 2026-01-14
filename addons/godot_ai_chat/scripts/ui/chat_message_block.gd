@@ -33,7 +33,9 @@ var _last_ui_node: Control = null
 
 ## 正则匹配：代码块开始 (锚定行首，但是允许行首出现空格)
 #var _re_code_start: RegEx = RegEx.create_from_string("^```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
-var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
+#var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
+var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*(.*)\\s*$")
+
 ## 正则匹配：代码块结束 (锚定行首，但是允许行首出现空格)
 #var _re_code_end: RegEx = RegEx.create_from_string("^```\\s*$")
 var _re_code_end: RegEx = RegEx.create_from_string("^\\s*```\\s*$")
@@ -482,7 +484,9 @@ func _create_code_block(_lang: String) -> void:
 ## 追加内容到代码块
 func _append_to_code(_text: String) -> void:
 	if _last_ui_node is CodeEdit:
-		_last_ui_node.text += _text
+		#_last_ui_node.text += _text
+		# 使用 insert_text_at_caret 替代 text +=
+		_last_ui_node.insert_text_at_caret(_text)
 
 
 ## 追加内容到文本块

@@ -7,7 +7,7 @@ const ALLOWED_EXTENSIONS = ["tscn"]
 
 func _init() -> void:
 	tool_name = "create_new_scene"
-	tool_description = "Safely create a `.tscn` scene file. Supports built-in classes and .tscn instantiation."
+	tool_description = "Safely create a `.tscn` scene file. NEXT STEP: Use 'open_and_switch_scene' to edit it."
 
 
 func get_parameters_schema() -> Dictionary:

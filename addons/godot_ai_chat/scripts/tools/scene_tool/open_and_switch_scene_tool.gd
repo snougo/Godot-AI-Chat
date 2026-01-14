@@ -11,7 +11,7 @@ const BLACKLIST_PATHS: Array[String] = [
 
 func _init():
 	tool_name = "open_and_switch_scene"
-	tool_description = "Open and Switch a scene file in the Godot Editor."
+	tool_description = "Opens a scene file in Godot Editor. EXECUTE BEFORE manipulating nodes."
 
 
 func get_parameters_schema() -> Dictionary:

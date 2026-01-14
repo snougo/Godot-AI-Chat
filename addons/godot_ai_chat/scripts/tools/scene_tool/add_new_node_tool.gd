@@ -4,7 +4,7 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "add_new_node"
-	tool_description = "Add a new node or a scene instance in the current open scene in Godot Editor."
+	tool_description = "Add a new node to the active scene. REQUIRES 'parent_path' from 'get_current_active_scene'."
 
 
 func get_parameters_schema() -> Dictionary:

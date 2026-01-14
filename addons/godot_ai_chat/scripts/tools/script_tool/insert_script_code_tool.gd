@@ -3,7 +3,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "insert_script_code"
-	tool_description = "Inserts new code relative to a specific anchor within a logical slice. Locates the slice, finds the 'anchor_code', and inserts 'new_code' before or after it."
+	tool_description = "Inserts code into a slice. REQUIRES 'slice_index' from 'get_current_active_script'."
 
 func get_parameters_schema() -> Dictionary:
 	return {

@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "notebook"
-	tool_description = "Record plain-text task details or temporary document excerpts."
+	tool_description = "Record information in 'Notebook.md'. Use for saving context, analysis, code snippets, or non-task details."
 
 
 func get_parameters_schema() -> Dictionary:
