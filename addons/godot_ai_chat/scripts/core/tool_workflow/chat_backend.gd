@@ -28,6 +28,7 @@ var current_chat_window: CurrentChatWindow
 ## 标记当前是否处于工具工作流中
 var is_in_workflow: bool = false
 
+
 # --- Public Functions ---
 
 ## 取消当前正在运行的工作流
@@ -45,7 +46,7 @@ func process_response(_msg: ChatMessage) -> void:
 	# 打印调试信息
 	print("[ChatBackend] Processing response. Role: %s, Content len: %d, Tool calls: %d" % [_msg.role, _msg.content.length(), _msg.tool_calls.size()])
 	
-	# [修复] 数据清洗：移除工具调用中的 XML 标签和非法字符
+	# 数据清洗：移除工具调用中的 XML 标签和非法字符
 	if not _msg.tool_calls.is_empty():
 		for _tool_call in _msg.tool_calls:
 			if _tool_call.has("function"):
@@ -57,12 +58,14 @@ func process_response(_msg: ChatMessage) -> void:
 				# 2. 尝试修复参数 JSON (如果是坏的 JSON)
 				if _f.has("arguments") and _f["arguments"] is String:
 					var _args_str: String = _f["arguments"]
-					if JSON.parse_string(_args_str) == null:
+					
+					# 使用静默检测代替 JSON.parse_string 以避免控制台红字
+					if not _is_valid_json(_args_str):
 						# 如果解析失败，尝试截取到最后一个 }
 						var _last_brace: int = _args_str.rfind("}")
 						if _last_brace != -1:
 							var _fixed_args: String = _args_str.substr(0, _last_brace + 1)
-							if JSON.parse_string(_fixed_args) != null:
+							if _is_valid_json(_fixed_args):
 								_f["arguments"] = _fixed_args
 	
 	# 检查是否有工具调用
@@ -72,6 +75,7 @@ func process_response(_msg: ChatMessage) -> void:
 		var _history: Array[ChatMessage] = [_msg]
 		assistant_message_ready.emit(_msg, _history)
 
+
 # --- Private Functions ---
 
 ## 启动工具工作流
@@ -79,7 +83,7 @@ func _start_tool_workflow(_trigger_msg: ChatMessage) -> void:
 	is_in_workflow = true
 	tool_workflow_started.emit()
 	
-	# [修复] 使用截断后的历史记录，而不是完整历史
+	# 使用截断后的历史记录，而不是完整历史
 	var _settings: PluginSettings = ToolBox.get_plugin_settings()
 	var _truncated_history: Array[ChatMessage] = current_chat_window.chat_history.get_truncated_messages(
 		_settings.max_chat_turns,
@@ -94,6 +98,13 @@ func _start_tool_workflow(_trigger_msg: ChatMessage) -> void:
 	
 	# 启动工作流，直接传入包含 tool_calls 的消息
 	current_workflow.start(_trigger_msg)
+
+
+## 辅助函数：静默检查 JSON 是否合法 (不打印 Error)
+func _is_valid_json(_json_str: String) -> bool:
+	var _json_obj: JSON = JSON.new()
+	return _json_obj.parse(_json_str) == OK
+
 
 # --- Signal Callbacks ---
 

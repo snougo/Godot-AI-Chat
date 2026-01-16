@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://ca2h5l0btu0bp"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_c1qt1"]
+
+[resource]
+script = ExtResource("1_c1qt1")
+skill_name = "Scene Builder"
+description = "用于场景创建编辑任务"
+instruction_file = "res://addons/godot_ai_chat/skills/scene_builder/building_rules.md"
+tools = Array[String](["uid://c4oiyceux12sy", "uid://c7cjeqg7x26ba", "uid://bigg2frp37yqh", "uid://dg18u2a5v0071", "uid://bmwjmdg3yk1hf", "uid://dfmy1wbywn1jx", "uid://21mn7yos55n5"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

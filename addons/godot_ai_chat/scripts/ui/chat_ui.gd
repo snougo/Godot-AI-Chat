@@ -49,6 +49,7 @@ enum UIState {
 @onready var _model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelSelector
 @onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelNameFilterInput
 @onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
+@onready var _skill_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/SkillSelector
 @onready var _settings_panel: Control = $TabContainer/Settings/SettingsPanel
 @onready var _error_dialog: AcceptDialog = $AcceptDialog
 @onready var _file_dialog: FileDialog = $FileDialog
@@ -62,6 +63,7 @@ var current_state: UIState = UIState.IDLE
 var model_list: Array[String] = []
 ## 用于判断是否为首次运行或初始化阶段
 var is_first_init: bool = false
+
 
 # --- Built-in Functions ---
 
@@ -77,8 +79,17 @@ func _ready() -> void:
 	_reconnect_button.pressed.connect(_on_reconnect_button_pressed)
 	
 	_update_chat_archive_selector()
+	
+	# 初始化技能选择器 (此时 ToolRegistry 刚初始化，状态为 Core Only)
+	_setup_skill_selector()
+	# [修复] 强制重置 UI 状态为 "None" (Index 0)，以匹配 ToolRegistry 的初始状态
+	# 除非我们实现了 ConfigFile 保存上次技能状态，否则默认归零是更安全的
+	if _skill_selector.item_count > 0:
+		_skill_selector.select(0)
+	
 	reset_token_cost_display()
 	update_ui_state(UIState.IDLE)
+
 
 # --- Public Functions ---
 
@@ -221,6 +232,7 @@ func show_confirmation(_message: String) -> void:
 	_error_dialog.dialog_text = _message
 	_error_dialog.popup_centered()
 
+
 # --- Private Functions ---
 
 func _get_default_status_text(_state: UIState) -> String:
@@ -296,10 +308,48 @@ func _update_chat_archive_selector() -> void:
 			_chat_archive_selector.select(_new_selection_index)
 
 
+func _setup_skill_selector() -> void:
+	if not _skill_selector: return
+	
+	# 临时断开信号，避免填充时触发回调
+	if _skill_selector.item_selected.is_connected(_on_skill_selected):
+		_skill_selector.item_selected.disconnect(_on_skill_selected)
+	
+	_skill_selector.clear()
+	var skills = ToolRegistry.get_available_skill_names()
+	
+	# 1. 添加 "None" 选项
+	_skill_selector.add_item("None", 0)
+	_skill_selector.set_item_metadata(0, "None")
+	
+	# 2. 填充技能列表
+	for i in range(skills.size()):
+		var s_name = skills[i]
+		_skill_selector.add_item(s_name, i + 1)
+		_skill_selector.set_item_metadata(i + 1, s_name)
+	
+	# 3. 同步 UI 与 Registry 状态
+	# 插件刚启动时 active_skill_name 为空，循环找不到匹配项，自然保持默认（或手动 select(0)）
+	var current_skill = ToolRegistry.active_skill_name
+	var found = false
+	for i in range(_skill_selector.item_count):
+		if _skill_selector.get_item_metadata(i) == current_skill:
+			_skill_selector.select(i)
+			found = true
+			break
+	
+	if not found:
+		_skill_selector.select(0)
+	
+	# 4. [修复] 重新连接信号
+	_skill_selector.item_selected.connect(_on_skill_selected)
+
+
 func _generate_default_filename(_extension: String) -> String:
 	var _now: Dictionary = Time.get_datetime_dict_from_system(false)
 	var _timestamp_str: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second]
 	return _timestamp_str + _extension
+
 
 # --- Signal Callbacks ---
 
@@ -330,6 +380,16 @@ func _on_model_selected(_index: int) -> void:
 	if _model_selector.get_item_count() > _index and _index >= 0:
 		var _model_name: String = _model_selector.get_item_text(_index)
 		model_selection_changed.emit(_model_name)
+
+
+func _on_skill_selected(index: int) -> void:
+	var skill_name = _skill_selector.get_item_metadata(index)
+	var success = ToolRegistry.switch_to_skill_by_name(skill_name)
+	if success:
+		if skill_name == "None":
+			print("Switched to Core Tools only.")
+		else:
+			print("Switched to skill: ", skill_name)
 
 
 func _on_model_name_filter_text_changed(_new_text: String) -> void:

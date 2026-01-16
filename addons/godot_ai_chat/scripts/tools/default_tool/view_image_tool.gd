@@ -5,7 +5,7 @@ extends AiTool
 const ALLOWED_EXTENSIONS = ["png", "jpg", "jpeg"]
 
 func _init() -> void:
-	tool_name = "get_image_content"
+	tool_name = "view_image"
 	tool_description = "Reads an image file from the specified path."
 
 

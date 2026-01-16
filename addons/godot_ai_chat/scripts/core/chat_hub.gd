@@ -26,6 +26,7 @@ var current_history_path: String = ""
 ## 状态锁，防止新建按钮连击导致逻辑错乱
 var is_creating_new_chat: bool = false
 
+
 # --- Built-in Functions ---
 
 func _ready() -> void:
@@ -90,6 +91,7 @@ func _ready() -> void:
 	# 插件启动时，若无当前对话路径，提示用户操作
 	if current_history_path.is_empty():
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
+
 
 # --- Private Functions ---
 
@@ -211,9 +213,18 @@ func _on_user_send_message(_text: String) -> void:
 	_current_chat_window.append_user_message(_text)
 	
 	var _settings: PluginSettings = ToolBox.get_plugin_settings()
+	# --- 修改开始: 构建增强版 System Prompt ---
+	var final_system_prompt = _settings.system_prompt
+	
+	if not ToolRegistry.active_skill_instructions.is_empty():
+		final_system_prompt += "\n\n=== CURRENT SKILL GUIDELINES ===\n"
+		final_system_prompt += ToolRegistry.active_skill_instructions
+		final_system_prompt += "\n================================\n"
+		final_system_prompt += "IMPERATIVE: You must strictly follow the guidelines above in your response."
+	# --- 修改结束 ---
 	var _context_history: Array[ChatMessage] = _current_chat_window.chat_history.get_truncated_messages(
 		_settings.max_chat_turns,
-		_settings.system_prompt
+		final_system_prompt # <--- 传入修改后的 Prompt
 	)
 	
 	_network_manager.start_chat_stream(_context_history)

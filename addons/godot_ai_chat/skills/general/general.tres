@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://8xkbpyyqmenn"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_aa0sw"]
+
+[resource]
+script = ExtResource("1_aa0sw")
+skill_name = "General"
+description = "用于普通聊天"
+instruction_file = "res://addons/godot_ai_chat/skills/general/guidelines.md"
+tools = Array[String](["uid://bx3tgapt002nb", "uid://bo06p18acpk2v", "uid://ctq7o6yli47nb", "uid://7gc37jg6grwt"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

@@ -10,7 +10,7 @@ const EXTENSION_MAP = {
 
 
 func _init():
-	tool_name = "get_context"
+	tool_name = "retrieve_context"
 	tool_description = "Retrieve context information in current workspace."
 
 

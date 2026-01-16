@@ -70,24 +70,20 @@ layout_mode = 2
 theme_override_constants/separation = 10
 
 [node name="StatusLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=2121040211]
-custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBoxFlat_a7m7s")
 text = "Ready"
 label_settings = SubResource("LabelSettings_2kdn8")
 vertical_alignment = 1
-autowrap_mode = 3
 
 [node name="ChatTrunDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
-custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBoxFlat_w6mml")
 text = "0/12"
 label_settings = SubResource("LabelSettings_qjs14")
 vertical_alignment = 1
-autowrap_mode = 3
 
 [node name="CurrentTokenCost" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
 layout_mode = 2
@@ -128,9 +124,18 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text_overrun_behavior = 1
 selected = 0
 fit_to_longest_item = false
-item_count = 1
-popup/item_0/text = "chat_2026-01-10_20-09-43.tres"
+item_count = 3
+popup/item_0/text = "chat_2026-01-16_22-36-48.tres"
 popup/item_0/id = 0
+popup/item_1/text = "chat_2026-01-16_19-58-44.tres"
+popup/item_1/id = 1
+popup/item_2/text = "chat_2026-01-16_17-18-38.tres"
+popup/item_2/id = 2
+
+[node name="SkillSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=137271050]
+layout_mode = 2
+size_flags_horizontal = 3
+text_overrun_behavior = 1
 
 [node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=388608477]
 layout_mode = 2

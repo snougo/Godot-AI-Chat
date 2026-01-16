@@ -3,7 +3,6 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "set_node_property"
-	# 更新描述：明确指出使用冒号访问子属性
 	tool_description = "Modifies a node property. REQUIRES 'node_path' from 'get_current_active_scene'."
 
 

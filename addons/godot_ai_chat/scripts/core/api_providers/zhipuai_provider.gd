@@ -7,7 +7,7 @@ extends BaseOpenAIProvider
 # --- Constants ---
 
 ## 智谱AI支持的模型列表（硬编码，因为API不提供模型列表端点）
-const ZHIPUAI_MODELS: Array[String] = ["glm-4.5", "glm-4.5-air"]
+const ZHIPUAI_MODELS: Array[String] = ["glm-4.5-air"]
 
 # --- Public Functions ---
 
