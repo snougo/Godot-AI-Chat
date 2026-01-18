@@ -31,7 +31,7 @@ var is_creating_new_chat: bool = false
 
 func _ready() -> void:
 	# 在这里注册工具，确保环境已稳定
-	ToolRegistry.load_default_tools()
+	#ToolRegistry.load_default_tools()
 	
 	# 确保目录存在
 	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
@@ -213,21 +213,29 @@ func _on_user_send_message(_text: String) -> void:
 	_current_chat_window.append_user_message(_text)
 	
 	var _settings: PluginSettings = ToolBox.get_plugin_settings()
-	# --- 修改开始: 构建增强版 System Prompt ---
+	
+	# --- 构建动态 System Prompt ---
 	var final_system_prompt = _settings.system_prompt
 	
-	if not ToolRegistry.active_skill_instructions.is_empty():
-		final_system_prompt += "\n\n=== CURRENT SKILL GUIDELINES ===\n"
-		final_system_prompt += ToolRegistry.active_skill_instructions
-		final_system_prompt += "\n================================\n"
+	# 获取所有已挂载技能的组合指令
+	var skill_instructions = ToolRegistry.get_combined_system_instructions()
+	
+	if not skill_instructions.is_empty():
+		final_system_prompt += "\n\n=== MOUNTED SKILL INSTRUCTIONS ===\n"
+		final_system_prompt += "The following specialized skills have been mounted to your capability set. Use them when appropriate.\n"
+		final_system_prompt += skill_instructions
+		final_system_prompt += "\n==================================\n"
 		final_system_prompt += "IMPERATIVE: You must strictly follow the guidelines above in your response."
-	# --- 修改结束 ---
+	
+	# ----------------------------
+	
 	var _context_history: Array[ChatMessage] = _current_chat_window.chat_history.get_truncated_messages(
 		_settings.max_chat_turns,
-		final_system_prompt # <--- 传入修改后的 Prompt
+		final_system_prompt
 	)
 	
 	_network_manager.start_chat_stream(_context_history)
+
 
 
 ## 收到第一个 Chunk 时，更新 UI 状态

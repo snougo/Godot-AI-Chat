@@ -1,11 +1,9 @@
 @tool
 extends BaseSceneTool
 
-
 func _init() -> void:
 	tool_name = "get_node_property"
 	tool_description = "Reads node properties. REQUIRES 'node_path' from 'get_current_active_scene'."
-
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -23,7 +21,6 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["node_path"]
 	}
 
-
 func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
 	var scene_path: String = args.get("scene_path", "")
 	var node_path: String = args.get("node_path", ".")
@@ -33,8 +30,14 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	
 	# 1. 确定 Root Node
 	if not scene_path.is_empty():
+		# 新增：安全检查
+		var security_error = validate_path_safety(scene_path)
+		if not security_error.is_empty():
+			return {"success": false, "data": security_error}
+
 		if not FileAccess.file_exists(scene_path):
 			return {"success": false, "data": "Error: Scene file not found at " + scene_path}
+		
 		var packed_scene = load(scene_path)
 		if not packed_scene or not (packed_scene is PackedScene):
 			return {"success": false, "data": "Error: Failed to load PackedScene from " + scene_path}
@@ -79,7 +82,6 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	
 	return {"success": true, "data": info}
 
-
 func _serialize_value(val: Variant) -> Variant:
 	match typeof(val):
 		TYPE_VECTOR2, TYPE_VECTOR2I:
@@ -91,15 +93,15 @@ func _serialize_value(val: Variant) -> Variant:
 		TYPE_RECT2, TYPE_RECT2I:
 			return [val.position.x, val.position.y, val.size.x, val.size.y]
 		TYPE_COLOR:
-			return val.to_html() # Returns hex string like "rrggbbaa"
+			return val.to_html() 
 		TYPE_OBJECT:
 			if val == null:
 				return null
 			if val is Resource:
 				if not val.resource_path.is_empty():
-					return val.resource_path # Return path for easy re-loading
+					return val.resource_path
 				else:
 					return "<Built-in Resource: %s>" % val.get_class()
 			return "<Object: %s>" % val.get_class()
 		_:
-			return val # Return basic types (int, float, bool, string, array, dict) as is
+			return val

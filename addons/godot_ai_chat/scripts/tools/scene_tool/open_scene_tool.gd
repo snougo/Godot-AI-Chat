@@ -1,18 +1,9 @@
 @tool
-extends AiTool
-
-# 定义黑名单路径片段
-# 任何包含这些字符串的路径都将被禁止打开
-const BLACKLIST_PATHS: Array[String] = [
-	".godot/",  # 内部缓存目录
-	"addons/godot_ai_chat/" # 示例：防止 AI 意外打开插件自身的 UI 场景
-]
-
+extends BaseSceneTool
 
 func _init():
 	tool_name = "open_scene"
 	tool_description = "Opens a scene file in Godot Editor. EXECUTE BEFORE manipulating nodes."
-
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -26,17 +17,16 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["path"]
 	}
 
-
 func execute(args: Dictionary, _context_provider) -> Dictionary:
 	if not args.has("path"):
 		return {"success": false, "data": "Missing 'path' argument."}
 	
 	var path: String = args["path"]
 	
-	# 1. 路径黑名单检查
-	for blacklisted in BLACKLIST_PATHS:
-		if path.find(blacklisted) != -1:
-			return {"success": false, "data": "Access denied: Path contains blacklisted segment '%s'." % blacklisted}
+	# 1. 路径安全检查 (复用 AiTool 基类逻辑)
+	var security_error = validate_path_safety(path)
+	if not security_error.is_empty():
+		return {"success": false, "data": security_error}
 	
 	# 2. 文件存在性检查
 	if not FileAccess.file_exists(path):

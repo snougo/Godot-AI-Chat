@@ -32,6 +32,16 @@ func get_request_url(_base_url: String, _model_name: String, _api_key: String, _
 
 ## 构建请求体 (Body)
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
+	# --- [添加在这里] ---
+	var tool_names := []
+	for tool_def in _tool_definitions:
+		tool_names.append(tool_def.get("name", "Unknown"))
+	
+	print("[OpenAI Debug] Current Model: %s" % _model_name)
+	print("[OpenAI Debug] Sending Tools Count: %d" % _tool_definitions.size())
+	print("[OpenAI Debug] Sending Tools Names: %s" % str(tool_names))
+	# ------------------
+	
 	var _api_messages: Array[Dictionary] = []
 	
 	for _msg in _messages:

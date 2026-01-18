@@ -5,7 +5,6 @@ func _init() -> void:
 	tool_name = "comment_script_code"
 	tool_description = "Comments out code. REQUIRES 'slice_index' and exact code from 'get_current_active_script'."
 
-
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -57,15 +56,16 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 		return {"success": false, "data": "Could not access script editor."}
 	var base_editor = current_editor.get_base_editor()
 	
-	# --- 3. 获取所有切片并定位 ---
-	var slices = _parse_script_to_slices(base_editor)
+	# --- 3. 获取所有切片 (基类) ---
+	var current_text = base_editor.text
+	var slices = _parse_script_to_slices(current_text)
 	
 	if slice_index >= slices.size():
 		return {"success": false, "data": "slice_index %d out of bounds. Total slices: %d" % [slice_index, slices.size()]}
 	
 	var target_slice = slices[slice_index]
 	
-	# --- 4. 在切片内匹配原始代码 ---
+	# --- 4. 在切片内匹配原始代码 (基类) ---
 	var match_result = _find_code_in_slice(base_editor, target_slice, original_code)
 	
 	if not match_result.found:
@@ -94,82 +94,3 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 		"success": true, 
 		"data": "Successfully commented out code in slice %d (Lines %d-%d). Verify the change in the editor." % [slice_index, start_line + 1, end_line + 1]
 	}
-
-# --- 核心辅助逻辑 ---
-
-# 将脚本解析为逻辑切片（Slice）
-# Slice 定义：
-# - 0: 文件头部（extends, class_name, 顶部变量）
-# - 1..N: 每个 func 及其内容
-func _parse_script_to_slices(editor: Control) -> Array:
-	var slices = []
-	var total_lines = editor.get_line_count()
-	var current_start = 0
-	
-	for i in range(total_lines):
-		var line = editor.get_line(i).strip_edges()
-		# 当遇到 func 且不是第一行时，切分
-		if line.begins_with("func ") and i > 0:
-			# 之前的块结束于 i - 1
-			slices.append({"start_line": current_start, "end_line": i - 1})
-			current_start = i
-	
-	# 添加最后一个块
-	if current_start < total_lines:
-		slices.append({"start_line": current_start, "end_line": total_lines - 1})
-		
-	return slices
-
-# 在指定切片范围内查找代码
-func _find_code_in_slice(editor: Control, slice: Dictionary, code_to_find: String) -> Dictionary:
-	var slice_start = slice.start_line
-	var slice_end = slice.end_line
-	
-	# 预处理要查找的代码：拆分成行，去除非空行的首尾空格
-	var find_lines = []
-	for line in code_to_find.split("\n"):
-		if not line.strip_edges().is_empty():
-			find_lines.append(line.strip_edges())
-	
-	if find_lines.is_empty():
-		return {"found": false}
-	
-	# 遍历切片内的每一行作为起始点尝试匹配
-	for i in range(slice_start, slice_end + 1):
-		var match_cursor = 0
-		var current_file_line = i
-		var possible_start = -1
-		var possible_end = -1
-		var mismatch = false
-		
-		# 尝试匹配序列
-		while match_cursor < find_lines.size() and current_file_line <= slice_end:
-			var file_line_content = editor.get_line(current_file_line).strip_edges()
-			
-			# 跳过文件中的空行和纯注释行（如果 original_code 不包含它们）
-			# 这里简化策略：严格匹配非空内容。
-			if file_line_content.is_empty():
-				current_file_line += 1
-				continue
-			
-			if file_line_content == find_lines[match_cursor]:
-				if match_cursor == 0: possible_start = current_file_line
-				possible_end = current_file_line
-				match_cursor += 1
-				current_file_line += 1
-			else:
-				mismatch = true
-				break
-		
-		# 检查是否完整匹配
-		if not mismatch and match_cursor == find_lines.size():
-			return {"found": true, "start_line": possible_start, "end_line": possible_end}
-			
-	return {"found": false}
-
-func _get_preview_lines(editor: Control, slice: Dictionary, count: int) -> String:
-	var txt = ""
-	var limit = min(slice.end_line, slice.start_line + count)
-	for i in range(slice.start_line, limit + 1):
-		txt += editor.get_line(i) + "\n"
-	return txt

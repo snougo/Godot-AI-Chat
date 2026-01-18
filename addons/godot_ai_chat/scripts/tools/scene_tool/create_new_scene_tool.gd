@@ -4,11 +4,9 @@ extends BaseSceneTool
 # 定义允许的扩展名白名单
 const ALLOWED_EXTENSIONS = ["tscn"]
 
-
 func _init() -> void:
 	tool_name = "create_new_scene"
 	tool_description = "Safely create a `.tscn` scene file. NEXT STEP: Use 'open_and_switch_scene' to edit it."
-
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -23,24 +21,18 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["scene_path", "tree_structure"]
 	}
 
-
 func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	var new_scene_path: String = args.get("scene_path", "")
 	var tree_text: String = args.get("tree_structure", "")
 	
-	# 调用AiTool基类方法进行安全检查
-	# 如果通过路径安全检查，则返回一个空字符串
-	# 如果安全检查失败，则返回对应的错误信息
 	var security_error = validate_path_safety(new_scene_path)
 	if not security_error.is_empty():
 		return {"success": false, "data": security_error}
 
-	# 格式白名单检查逻辑
 	var extension = new_scene_path.get_extension().to_lower()
 	if extension not in ALLOWED_EXTENSIONS:
 		return {"success": false, "data": "Invalid scene_path extension. Allowed: %s" % ", ".join(ALLOWED_EXTENSIONS)}
 	
-	# 同名文件检查
 	if FileAccess.file_exists(new_scene_path):
 		return {"success": false, "data": "File already exists: %s" % new_scene_path}
 	
@@ -48,11 +40,6 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	var node_stack: Array = [] 
 	var lines: PackedStringArray = tree_text.split("\n")
 	var regex := RegEx.new()
-	#regex.compile("^([a-zA-Z0-9_]+)\\s*\\(([^)]+)\\)\\s*(?:(\\{.*\\}))?$")
-	
-	# 修复后正则：
-	# 1. 节点名允许除 '(' 以外的任意字符
-	# 2. 类型定义部分允许更宽泛的字符 (.+)
 	regex.compile("^([^\\(]+)\\s*\\((.+)\\)\\s*(?:(\\{.*\\}))?$")
 	
 	for line in lines:
@@ -78,10 +65,8 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		var new_node: Node = null
 		if type_str.begins_with("res://"):
 			if ResourceLoader.exists(type_str):
-				# 强制忽略缓存，防止读取到内存中已损坏的资源
 				var scn := ResourceLoader.load(type_str, "", ResourceLoader.CACHE_MODE_IGNORE)
 				if scn is PackedScene: 
-					# 使用 GEN_EDIT_STATE_INSTANCE，确保编辑器元数据正确
 					new_node = scn.instantiate(PackedScene.GEN_EDIT_STATE_INSTANCE)
 		elif ClassDB.class_exists(type_str):
 			new_node = ClassDB.instantiate(type_str)
@@ -132,7 +117,6 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		return {"success": true, "data": "Scene created at %s" % new_scene_path}
 	else:
 		return {"success": false, "data": "Save Failed: %d" % err}
-
 
 func _cleanup_nodes(node: Node):
 	if node and is_instance_valid(node): node.free()

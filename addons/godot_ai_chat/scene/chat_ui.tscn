@@ -124,18 +124,23 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text_overrun_behavior = 1
 selected = 0
 fit_to_longest_item = false
-item_count = 3
-popup/item_0/text = "chat_2026-01-16_22-36-48.tres"
+item_count = 8
+popup/item_0/text = "chat_2026-01-18_15-37-03.tres"
 popup/item_0/id = 0
-popup/item_1/text = "chat_2026-01-16_19-58-44.tres"
+popup/item_1/text = "chat_2026-01-17_02-21-51.tres"
 popup/item_1/id = 1
-popup/item_2/text = "chat_2026-01-16_17-18-38.tres"
+popup/item_2/text = "chat_2026-01-17_02-18-25.tres"
 popup/item_2/id = 2
-
-[node name="SkillSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=137271050]
-layout_mode = 2
-size_flags_horizontal = 3
-text_overrun_behavior = 1
+popup/item_3/text = "chat_2026-01-17_02-09-33.tres"
+popup/item_3/id = 3
+popup/item_4/text = "chat_2026-01-17_01-40-37.tres"
+popup/item_4/id = 4
+popup/item_5/text = "chat_2026-01-17_01-39-06.tres"
+popup/item_5/id = 5
+popup/item_6/text = "chat_2026-01-17_01-35-29.tres"
+popup/item_6/id = 6
+popup/item_7/text = "chat_2026-01-17_01-30-28.tres"
+popup/item_7/id = 7
 
 [node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=388608477]
 layout_mode = 2
@@ -210,6 +215,19 @@ text = "Save as Markdown"
 icon = ExtResource("4_qoxj2")
 text_overrun_behavior = 1
 expand_icon = true
+
+[node name="SkillMenuButton" type="MenuButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer3" unique_id=1867776721]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Skills (Core)"
+text_overrun_behavior = 1
+item_count = 2
+popup/item_0/text = "GDscript Coder"
+popup/item_0/checkable = 1
+popup/item_0/id = 0
+popup/item_1/text = "Scene Builder"
+popup/item_1/checkable = 1
+popup/item_1/id = 1
 
 [node name="SendButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer3" unique_id=1719100201]
 layout_mode = 2

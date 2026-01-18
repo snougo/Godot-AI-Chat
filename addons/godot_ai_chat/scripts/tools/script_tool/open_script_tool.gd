@@ -1,13 +1,9 @@
 @tool
-extends AiTool
-
-const ALLOWED_EXTENSIONS: Array[String] = ["gd", "gdshader"]
-
+extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "open_script"
 	tool_description = "Opens a script file in the Godot Script Editor."
-
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -21,19 +17,19 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["path"]
 	}
 
-
 func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
 	var path = args.get("path", "")
 	
-	# 1. 基础路径安全检查 (调用基类)
+	# 1. 基础路径安全检查 (AiTool)
 	var safety_error = validate_path_safety(path)
 	if not safety_error.is_empty():
 		return {"success": false, "data": safety_error}
 	
-	# 2. 扩展名白名单检查
-	var ext = path.get_extension().to_lower()
-	if not ext in ALLOWED_EXTENSIONS:
-		return {"success": false, "data": "Security Error: File extension '%s' is not allowed. Allowed: %s" % [ext, str(ALLOWED_EXTENSIONS)]}
+	# 2. 扩展名白名单检查 (BaseScriptTool)
+	# 使用默认的 gd, gdshader 白名单
+	var ext_error = validate_file_extension(path)
+	if not ext_error.is_empty():
+		return {"success": false, "data": ext_error}
 	
 	# 3. 文件存在性检查
 	if not FileAccess.file_exists(path):

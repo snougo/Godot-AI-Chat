@@ -49,7 +49,7 @@ enum UIState {
 @onready var _model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelSelector
 @onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelNameFilterInput
 @onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
-@onready var _skill_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/SkillSelector
+@onready var _skill_menu_button: MenuButton = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SkillMenuButton
 @onready var _settings_panel: Control = $TabContainer/Settings/SettingsPanel
 @onready var _error_dialog: AcceptDialog = $AcceptDialog
 @onready var _file_dialog: FileDialog = $FileDialog
@@ -80,12 +80,8 @@ func _ready() -> void:
 	
 	_update_chat_archive_selector()
 	
-	# 初始化技能选择器 (此时 ToolRegistry 刚初始化，状态为 Core Only)
-	_setup_skill_selector()
-	# [修复] 强制重置 UI 状态为 "None" (Index 0)，以匹配 ToolRegistry 的初始状态
-	# 除非我们实现了 ConfigFile 保存上次技能状态，否则默认归零是更安全的
-	if _skill_selector.item_count > 0:
-		_skill_selector.select(0)
+	# [New] 初始化多选菜单
+	_setup_skill_menu()
 	
 	reset_token_cost_display()
 	update_ui_state(UIState.IDLE)
@@ -308,41 +304,44 @@ func _update_chat_archive_selector() -> void:
 			_chat_archive_selector.select(_new_selection_index)
 
 
-func _setup_skill_selector() -> void:
-	if not _skill_selector: return
+func _setup_skill_menu() -> void:
+	# 配置 PopupMenu
+	var popup = _skill_menu_button.get_popup()
+	if not popup.id_pressed.is_connected(_on_skill_menu_item_pressed):
+		popup.id_pressed.connect(_on_skill_menu_item_pressed)
+	popup.hide_on_checkable_item_selection = false 
 	
-	# 临时断开信号，避免填充时触发回调
-	if _skill_selector.item_selected.is_connected(_on_skill_selected):
-		_skill_selector.item_selected.disconnect(_on_skill_selected)
+	# 填充内容
+	_refresh_skill_menu_items()
+
+
+func _refresh_skill_menu_items() -> void:
+	if not _skill_menu_button:
+		return
 	
-	_skill_selector.clear()
+	var popup = _skill_menu_button.get_popup()
+	popup.clear()
+	
 	var skills = ToolRegistry.get_available_skill_names()
+	var active_count = 0
 	
-	# 1. 添加 "None" 选项
-	_skill_selector.add_item("None", 0)
-	_skill_selector.set_item_metadata(0, "None")
-	
-	# 2. 填充技能列表
 	for i in range(skills.size()):
 		var s_name = skills[i]
-		_skill_selector.add_item(s_name, i + 1)
-		_skill_selector.set_item_metadata(i + 1, s_name)
+		# 使用 ID = index
+		popup.add_check_item(s_name, i)
+		
+		# 检查是否激活
+		var is_active = ToolRegistry.is_skill_active(s_name)
+		popup.set_item_checked(i, is_active)
+		
+		if is_active:
+			active_count += 1
 	
-	# 3. 同步 UI 与 Registry 状态
-	# 插件刚启动时 active_skill_name 为空，循环找不到匹配项，自然保持默认（或手动 select(0)）
-	var current_skill = ToolRegistry.active_skill_name
-	var found = false
-	for i in range(_skill_selector.item_count):
-		if _skill_selector.get_item_metadata(i) == current_skill:
-			_skill_selector.select(i)
-			found = true
-			break
-	
-	if not found:
-		_skill_selector.select(0)
-	
-	# 4. [修复] 重新连接信号
-	_skill_selector.item_selected.connect(_on_skill_selected)
+	# 更新按钮文本
+	if active_count == 0:
+		_skill_menu_button.text = "Skills (Core)"
+	else:
+		_skill_menu_button.text = "Skills (%d)" % active_count
 
 
 func _generate_default_filename(_extension: String) -> String:
@@ -382,14 +381,25 @@ func _on_model_selected(_index: int) -> void:
 		model_selection_changed.emit(_model_name)
 
 
-func _on_skill_selected(index: int) -> void:
-	var skill_name = _skill_selector.get_item_metadata(index)
-	var success = ToolRegistry.switch_to_skill_by_name(skill_name)
-	if success:
-		if skill_name == "None":
-			print("Switched to Core Tools only.")
-		else:
-			print("Switched to skill: ", skill_name)
+func _on_skill_menu_item_pressed(id: int) -> void:
+	var popup = _skill_menu_button.get_popup()
+	var skill_index = id
+	var skill_name = popup.get_item_text(skill_index)
+	var is_currently_checked = popup.is_item_checked(skill_index)
+	
+	# 逻辑反转：如果当前是 checked，说明用户点击是想取消
+	# 但 PopupMenu 的信号是在 toggle 之前发的（或者说我们需要手动处理 state）
+	# 这里最稳妥的是看当前状态，然后反向操作
+	
+	if is_currently_checked:
+		# 执行卸载
+		ToolRegistry.unmount_skill(skill_name)
+	else:
+		# 执行挂载
+		ToolRegistry.mount_skill(skill_name)
+	
+	# 刷新 UI 显示 (这一步会重新读取 ToolRegistry 状态来更新 Checkbox)
+	_refresh_skill_menu_items()
 
 
 func _on_model_name_filter_text_changed(_new_text: String) -> void:

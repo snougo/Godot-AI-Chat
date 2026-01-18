@@ -5,7 +5,6 @@ func _init() -> void:
 	tool_name = "set_node_property"
 	tool_description = "Modifies a node property. REQUIRES 'node_path' from 'get_current_active_scene'."
 
-
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -16,7 +15,6 @@ func get_parameters_schema() -> Dictionary:
 		},
 		"required": ["node_path", "property_name", "value"]
 	}
-
 
 func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
 	if not Engine.is_editor_hint():
@@ -35,7 +33,6 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	var raw_value = args.get("value")
 	
 	# --- 1. 严格检查：属性是否存在 ---
-	# 直接使用 ':' 作为分隔符来获取顶层属性名
 	var top_level_prop = prop_name
 	if ":" in prop_name:
 		top_level_prop = prop_name.split(":")[0]
@@ -69,18 +66,14 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 				[prop_name, get_type_name(target_type), get_type_name(final_type), str(raw_value)]
 			}
 	else:
-		# 如果当前值为 null 时，尝试智能推断
 		final_value = try_infer_type_from_string(raw_value)
 		
 		if final_value is String:
-			# 处理资源路径
 			if final_value.begins_with("res://"):
 				if ResourceLoader.exists(final_value):
 					final_value = ResourceLoader.load(final_value)
 				else:
 					return {"success": false, "data": "Error: Resource not found at '%s'." % final_value}
-			
-			# 处理类实例创建
 			else:
 				var type_to_create = ""
 				if final_value.begins_with("new:"):
@@ -98,7 +91,6 @@ func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary
 	var undo_redo = EditorInterface.get_editor_undo_redo()
 	undo_redo.create_action("AI Set Property")
 	
-	# 根据是否存在冒号来决定使用 set_indexed 还是 set
 	if ":" in prop_name:
 		undo_redo.add_do_method(node, "set_indexed", prop_name, final_value)
 		undo_redo.add_undo_method(node, "set_indexed", prop_name, current_val)

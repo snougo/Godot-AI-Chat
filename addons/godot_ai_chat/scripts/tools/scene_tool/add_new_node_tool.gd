@@ -1,11 +1,9 @@
 @tool
 extends BaseSceneTool
 
-
 func _init() -> void:
 	tool_name = "add_new_node"
 	tool_description = "Add a new node to the active scene. REQUIRES 'parent_path' from 'get_current_active_scene'."
-
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -21,7 +19,6 @@ func get_parameters_schema() -> Dictionary:
 		},
 		"required": ["parent_path", "node_name", "node_type"]
 	}
-
 
 func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 	if not Engine.is_editor_hint():
@@ -65,7 +62,7 @@ func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
 		parent.add_child(new_node)
 		new_node.owner = root # 确保保存
 		
-		# 应用属性
+		# 应用属性 (基类方法)
 		var properties = args.get("properties", {})
 		if properties is Dictionary and not properties.is_empty():
 			apply_properties(new_node, properties)
