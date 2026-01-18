@@ -49,7 +49,6 @@ enum UIState {
 @onready var _model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelSelector
 @onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelNameFilterInput
 @onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
-@onready var _skill_menu_button: MenuButton = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SkillMenuButton
 @onready var _settings_panel: Control = $TabContainer/Settings/SettingsPanel
 @onready var _error_dialog: AcceptDialog = $AcceptDialog
 @onready var _file_dialog: FileDialog = $FileDialog
@@ -79,10 +78,6 @@ func _ready() -> void:
 	_reconnect_button.pressed.connect(_on_reconnect_button_pressed)
 	
 	_update_chat_archive_selector()
-	
-	# [New] 初始化多选菜单
-	_setup_skill_menu()
-	
 	reset_token_cost_display()
 	update_ui_state(UIState.IDLE)
 
@@ -304,46 +299,6 @@ func _update_chat_archive_selector() -> void:
 			_chat_archive_selector.select(_new_selection_index)
 
 
-func _setup_skill_menu() -> void:
-	# 配置 PopupMenu
-	var popup = _skill_menu_button.get_popup()
-	if not popup.id_pressed.is_connected(_on_skill_menu_item_pressed):
-		popup.id_pressed.connect(_on_skill_menu_item_pressed)
-	popup.hide_on_checkable_item_selection = false 
-	
-	# 填充内容
-	_refresh_skill_menu_items()
-
-
-func _refresh_skill_menu_items() -> void:
-	if not _skill_menu_button:
-		return
-	
-	var popup = _skill_menu_button.get_popup()
-	popup.clear()
-	
-	var skills = ToolRegistry.get_available_skill_names()
-	var active_count = 0
-	
-	for i in range(skills.size()):
-		var s_name = skills[i]
-		# 使用 ID = index
-		popup.add_check_item(s_name, i)
-		
-		# 检查是否激活
-		var is_active = ToolRegistry.is_skill_active(s_name)
-		popup.set_item_checked(i, is_active)
-		
-		if is_active:
-			active_count += 1
-	
-	# 更新按钮文本
-	if active_count == 0:
-		_skill_menu_button.text = "Skills (Core)"
-	else:
-		_skill_menu_button.text = "Skills (%d)" % active_count
-
-
 func _generate_default_filename(_extension: String) -> String:
 	var _now: Dictionary = Time.get_datetime_dict_from_system(false)
 	var _timestamp_str: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [_now.year, _now.month, _now.day, _now.hour, _now.minute, _now.second]
@@ -379,27 +334,6 @@ func _on_model_selected(_index: int) -> void:
 	if _model_selector.get_item_count() > _index and _index >= 0:
 		var _model_name: String = _model_selector.get_item_text(_index)
 		model_selection_changed.emit(_model_name)
-
-
-func _on_skill_menu_item_pressed(id: int) -> void:
-	var popup = _skill_menu_button.get_popup()
-	var skill_index = id
-	var skill_name = popup.get_item_text(skill_index)
-	var is_currently_checked = popup.is_item_checked(skill_index)
-	
-	# 逻辑反转：如果当前是 checked，说明用户点击是想取消
-	# 但 PopupMenu 的信号是在 toggle 之前发的（或者说我们需要手动处理 state）
-	# 这里最稳妥的是看当前状态，然后反向操作
-	
-	if is_currently_checked:
-		# 执行卸载
-		ToolRegistry.unmount_skill(skill_name)
-	else:
-		# 执行挂载
-		ToolRegistry.mount_skill(skill_name)
-	
-	# 刷新 UI 显示 (这一步会重新读取 ToolRegistry 状态来更新 Checkbox)
-	_refresh_skill_menu_items()
 
 
 func _on_model_name_filter_text_changed(_new_text: String) -> void:

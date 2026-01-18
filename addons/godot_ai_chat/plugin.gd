@@ -12,7 +12,7 @@ var chat_hub_instance: Control = null
 
 func _enter_tree() -> void:
 	# 强制重置工具注册表状态，防止静态变量残留导致 UI 状态不一致
-	ToolRegistry.load_default_tools()
+	#ToolRegistry.load_default_tools()
 	
 	# 优先初始化文件系统环境
 	# 这必须在实例化任何 UI 或逻辑脚本之前完成，以确保路径有效
