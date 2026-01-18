@@ -146,7 +146,10 @@ static func get_all_tool_definitions(for_gemini: bool = false) -> Array:
 
 
 static func get_available_skill_names() -> Array:
-	if available_skills.is_empty(): _scan_skills()
+	#if available_skills.is_empty():
+		#_scan_skills()
+	# [DEBUG] 强制刷新，不使用缓存，以便调试
+	_scan_skills()
 	return available_skills.keys()
 
 
@@ -184,8 +187,17 @@ static func _load_skill_from_folder(folder_path: String) -> void:
 		while file_name != "":
 			if not dir.current_is_dir() and (file_name.ends_with(".tres") or file_name.ends_with(".res")):
 				var resource = load(folder_path.path_join(file_name))
-				if resource and "skill_name" in resource:
-					available_skills[resource.skill_name] = resource
+				
+				# 详细判断并打印结果
+				if resource:
+					if "skill_name" in resource:
+						available_skills[resource.skill_name] = resource
+						print("[ToolRegistry] -> SUCCESS: Loaded ", resource.skill_name)
+					else:
+						printerr("[ToolRegistry] -> ERROR: Resource has no 'skill_name'")
+				else:
+					printerr("[ToolRegistry] -> ERROR: load() returned null")
+			
 			file_name = dir.get_next()
 		dir.list_dir_end()
 
