@@ -31,7 +31,7 @@ var is_creating_new_chat: bool = false
 
 func _ready() -> void:
 	# 在这里注册工具，确保环境已稳定
-	#ToolRegistry.load_default_tools()
+	ToolRegistry.load_default_tools()
 	
 	# 确保目录存在
 	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):

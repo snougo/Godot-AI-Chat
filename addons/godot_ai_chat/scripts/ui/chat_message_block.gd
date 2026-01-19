@@ -49,6 +49,10 @@ var _current_typing_node: RichTextLabel = null
 var _reasoning_container: FoldableContainer = null
 var _reasoning_label: RichTextLabel = null
 
+# [新增] 专门用于处理 <think> 标签的缓冲区和状态
+var _think_parse_buffer: String = ""
+var _is_parsing_think: bool = false
+
 # --- Built-in Functions ---
 
 func _ready() -> void:
@@ -86,9 +90,68 @@ func start_stream(_role: String, _model_name: String = "") -> void:
 
 ## 追加流式文本块
 func append_chunk(_text: String) -> void:
+	#if _text.is_empty(): 
+		#return
+	#_process_smart_chunk(_text, false)
+	
 	if _text.is_empty(): 
 		return
-	_process_smart_chunk(_text, false)
+	
+	_think_parse_buffer += _text
+	
+	while true:
+		if _is_parsing_think:
+			var _end_idx: int = _think_parse_buffer.find("</think>")
+			if _end_idx != -1:
+				# 思考结束
+				var _think_content: String = _think_parse_buffer.substr(0, _end_idx)
+				append_reasoning(_think_content)
+				
+				_is_parsing_think = false
+				_think_parse_buffer = _think_parse_buffer.substr(_end_idx + 8)
+				continue
+			else:
+				# 还没结束，尽量刷新缓冲区到思考UI，只留一点尾巴防止切断 </think>
+				var _keep_len: int = 8 # </think> 长度
+				if _think_parse_buffer.length() > _keep_len:
+					var _flush_len: int = _think_parse_buffer.length() - _keep_len
+					var _content: String = _think_parse_buffer.left(_flush_len)
+					append_reasoning(_content)
+					_think_parse_buffer = _think_parse_buffer.right(-_flush_len)
+				break
+		
+		else: # 正常文本模式
+			var _start_idx: int = _think_parse_buffer.find("<think>")
+			if _start_idx != -1:
+				# 发现思考开始
+				# 1. 先把 <think> 之前的内容当作普通文本处理
+				if _start_idx > 0:
+					var _normal_text: String = _think_parse_buffer.substr(0, _start_idx)
+					_process_smart_chunk(_normal_text, false) # 调用原有的处理逻辑
+				
+				# 2. 切换状态
+				_is_parsing_think = true
+				_think_parse_buffer = _think_parse_buffer.substr(_start_idx + 7)
+				continue
+			else:
+				# 没发现 <think>，检查是否有潜在的半个 <think>
+				# 类似 <, <t, <th ...
+				var _safe_idx: int = _think_parse_buffer.length()
+				# 简单粗暴点：如果不包含 <，则全部安全
+				# 如果包含 <，则保留 < 及其后面的内容到下次处理
+				var _last_lt: int = _think_parse_buffer.rfind("<")
+				if _last_lt != -1:
+					# 检查后面是否可能构成 <think>
+					var _potential: String = _think_parse_buffer.substr(_last_lt)
+					if "<think>".begins_with(_potential):
+						_safe_idx = _last_lt
+				
+				if _safe_idx > 0:
+					var _safe_text: String = _think_parse_buffer.left(_safe_idx)
+					_process_smart_chunk(_safe_text, false) # 调用原有的处理逻辑
+					_think_parse_buffer = _think_parse_buffer.right(-_safe_idx)
+				
+				break
 
 
 ## 追加流式思考内容
@@ -105,6 +168,15 @@ func append_reasoning(_text: String) -> void:
 
 ## 结束流式接收，刷新缓冲区
 func finish_stream() -> void:
+	# 刷新剩余的缓冲区
+	if not _think_parse_buffer.is_empty():
+		if _is_parsing_think:
+			append_reasoning(_think_parse_buffer)
+		else:
+			_process_smart_chunk(_think_parse_buffer, false)
+	_think_parse_buffer = ""
+	_is_parsing_think = false
+	
 	if not _pending_buffer.is_empty():
 		if _pending_buffer.begins_with("```"):
 			var _line: String = _pending_buffer
@@ -466,11 +538,33 @@ func _create_code_block(_lang: String) -> void:
 	var _lang_label: Label = Label.new()
 	_lang_label.text = _lang if not _lang.is_empty() else "Code"
 	_lang_label.modulate = Color(0.7, 0.7, 0.7)
+	
 	var _copy_btn: Button = Button.new()
 	_copy_btn.text = "Copy"
 	_copy_btn.flat = true
 	_copy_btn.focus_mode = Control.FOCUS_NONE
-	_copy_btn.pressed.connect(func(): DisplayServer.clipboard_set(_code_edit.text))
+	#_copy_btn.pressed.connect(func(): DisplayServer.clipboard_set(_code_edit.text))
+	# --- [修改开始] 增强的复制反馈逻辑 ---
+	_copy_btn.pressed.connect(func():
+		DisplayServer.clipboard_set(_code_edit.text)
+		
+		# 记录原始文本，防止多次点击导致逻辑混乱
+		if _copy_btn.text != "Copied ✓":
+			var _original_text: String = "Copy"
+			_copy_btn.text = "Copied ✓"
+			_copy_btn.modulate = Color.GREEN_YELLOW # 可选：稍微变色提示
+			
+			# 等待 3 秒
+			if _copy_btn.is_inside_tree():
+				await _copy_btn.get_tree().create_timer(3.0).timeout
+			
+			# 恢复状态 (需检查节点是否仍有效)
+			if is_instance_valid(_copy_btn):
+				_copy_btn.text = _original_text
+				_copy_btn.modulate = Color.WHITE
+	)
+	# --- [修改结束] ---
+	
 	_header.add_child(_lang_label)
 	_header.add_child(Control.new())
 	_header.get_child(1).size_flags_horizontal = Control.SIZE_EXPAND_FILL

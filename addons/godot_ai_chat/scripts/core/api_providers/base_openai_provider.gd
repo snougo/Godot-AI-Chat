@@ -4,6 +4,7 @@ extends BaseLLMProvider
 
 ## OpenAI 兼容接口的基类实现。
 
+
 # --- Public Functions ---
 
 ## 返回该 Provider 使用的流式解析协议
@@ -48,7 +49,7 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 		var _msg_dict: Dictionary = _msg.to_api_dict()
 		
 		# --- 多模态图片支持 ---
-		# [修复] 仅非 Tool 类型的消息支持多模态 (OpenAI 限制 Tool 消息内容必须为 String)
+		# 仅非 Tool 类型的消息支持多模态 (OpenAI 限制 Tool 消息内容必须为 String)
 		if not _msg.image_data.is_empty() and _msg.role != "tool":
 			var _content_array: Array = []
 			

@@ -130,3 +130,22 @@ static func remove_think_tags(_text: String) -> String:
 	var _think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
 	var _cleaned_text: String = _think_regex.sub(_text, "", true)
 	return _cleaned_text.strip_edges()
+
+
+## 过滤掉那些在 <think> 标签尚未闭合时产生的工具调用
+static func filter_hallucinated_tool_calls(_content: String, _tool_calls: Array) -> Array:
+	if _tool_calls.is_empty() or "<think>" not in _content:
+		return _tool_calls
+	
+	var _think_start: int = _content.find("<think>")
+	var _think_end: int = _content.find("</think>")
+	
+	# 如果找到了 <think> 但没找到 </think>，说明思考过程尚未结束
+	# 此时产生的所有工具调用都应视为不稳定或幻觉，予以拦截
+	if _think_start != -1 and _think_end == -1:
+		print("[ToolBox] Intercepted %d tool calls during unclosed <think> block." % _tool_calls.size())
+		return []
+	
+	# 如果 <think> 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
+	# 直接放行，不再做内容匹配（防止误杀）
+	return _tool_calls
