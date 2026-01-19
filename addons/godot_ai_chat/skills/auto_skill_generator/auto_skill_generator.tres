@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://cmfd86cflo2p3"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_w2n1e"]
+
+[resource]
+script = ExtResource("1_w2n1e")
+skill_name = "Auto Skill Generator"
+description = "根据用户需求自动创建自定义 SKILL.md 文档。
+如需更多信息，可按需查阅 `res://addons/godot_ai_chat/skills/skill_creator/reference/` 文件夹中的引用文档"
+instruction_file = "res://addons/godot_ai_chat/skills/skill_creator/Skill.md"
+tools = Array[String](["uid://dfviwipf4ajsp"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

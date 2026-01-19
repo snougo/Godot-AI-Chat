@@ -42,7 +42,27 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 			
 			var result = ToolRegistry.mount_skill(skill_name)
 			if result:
-				return {"success": true, "data": "Successfully mounted skill: %s. You now have access to its capabilities." % skill_name}
+				# 获取新增的工具列表
+				var new_tools = []
+				if ToolRegistry.available_skills.has(skill_name):
+					var skill = ToolRegistry.available_skills[skill_name]
+					if "tools" in skill:
+						for tool_path in skill.tools:
+							# 尝试加载脚本以获取准确的工具名称
+							var script = load(tool_path)
+							if script:
+								var temp_tool = script.new()
+								if "tool_name" in temp_tool:
+									new_tools.append(temp_tool.tool_name)
+								else:
+									new_tools.append(tool_path.get_file()) # 后备方案：使用文件名
+				
+				var tool_msg = ""
+				if not new_tools.is_empty():
+					# 格式化为: New Tool has added: "tool_a", "tool_b"
+					var quoted_tools = new_tools.map(func(t): return '"%s"' % t)
+					tool_msg = "\nNew Tool has added: " + ", ".join(quoted_tools)
+				return {"success": true, "data": "Successfully mounted skill: %s.%s" % [skill_name, tool_msg]}
 			else:
 				return {"success": false, "data": "Failed to mount skill: %s. Check console for details." % skill_name}
 		
@@ -52,6 +72,6 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 			
 			ToolRegistry.unmount_skill(skill_name)
 			return {"success": true, "data": "Successfully unmounted skill: %s." % skill_name}
-			
+		
 		_:
 			return {"success": false, "data": "Invalid action: %s" % action}

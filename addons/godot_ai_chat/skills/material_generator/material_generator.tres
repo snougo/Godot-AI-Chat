@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://cxfaoxu7djtl2"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_7pdkc"]
+
+[resource]
+script = ExtResource("1_7pdkc")
+skill_name = "Material Generator"
+description = "根据用户指定的文件夹，识别其中的纹理贴图，并自动配置并保存对应的 `StandardMaterial3D` 或 `ShaderMaterial` 资源。"
+instruction_file = "res://addons/godot_ai_chat/skills/material_generator/Skill.md"
+tools = Array[String](["uid://cowwxsqfjoudu"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"
