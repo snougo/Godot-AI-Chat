@@ -93,21 +93,7 @@ func get_truncated_messages(_max_turns: int, _system_prompt: String = "", _clean
 	# 3.2 展开所有保留的轮次
 	for _turn in _truncated_turns:
 		_result.append_array(_turn)
-
-	# 4. 尾部安全清洗 (Sanitization)
-	# 目的：处理中断导致的脏数据，防止 API 报错 (400 Bad Request)。
-	# 逻辑：如果上下文以 "Assistant 发起工具调用" 结尾，但后面没有跟着 "Tool 结果"，
-	#       说明调用链中断了。这种 "悬空" 的 Assistant 消息必须移除，否则 API 会拒绝请求。
-	#       注意：如果以 "Tool" 结尾，是安全的（保留它以告知模型之前的操作结果）。
-	#while not _result.is_empty():
-		#var _last: ChatMessage = _result.back()
-		#if _last.role == ChatMessage.ROLE_ASSISTANT and not _last.tool_calls.is_empty():
-			# 这是一个悬空的工具调用请求，移除它
-			#_result.pop_back()
-			# 继续循环，以防前面还有连续的悬空请求（虽然罕见）
-		#else:
-			# 遇到正常的文本回复、User 消息或 Tool 结果消息，停止清洗
-			#break
+	
 	# [修复] 仅在 _cleanup_pending_tool_calls 为 true 时才执行清洗。
 	# 防止在 Agent 连续对话中删除了刚刚生成的 Assistant 消息。
 	if _cleanup_pending_tool_calls:

@@ -54,23 +54,24 @@ func process_response(_msg: ChatMessage) -> void:
 	if not _msg.tool_calls.is_empty():
 		for _tool_call in _msg.tool_calls:
 			if _tool_call.has("function"):
-				var _f: Dictionary = _tool_call["function"]
+				var tool_call_function: Dictionary = _tool_call["function"]
 				# 1. 清洗函数名
-				if _f.has("name") and _f["name"] is String:
-					_f["name"] = _f["name"].replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
+				if tool_call_function.has("name") and tool_call_function["name"] is String:
+					tool_call_function["name"] = tool_call_function["name"].replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
 				
 				# 2. 尝试修复参数 JSON (如果是坏的 JSON)
-				if _f.has("arguments") and _f["arguments"] is String:
-					var _args_str: String = _f["arguments"]
+				if tool_call_function.has("arguments") and tool_call_function["arguments"] is String:
+					# 使用 JSONRepairHelper 进行健壮的提取和修复
+					var _raw_args: String = tool_call_function["arguments"]
+					var _fixed_args: String = JSONRepairHelper.repair_json(_raw_args)
 					
-					# 使用静默检测代替 JSON.parse_string 以避免控制台红字
-					if not _is_valid_json(_args_str):
-						# 如果解析失败，尝试截取到最后一个 }
-						var _last_brace: int = _args_str.rfind("}")
-						if _last_brace != -1:
-							var _fixed_args: String = _args_str.substr(0, _last_brace + 1)
-							if _is_valid_json(_fixed_args):
-								_f["arguments"] = _fixed_args
+					# 验证修复结果，如果仍然无效，则回退到空对象
+					if JSON.parse_string(_fixed_args) != null:
+						tool_call_function["arguments"] = _fixed_args
+					else:
+						# 只有当原始参数完全不可救药时才这样做
+						# 也可以保留原样让后续流程报错，这里选择安全回退
+						tool_call_function["arguments"] = "{}" 
 	
 	# 检查是否有工具调用
 	if not _msg.tool_calls.is_empty():
@@ -102,12 +103,6 @@ func _start_tool_workflow(_trigger_msg: ChatMessage) -> void:
 	
 	# 启动工作流，直接传入包含 tool_calls 的消息
 	current_workflow.start(_trigger_msg)
-
-
-## 辅助函数：静默检查 JSON 是否合法 (不打印 Error)
-func _is_valid_json(_json_str: String) -> bool:
-	var _json_obj: JSON = JSON.new()
-	return _json_obj.parse(_json_str) == OK
 
 
 # --- Signal Callbacks ---

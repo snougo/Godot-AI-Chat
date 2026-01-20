@@ -15,7 +15,7 @@ const SUPPORTED_EXTENSIONS = ["png", "jpg", "jpeg", "tga", "webp", "bmp"]
 
 
 func _init():
-	tool_name = "generate_materials_from_textures"
+	tool_name = "generate_materials"
 	tool_description = "Automatically scans a folder for textures and generates StandardMaterial3D resources. Handles resolution suffixes (e.g., _1k) intelligently."
 
 

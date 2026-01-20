@@ -104,6 +104,46 @@ func handle_stream_chunk(_raw_chunk: Dictionary, _provider: BaseLLMProvider) -> 
 	_scroll_to_bottom()
 
 
+## 回滚未完成的消息（用于停止生成时）
+## 现在支持递归回滚工具链，防止留下悬空的 Tool Output 或 Tool Call
+func rollback_incomplete_message() -> void:
+	if chat_history.messages.is_empty():
+		return
+	
+	var _safety_count := 0
+	
+	while not chat_history.messages.is_empty() and _safety_count < 10:
+		var _last_msg: ChatMessage = chat_history.messages.back()
+		var _should_continue_rollback := false
+		
+		# 1. 正在生成的纯文本 Assistant 消息 -> 删除并结束
+		if _last_msg.role == ChatMessage.ROLE_ASSISTANT and _last_msg.tool_calls.is_empty():
+			print("[CurrentChatWindow] Rolling back text message.")
+			_pop_last_message_and_ui()
+			break 
+		
+		# 2. 工具输出消息 (Tool) -> 删除，并继续检查上一条
+		elif _last_msg.role == ChatMessage.ROLE_TOOL:
+			print("[CurrentChatWindow] Rolling back tool output.")
+			_pop_last_message_and_ui()
+			_should_continue_rollback = true
+		
+		# 3. 包含工具调用的 Assistant 消息 -> 删除并结束 (这是这一轮的源头)
+		elif _last_msg.role == ChatMessage.ROLE_ASSISTANT and not _last_msg.tool_calls.is_empty():
+			print("[CurrentChatWindow] Rolling back tool call.")
+			_pop_last_message_and_ui()
+			break
+		
+		# 4. User 或 System -> 停止
+		else:
+			break
+		
+		if not _should_continue_rollback:
+			break
+		
+		_safety_count += 1
+
+
 ## 提交 Agent 历史记录（占位符，逻辑已在 ChatHub 处理）
 func commit_agent_history(_new_messages: Array[ChatMessage]) -> void:
 	pass
@@ -113,6 +153,7 @@ func commit_agent_history(_new_messages: Array[ChatMessage]) -> void:
 func update_token_usage(_usage: Dictionary) -> void:
 	if not _usage.is_empty():
 		token_usage_updated.emit(_usage)
+
 
 # --- Private Functions ---
 
@@ -158,3 +199,11 @@ func _scroll_to_bottom() -> void:
 	await get_tree().process_frame
 	if chat_scroll_container.get_v_scroll_bar():
 		chat_scroll_container.scroll_vertical = chat_scroll_container.get_v_scroll_bar().max_value
+
+
+## 辅助：移除最后一条数据和 UI
+func _pop_last_message_and_ui() -> void:
+	chat_history.messages.pop_back()
+	var _last_block: Node = _get_last_block()
+	if _last_block:
+		_last_block.queue_free()

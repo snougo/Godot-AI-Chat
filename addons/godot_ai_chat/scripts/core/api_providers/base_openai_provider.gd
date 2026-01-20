@@ -33,45 +33,14 @@ func get_request_url(_base_url: String, _model_name: String, _api_key: String, _
 
 ## 构建请求体 (Body)
 func build_request_body(_model_name: String, _messages: Array[ChatMessage], _temperature: float, _stream: bool, _tool_definitions: Array = []) -> Dictionary:
-	# --- [添加在这里] ---
-	var tool_names := []
-	for tool_def in _tool_definitions:
-		tool_names.append(tool_def.get("name", "Unknown"))
-	
-	print("[OpenAI Debug] Current Model: %s" % _model_name)
-	print("[OpenAI Debug] Sending Tools Count: %d" % _tool_definitions.size())
-	print("[OpenAI Debug] Sending Tools Names: %s" % str(tool_names))
-	# ------------------
+	#print("[OpenAI Debug] Current Model: %s" % _model_name)
+	#print("[OpenAI Debug] Sending Tools Count: %d" % _tool_definitions.size())
 	
 	var _api_messages: Array[Dictionary] = []
 	
 	for _msg in _messages:
-		var _msg_dict: Dictionary = _msg.to_api_dict()
-		
-		# --- 多模态图片支持 ---
-		# 仅非 Tool 类型的消息支持多模态 (OpenAI 限制 Tool 消息内容必须为 String)
-		if not _msg.image_data.is_empty() and _msg.role != "tool":
-			var _content_array: Array = []
-			
-			# 1. 如果有文本内容，添加为 text 类型块
-			if not _msg.content.is_empty():
-				_content_array.append({
-					"type": "text",
-					"text": _msg.content
-				})
-			
-			# 2. 添加图片块 (使用 Data URL 格式)
-			var _base64_str: String = Marshalls.raw_to_base64(_msg.image_data)
-			_content_array.append({
-				"type": "image_url",
-				"image_url": {
-					"url": "data:%s;base64,%s" % [_msg.image_mime, _base64_str]
-				}
-			})
-			
-			# 覆盖原有的 String content
-			_msg_dict["content"] = _content_array
-		
+		# [Refactor] 核心改动：调用内部函数进行转换
+		var _msg_dict: Dictionary = _convert_message_to_api_format(_msg)
 		_api_messages.append(_msg_dict)
 	
 	var _body: Dictionary = {
@@ -126,7 +95,6 @@ func parse_non_stream_response(_body_bytes: PackedByteArray) -> Dictionary:
 
 
 ## 实现流式碎片拼装逻辑
-# 接收原始网络数据(_chunk_data)，直接修改目标消息对象(_target_msg)的数据层
 func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> Dictionary:
 	var _ui_update: Dictionary = { "content_delta": "" }
 	
@@ -146,20 +114,16 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 		_ui_update["content_delta"] = _text
 	
 	# 3. 提取思考 (Reasoning - Kimi/DeepSeek)
-	# 独立解析 reasoning_content 字段
 	if _delta.has("reasoning_content") and _delta.reasoning_content is String:
 		var _r_text: String = _delta.reasoning_content
 		_target_msg.reasoning_content += _r_text
-		# 使用专用字段通知 UI，避免混入正文
 		_ui_update["reasoning_delta"] = _r_text
 	
 	# 4. 提取工具 (Tool Calls - 流式拼装)
-	# 增加对 delta.tool_calls 是否为 null 的检查
 	if _delta.has("tool_calls") and _delta.tool_calls is Array:
 		for _tc in _delta.tool_calls:
 			var _index: int = int(_tc.get("index", 0))
 			
-			# 自动扩容数组
 			while _target_msg.tool_calls.size() <= _index:
 				_target_msg.tool_calls.append({
 					"id": "",
@@ -169,7 +133,6 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 			
 			var _target_call: Dictionary = _target_msg.tool_calls[_index]
 			
-			# 增量合并
 			if _tc.has("id") and _tc.id != null:
 				_target_call["id"] = _tc.id
 			
@@ -178,6 +141,64 @@ func process_stream_chunk(_target_msg: ChatMessage, _chunk_data: Dictionary) -> 
 				if _f.has("name") and _f.name != null:
 					_target_call.function.name += _f.name
 				if _f.has("arguments") and _f.arguments != null:
-					_target_call.function.arguments += _f.arguments # 确保此处累加的是有效的字符串
+					_target_call.function.arguments += _f.arguments
 	
 	return _ui_update
+
+
+# --- Private Helper ---
+
+## [Refactor] 将 ChatMessage 转换为 OpenAI 格式的字典
+## 统一了普通文本、多模态和工具调用的处理逻辑
+func _convert_message_to_api_format(_msg: ChatMessage) -> Dictionary:
+	var _dict: Dictionary = { "role": _msg.role }
+	
+	# 1. 优先处理多模态 (仅 User 且有图)
+	if _msg.role == "user" and not _msg.image_data.is_empty():
+		var _content_array: Array = []
+		if not _msg.content.is_empty():
+			_content_array.append({ "type": "text", "text": _msg.content })
+		
+		var _base64_str: String = Marshalls.raw_to_base64(_msg.image_data)
+		_content_array.append({
+			"type": "image_url",
+			"image_url": { "url": "data:%s;base64,%s" % [_msg.image_mime, _base64_str] }
+		})
+		_dict["content"] = _content_array
+	
+	# 2. 普通文本处理
+	else:
+		var _final_content = _msg.content
+		
+		# [防御性修复] Tool 类型的消息内容绝对不能为空，否则会导致对话链断裂
+		if _msg.role == "tool" and _final_content.is_empty():
+			_final_content = "SUCCESS" # 或 "{}"，给一个占位符防止被后端丢弃
+		
+		# [兼容性策略] Assistant 消息如果有 ToolCall，content 必须存在
+		elif _msg.role == "assistant" and not _msg.tool_calls.is_empty() and _final_content.is_empty():
+			_final_content = ""
+		
+		_dict["content"] = _final_content
+	
+	# 3. Name 字段
+	if not _msg.name.is_empty() and _msg.role != "tool":
+		_dict["name"] = _msg.name
+	
+	# 4. Tool Calls
+	# [防御性修复] 过滤掉可能存在的格式错误的 Tool Call (例如 id 为空的)
+	if not _msg.tool_calls.is_empty():
+		var _valid_calls: Array = []
+		for _tc in _msg.tool_calls:
+			if _tc.get("id", "") != "": # 确保 id 存在
+				# 确保 type 字段存在，OpenAI 规范必需
+				if not _tc.has("type"): _tc["type"] = "function"
+				_valid_calls.append(_tc)
+		
+		if not _valid_calls.is_empty():
+			_dict["tool_calls"] = _valid_calls
+	
+	# 5. Tool Call ID
+	if not _msg.tool_call_id.is_empty():
+		_dict["tool_call_id"] = _msg.tool_call_id
+	
+	return _dict

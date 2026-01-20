@@ -37,8 +37,8 @@ func build_request_body(_model_name: String, _messages: Array[ChatMessage], _tem
 		# 根据你的实现，这里 _tool_definitions 应该是一个 function declaration 的列表
 		tool_names.append(tool_def.get("name", "Unknown"))
 	
-	print("[Gemini Debug] Current Model: %s" % _model_name)
-	print("[Gemini Debug] Sending Tools Count: %d" % _tool_definitions.size())
+	#print("[Gemini Debug] Current Model: %s" % _model_name)
+	#print("[Gemini Debug] Sending Tools Count: %d" % _tool_definitions.size())
 	print("[Gemini Debug] Sending Tools Names: %s" % str(tool_names))
 	# ------------------
 	

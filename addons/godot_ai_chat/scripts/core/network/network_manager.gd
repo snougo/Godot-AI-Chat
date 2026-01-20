@@ -35,10 +35,12 @@ var api_base_url: String = ""
 var temperature: float = 0.7
 var current_model_name: String = ""
 
+
 # --- Built-in Functions ---
 
 func _ready() -> void:
 	_http_request_node.timeout = 10.0
+
 
 # --- Public Functions ---
 
@@ -114,6 +116,7 @@ func cancel_stream() -> void:
 		current_stream_request.cancel()
 		chat_stream_request_canceled.emit()
 
+
 # --- Private Functions ---
 
 ## 初始化 Provider 配置
@@ -123,20 +126,13 @@ func _update_provider_config() -> bool:
 	api_base_url = _settings.api_base_url
 	temperature = _settings.temperature
 	
-	match _settings.api_provider:
-		"OpenAI-Compatible":
-			current_provider = BaseOpenAIProvider.new()
-		"Local-AI-Service":
-			current_provider = LocalAIProvider.new()
-		"ZhipuAI":
-			current_provider = ZhipuAIProvider.new()
-		"Google Gemini":
-			current_provider = GeminiProvider.new()
-		_:
-			push_error("Unknown API Provider: %s" % _settings.api_provider)
-			return false
+	# 使用工厂创建实例
+	current_provider = ProviderFactory.create_provider(_settings.api_provider)
+	if current_provider == null:
+		return false
 	
 	return true
+
 
 # --- Signal Callbacks ---
 

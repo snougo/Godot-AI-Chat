@@ -32,8 +32,6 @@ var _pending_buffer: String = ""
 var _last_ui_node: Control = null
 
 ## 正则匹配：代码块开始 (锚定行首，但是允许行首出现空格)
-#var _re_code_start: RegEx = RegEx.create_from_string("^```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
-#var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*([a-zA-Z0-9_+\\-#.]*)\\s*$")
 var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*(.*)\\s*$")
 
 ## 正则匹配：代码块结束 (锚定行首，但是允许行首出现空格)
@@ -90,10 +88,6 @@ func start_stream(_role: String, _model_name: String = "") -> void:
 
 ## 追加流式文本块
 func append_chunk(_text: String) -> void:
-	#if _text.is_empty(): 
-		#return
-	#_process_smart_chunk(_text, false)
-	
 	if _text.is_empty(): 
 		return
 	

@@ -11,9 +11,6 @@ var chat_hub_instance: Control = null
 
 
 func _enter_tree() -> void:
-	# 强制重置工具注册表状态，防止静态变量残留导致 UI 状态不一致
-	#ToolRegistry.load_default_tools()
-	
 	# 优先初始化文件系统环境
 	# 这必须在实例化任何 UI 或逻辑脚本之前完成，以确保路径有效
 	self._initialize_plugin_file_environment()
@@ -25,13 +22,18 @@ func _enter_tree() -> void:
 		return
 	
 	chat_hub_instance = scene.instantiate()
-	
 	# 将界面添加到编辑器停靠栏 (右侧左上区域)
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, chat_hub_instance)
 	
 	# 注入编辑器依赖
 	# 获取 ChatUI 节点并传递文件系统引用，用于文件选择器等功能
-	var chat_ui: ChatUI = chat_hub_instance.get_node_or_null("ChatUI")
+	var chat_ui: ChatUI = null
+	if chat_hub_instance.has_method("get_chat_ui"):
+		chat_ui = chat_hub_instance.get_chat_ui()
+	else:
+		# 兼容性兜底
+		chat_ui = chat_hub_instance.get_node_or_null("ChatUI")
+	
 	if is_instance_valid(chat_ui):
 		var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
 		chat_ui.initialize_editor_dependencies(editor_file_system)

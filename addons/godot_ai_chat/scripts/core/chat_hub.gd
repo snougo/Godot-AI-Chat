@@ -16,9 +16,6 @@ const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
 @onready var _chat_backend: ChatBackend = $ChatBackend
 @onready var _current_chat_window: CurrentChatWindow = $CurrentChatWindow
 
-@onready var _chat_list_container: VBoxContainer = $ChatUI/TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer/ChatListContainer
-@onready var _chat_scroll_container: ScrollContainer = $ChatUI/TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer
-
 # --- Public Vars ---
 
 ## 当前绑定的资源文件路径 (用于自动保存)
@@ -36,6 +33,10 @@ func _ready() -> void:
 	# 确保目录存在
 	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
 		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
+	
+	# [Refactor] 通过 ChatUI 接口获取节点引用
+	var _chat_list_container: VBoxContainer = _chat_ui.get_chat_list_container()
+	var _chat_scroll_container: ScrollContainer = _chat_ui.get_chat_scroll_container()
 	
 	# 依赖注入
 	_chat_backend.network_manager = _network_manager
@@ -91,6 +92,12 @@ func _ready() -> void:
 	# 插件启动时，若无当前对话路径，提示用户操作
 	if current_history_path.is_empty():
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
+
+
+# --- Public Functions ---
+
+func get_chat_ui() -> ChatUI:
+	return _chat_ui
 
 
 # --- Private Functions ---
@@ -274,6 +281,16 @@ func _on_stream_completed() -> void:
 func _on_stop_requested() -> void:
 	_network_manager.cancel_stream()
 	_chat_backend.cancel_workflow()
+	
+	# [Fix] 回滚未完成的消息，防止坏数据污染历史记录
+	# 修复逻辑：将 TOOLCALLING 状态加入回滚判断中。
+	# 当在工具调用阶段中断时，那条触发工具的 Assistant 消息是“无效”的，必须删除，
+	# 否则会留下一条悬空的 Tool Call，导致下一次对话因上下文结构错误而崩溃。
+	var is_response_generating: bool = _chat_ui.current_state == ChatUI.UIState.RESPONSE_GENERATING
+	var is_waiting_response: bool = _chat_ui.current_state == ChatUI.UIState.WAITING_RESPONSE
+	var is_tool_calling: bool = _chat_ui.current_state == ChatUI.UIState.TOOLCALLING
+	if is_response_generating or is_waiting_response or is_tool_calling:
+		_current_chat_window.rollback_incomplete_message()
 	
 	if _current_chat_window.chat_history:
 		_current_chat_window.chat_history.emit_changed()

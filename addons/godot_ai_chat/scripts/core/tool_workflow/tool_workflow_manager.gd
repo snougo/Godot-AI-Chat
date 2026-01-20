@@ -51,28 +51,20 @@ func cleanup() -> void:
 func start(_trigger_msg: ChatMessage) -> void:
 	_execute_tool_calls(_trigger_msg)
 
+
 # --- Private Functions ---
 
 ## 执行消息中的所有工具调用
 func _execute_tool_calls(_msg: ChatMessage) -> void:
 	var _generated_tool_msgs: Array[ChatMessage] = []
-	var _generated_image_msgs: Array[ChatMessage] = []
+	#var _generated_image_msgs: Array[ChatMessage] = []
 	
-	#for _call in _msg.tool_calls:
-		#var _call_id: String = _call.get("id", "")
-		#var _func_def: Dictionary = _call.get("function", {})
-		#var _tool_name: String = _func_def.get("name", "")
-		#var _raw_args_str: String = _func_def.get("arguments", "{}")
-		
-		#print("[Workflow] Executing tool: %s" % _tool_name)
-	
-	# [修复] 使用索引遍历，以便直接修改字典（引用类型），解决 ID 缺失问题
+	# 使用索引遍历，以便直接修改字典（引用类型），解决 ID 缺失问题
 	for i in range(_msg.tool_calls.size()):
 		var _call: Dictionary = _msg.tool_calls[i]
-		
 		var _call_id: String = _call.get("id", "")
 		
-		# [修复] ID 完整性检查
+		# ID 完整性检查
 		# 部分模型流式输出时可能丢失 ID，或者 Godot 解析流时未能捕获。
 		# 如果 ID 为空，手动生成一个默认 ID 并回填到 Assistant 消息中。
 		if _call_id.is_empty():
@@ -87,7 +79,8 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 		print("[Workflow] Executing tool: %s (ID: %s)" % [_tool_name, _call_id])
 		
 		# 1. 清洗参数
-		var _clean_args_str: String = _sanitize_json_arguments(_raw_args_str)
+		# 使用 JSONRepairHelper 直接修复
+		var _clean_args_str: String = JSONRepairHelper.repair_json(_raw_args_str)
 		# 更新原始消息中的参数字符串，保证历史记录整洁
 		_func_def["arguments"] = _clean_args_str
 		
@@ -139,12 +132,13 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 					_tool_msg.image_data = _att.get("image_data", PackedByteArray())
 					_tool_msg.image_mime = _att.get("mime", "image/png")
 				else:
-					# OpenAI/Local 模式：转换为额外的 User 消息
-					# 注意：OpenAI 不允许 Tool Message 包含图片，必须另起一个 User 消息
-					var _image_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, "Image content from tool '%s':" % _tool_name)
-					_image_msg.image_data = _att.get("image_data", PackedByteArray())
-					_image_msg.image_mime = _att.get("mime", "image/png")
-					_generated_image_msgs.append(_image_msg)
+					# [Fix] OpenAI/Local 模式：
+					# 不要创建新的 User 消息（会破坏对话链），而是将图片附加到最近的 User 消息上
+					_attach_image_to_last_user_message(_att.get("image_data", PackedByteArray()), _att.get("mime", "image/png"))
+					# 更新 Tool 消息文本，提示 LLM 图片已上传
+					# 这对 LLM 来说是一个明确的信号，表明它现在可以去查看上下文中的图片了
+					if _tool_msg.content == "Image successfully read and attached to this message.":
+						_tool_msg.content = "Image content has been uploaded to the context. Please check the user message."
 		
 		_generated_tool_msgs.append(_tool_msg)
 	
@@ -153,12 +147,29 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 	for _tm in _generated_tool_msgs:
 		tool_msg_generated.emit(_tm)
 	
-	workflow_messages.append_array(_generated_image_msgs)
-	for _im in _generated_image_msgs:
-		tool_msg_generated.emit(_im)
-	
 	# 请求 AI 下一步
 	_request_next_step()
+
+
+## [New Helper] 将图片附加到历史记录中最近的一条 User 消息
+func _attach_image_to_last_user_message(_data: PackedByteArray, _mime: String) -> void:
+	# 优先检查本次工作流中产生的新消息（虽然不太可能有 User 消息，但为了逻辑完整）
+	for i in range(workflow_messages.size() - 1, -1, -1):
+		if workflow_messages[i].role == ChatMessage.ROLE_USER:
+			workflow_messages[i].image_data = _data
+			workflow_messages[i].image_mime = _mime
+			print("[Workflow] Attached image to Workflow User message index: %d" % i)
+			return
+	
+	# 然后检查基础历史记录 (倒序)
+	for i in range(base_history.size() - 1, -1, -1):
+		if base_history[i].role == ChatMessage.ROLE_USER:
+			base_history[i].image_data = _data
+			base_history[i].image_mime = _mime
+			print("[Workflow] Attached image to Base History User message index: %d" % i)
+			return
+	
+	print("[Workflow] Warning: No User message found to attach image.")
 
 
 ## 请求 AI 进行下一步决策或最终回复
@@ -173,49 +184,6 @@ func _request_next_step() -> void:
 		network_manager.chat_stream_request_completed.connect(_on_stream_done)
 	
 	network_manager.start_chat_stream(_context)
-
-
-## 清洗 JSON 字符串，去除 Markdown 包裹及尾部垃圾数据
-func _sanitize_json_arguments(_json_str: String) -> String:
-	_json_str = _json_str.strip_edges()
-	
-	# --- 1. 尝试剥离 Markdown 代码块 ---
-	# 许多模型喜欢用 ```json ... ``` 包裹参数
-	if _json_str.begins_with("```"):
-		var _newline_index: int = _json_str.find("\n")
-		if _newline_index != -1:
-			# 提取从第一行换行符之后的内容
-			var _content: String = _json_str.substr(_newline_index + 1)
-			
-			# 去除尾部的空白和 ``` 标记
-			_content = _content.strip_edges()
-			if _content.ends_with("```"):
-				_content = _content.substr(0, _content.length() - 3)
-			
-			# 如果剥离后的内容能解析成功，直接返回
-			_content = _content.strip_edges()
-			if JSON.parse_string(_content) != null:
-				return _content
-			
-			# 如果剥离后解析失败（比如内部还有截断），则让它继续走下面的截断修复逻辑，
-			# 但使用已经剥离了外壳的 _content 作为基础
-			_json_str = _content
-	
-	# --- 2. 尝试直接解析 ---
-	if JSON.parse_string(_json_str) != null:
-		return _json_str
-	
-	# --- 3. 截断修复逻辑 ---
-	# 处理因 token 限制导致的 JSON 截断问题
-	var _end_idx: int = _json_str.rfind("}")
-	while _end_idx != -1:
-		var _candidate: String = _json_str.substr(0, _end_idx + 1)
-		if JSON.parse_string(_candidate) != null:
-			return _candidate
-		_end_idx = _json_str.rfind("}", _end_idx - 1)
-	
-	# 如果所有尝试都失败，返回空 JSON 对象防止崩溃
-	return "{}"
 
 
 # --- Signal Callbacks ---

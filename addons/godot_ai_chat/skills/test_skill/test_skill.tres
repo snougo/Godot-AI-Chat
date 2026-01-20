@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://d0sy6e2hjl4sn"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_8rtaq"]
+
+[resource]
+script = ExtResource("1_8rtaq")
+skill_name = "Tset Skill"
+description = "Test Skill"
+tools = Array[String](["", "", "", "", "", "", "", "", ""])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

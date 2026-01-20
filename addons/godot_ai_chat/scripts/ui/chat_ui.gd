@@ -54,6 +54,11 @@ enum UIState {
 @onready var _file_dialog: FileDialog = $FileDialog
 @onready var _tab_container: TabContainer = $TabContainer 
 
+# [Refactor] 新增：暴露给 Controller 使用的内部节点引用
+@onready var _chat_list_container: VBoxContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer/ChatListContainer
+@onready var _chat_scroll_container: ScrollContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer
+@onready var _settings_panel_node: SettingsPanel = $TabContainer/Settings/SettingsPanel
+
 # --- Public Vars ---
 
 ## 当前 UI 状态
@@ -83,6 +88,19 @@ func _ready() -> void:
 
 
 # --- Public Functions ---
+
+# [Refactor] 新增：公共访问方法
+func get_chat_list_container() -> VBoxContainer:
+	return _chat_list_container
+
+
+func get_chat_scroll_container() -> ScrollContainer:
+	return _chat_scroll_container
+
+
+func get_settings_panel() -> SettingsPanel:
+	return _settings_panel_node
+
 
 ## 初始化编辑器依赖
 func initialize_editor_dependencies(_editor_filesystem: EditorFileSystem) -> void:

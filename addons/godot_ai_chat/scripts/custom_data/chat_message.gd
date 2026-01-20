@@ -48,46 +48,10 @@ const ROLE_TOOL: String = "tool"
 ## [Gemini 专用] 用于在多轮工具调用中维持 Gemini 的思维链签名
 @export var gemini_thought_signature: String = ""
 
+
 # --- Built-in Functions ---
 
 func _init(_role: String = ROLE_USER, _content: String = "", _name: String = "") -> void:
 	role = _role
 	content = _content
 	name = _name
-
-# --- Public Functions ---
-
-## 根据角色生成严格符合 API 规范的字典
-func to_api_dict() -> Dictionary:
-	var _dict: Dictionary = {
-		"role": role
-	}
-	
-	# 1. 处理 Content
-	# OpenAI 规定：如果 assistant 消息有 tool_calls，content 可以为 null
-	#if role == ROLE_ASSISTANT and not tool_calls.is_empty() and content.is_empty():
-		#_dict["content"] = null
-	#else:
-		#_dict["content"] = content
-	
-	# [修复] 强制使用空字符串 "" 而非 null。
-	# 许多兼容 API (DeepSeek, Azure) 收到 null 会直接报 400。
-	if role == ROLE_ASSISTANT and not tool_calls.is_empty() and content.is_empty():
-		_dict["content"] = "" 
-	else:
-		_dict["content"] = content
-	
-	# 2. 处理 Name
-	# OpenAI 规定：role=tool 时不需要 name (只看 tool_call_id)
-	if not name.is_empty() and role != ROLE_TOOL:
-		_dict["name"] = name
-	
-	# 3. 处理 Tool Calls
-	if not tool_calls.is_empty():
-		_dict["tool_calls"] = tool_calls
-	
-	# 4. 处理 Tool Call ID
-	if not tool_call_id.is_empty():
-		_dict["tool_call_id"] = tool_call_id
-	
-	return _dict

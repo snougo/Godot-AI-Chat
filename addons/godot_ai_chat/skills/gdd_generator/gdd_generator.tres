@@ -7,4 +7,5 @@ script = ExtResource("1_22dul")
 skill_name = "GDD Generator"
 description = "根据给定的游戏主题或概念，自动创建内容详尽的游戏设计文档（GDD），涵盖游戏机制、技术规格、美术方向和开发路线图等详细章节。"
 instruction_file = "res://addons/godot_ai_chat/skills/gdd_generator/Skill.md"
+tools = Array[String](["uid://c0f8av5wi3pib"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"
