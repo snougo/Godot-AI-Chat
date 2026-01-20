@@ -25,7 +25,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["path", "original_code", "slice_index"]
 	}
 
-func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	var path = args.get("path", "")
 	var original_code = args.get("original_code", "")
 	var slice_index = args.get("slice_index", -1)

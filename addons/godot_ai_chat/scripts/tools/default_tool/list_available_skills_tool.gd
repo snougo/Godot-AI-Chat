@@ -14,7 +14,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	# 直接访问 ToolRegistry 静态成员
 	var all_skills: Array = ToolRegistry.get_available_skill_names()
 	

@@ -107,7 +107,7 @@ func _execute_tool_calls(_msg: ChatMessage) -> void:
 			push_error("[Workflow] " + _result_str)
 		else:
 			# 支持异步执行
-			var _result_dict: Dictionary = await _tool_instance.execute(_args, tool_executor.context_provider)
+			var _result_dict: Dictionary = await _tool_instance.execute(_args)
 			
 			# 处理非字符串类型的data
 			var _data_val: Variant = _result_dict.get("data", "")

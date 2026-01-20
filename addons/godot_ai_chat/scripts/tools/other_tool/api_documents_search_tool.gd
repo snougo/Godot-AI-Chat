@@ -22,7 +22,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var raw_keywords = _args.get("keywords", "")
 	var keywords_list: PackedStringArray = _parse_keywords(raw_keywords)
 	

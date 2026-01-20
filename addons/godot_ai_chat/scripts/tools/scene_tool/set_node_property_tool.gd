@@ -16,7 +16,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["node_path", "property_name", "value"]
 	}
 
-func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	if not Engine.is_editor_hint():
 		return {"success": false, "data": "Editor only."}
 	

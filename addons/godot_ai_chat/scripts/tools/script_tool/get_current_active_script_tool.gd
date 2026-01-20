@@ -12,7 +12,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": []
 	}
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
 	
 	if not script_editor:

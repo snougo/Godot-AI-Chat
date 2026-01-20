@@ -32,9 +32,12 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var context_type: String = _args.get("context_type", "")
 	var path: String = _args.get("path", "")
+	
+	# 实例化 ContextProvider (假设它是全局类)
+	var context_provider := ContextProvider.new()
 	
 	if context_type.is_empty() or path.is_empty():
 		return {"success": false, "data": "Missing parameters: context_type or path"}
@@ -50,7 +53,7 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 		var dir = DirAccess.open("res://")
 		if not dir.dir_exists(path):
 			return {"success": false, "data": "Error: Directory not found: " + path}
-		return _context_provider.get_folder_structure_as_markdown(path)
+		return context_provider.get_folder_structure_as_markdown(path)
 	
 	# 3. 针对文件类型的白名单检查
 	if not EXTENSION_MAP.has(context_type):
@@ -68,12 +71,12 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 	# 4. 执行具体逻辑
 	match context_type:
 		"scene_tree": 
-			return _context_provider.get_scene_tree_as_markdown(path)
+			return context_provider.get_scene_tree_as_markdown(path)
 		"script_file": 
-			return _context_provider.get_script_content_as_markdown(path)
+			return context_provider.get_script_content_as_markdown(path)
 		"text-based_file": 
-			return _context_provider.get_text_content_as_markdown(path)
+			return context_provider.get_text_content_as_markdown(path)
 		"image-meta": 
-			return _context_provider.get_image_metadata_as_markdown(path)
+			return context_provider.get_image_metadata_as_markdown(path)
 		_:
 			return {"success": false, "data": "Internal Error: Unhandled context type."}

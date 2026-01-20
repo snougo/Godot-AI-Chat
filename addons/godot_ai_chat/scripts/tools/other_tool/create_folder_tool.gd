@@ -19,7 +19,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var path: String = _args.get("path", "")
 	
 	# 标准化路径分隔符

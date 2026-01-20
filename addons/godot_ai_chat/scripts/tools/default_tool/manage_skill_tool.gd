@@ -24,28 +24,28 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var action = _args.get("action", "")
 	var skill_name = _args.get("skill_name", "")
 	
 	if action.is_empty() or skill_name.is_empty():
-		return {"success": false, "data": "Error: Both 'action' and 'skill_name' are required."}
+		return {"success": false, "data": "Tool Error: Both 'action' and 'skill_name' are required."}
 	
 	# 检查技能是否存在
 	if not skill_name in ToolRegistry.get_available_skill_names():
-		return {"success": false, "data": "Error: Unknown skill '%s'. Use `list_available_skills` to see valid options." % skill_name}
+		return {"success": false, "data": "Tool Error: Unknown skill '%s'. Use `list_available_skills` to see valid options." % skill_name}
 	
 	match action:
 		"mount":
 			if ToolRegistry.is_skill_active(skill_name):
 				return {"success": true, "data": "Skill '%s' is already mounted." % skill_name}
 			
-			var result = ToolRegistry.mount_skill(skill_name)
+			var result: bool = ToolRegistry.mount_skill(skill_name)
 			if result:
 				# 获取新增的工具列表
-				var new_tools = []
+				var new_tools := []
 				if ToolRegistry.available_skills.has(skill_name):
-					var skill = ToolRegistry.available_skills[skill_name]
+					var skill: Object = ToolRegistry.available_skills[skill_name]
 					if "tools" in skill:
 						for tool_path in skill.tools:
 							# 尝试加载脚本以获取准确的工具名称
@@ -55,12 +55,13 @@ func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionar
 								if "tool_name" in temp_tool:
 									new_tools.append(temp_tool.tool_name)
 								else:
-									new_tools.append(tool_path.get_file()) # 后备方案：使用文件名
+									# 后备方案：使用文件名
+									new_tools.append(tool_path.get_file())
 				
-				var tool_msg = ""
+				var tool_msg := ""
 				if not new_tools.is_empty():
 					# 格式化为: New Tool has added: "tool_a", "tool_b"
-					var quoted_tools = new_tools.map(func(t): return '"%s"' % t)
+					var quoted_tools: Array = new_tools.map(func(t): return '"%s"' % t)
 					tool_msg = "\nNew Tool has added: " + ", ".join(quoted_tools)
 				return {"success": true, "data": "Successfully mounted skill: %s.%s" % [skill_name, tool_msg]}
 			else:

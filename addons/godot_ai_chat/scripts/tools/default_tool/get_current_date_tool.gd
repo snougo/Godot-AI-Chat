@@ -15,7 +15,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var date_dict: Dictionary = Time.get_date_dict_from_system()
 	# 格式化为 YYYY-MM-DD
 	var date_str = "%04d-%02d-%02d" % [date_dict.year, date_dict.month, date_dict.day]

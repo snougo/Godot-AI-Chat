@@ -17,7 +17,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["path"]
 	}
 
-func execute(args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	var path = args.get("path", "")
 	
 	# 1. 基础路径安全检查 (AiTool)

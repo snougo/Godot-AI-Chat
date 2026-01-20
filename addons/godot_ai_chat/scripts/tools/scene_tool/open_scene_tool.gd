@@ -17,7 +17,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["path"]
 	}
 
-func execute(args: Dictionary, _context_provider) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	if not args.has("path"):
 		return {"success": false, "data": "Missing 'path' argument."}
 	

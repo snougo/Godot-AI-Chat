@@ -12,7 +12,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": []
 	}
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var edited_root := EditorInterface.get_edited_scene_root()
 	if edited_root:
 		var file_path: String = edited_root.scene_file_path

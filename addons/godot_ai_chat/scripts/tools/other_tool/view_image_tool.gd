@@ -22,7 +22,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var path: String = _args.get("path", "")
 	
 	# 1. 基础路径安全检查

@@ -20,7 +20,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var new_script_path: String = _args.get("path", "")
 	var content: String = "" 
 	

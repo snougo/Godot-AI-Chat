@@ -20,7 +20,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["parent_path", "node_name", "node_type"]
 	}
 
-func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	if not Engine.is_editor_hint():
 		return {"success": false, "data": "Editor only."}
 	

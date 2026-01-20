@@ -26,7 +26,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var skill_folder_name = _args.get("skill_folder_name", "")
 	var skill_md_content = _args.get("skill_md_content", "")
 	

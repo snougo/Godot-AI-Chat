@@ -30,7 +30,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: ContextProvider) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var mode = _args.get("mode", "append")
 	var content = _args.get("content", "")
 	var target_path = _args.get("path", "")

@@ -32,7 +32,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	var folder_path = args.get("folder_path", "")
 	
 	if folder_path.is_empty():

@@ -20,13 +20,13 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
+func execute(_args: Dictionary) -> Dictionary:
 	var query = _args.get("query", "")
 	if query.is_empty():
 		return {"success": false, "data": "Error: Query cannot be empty."}
 	
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
-	var api_key = settings.get("tavily_api_key")
+	var api_key: String = settings.get("tavily_api_key")
 	
 	if api_key == null or api_key.is_empty():
 		return {"success": false, "data": "Error: Tavily API Key is not configured in settings."}
@@ -43,7 +43,7 @@ func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
 		"query": query,
 		"search_depth": "basic",
 		"include_answer": true,
-		"max_results": 3
+		"max_results": 5
 	})
 	
 	var err: Error = http.request(url, headers, HTTPClient.METHOD_POST, body)
@@ -52,9 +52,9 @@ func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
 		return {"success": false, "data": "Error: Failed to send HTTP request."}
 	
 	# 等待请求完成 (异步)
-	var response = await http.request_completed
+	var response: Array = await http.request_completed
 	var result_body = response[3] # Body is at index 3
-	var response_code = response[1]
+	var response_code: int = response[1]
 	
 	http.queue_free() # 清理节点
 	
@@ -66,7 +66,7 @@ func execute(_args: Dictionary, _context_provider: Object) -> Dictionary:
 		return {"success": false, "data": "Error: Failed to parse JSON response."}
 	
 	# 提取有用信息
-	var output = ""
+	var output := ""
 	if json.has("answer") and not str(json.answer).is_empty():
 		output += "Direct Answer: " + str(json.answer) + "\n\n"
 	

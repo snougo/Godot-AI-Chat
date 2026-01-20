@@ -21,7 +21,7 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["scene_path", "tree_structure"]
 	}
 
-func execute(args: Dictionary, _context_provider: Object) -> Dictionary:
+func execute(args: Dictionary) -> Dictionary:
 	var new_scene_path: String = args.get("scene_path", "")
 	var tree_text: String = args.get("tree_structure", "")
 	
