@@ -7,14 +7,14 @@ category: GodotAIChatPlugin
 # 自动技能生成器 (Auto Skill Generator)
 
 ## 概览 (Overview)
-本技能根据用户的需求和规范，自动生成格式正确的 Claude Code Skills 所需的 SKILL.md 文档。
+本技能根据用户的需求和规范，自动生成格式正确的 Skill 所需的 SKILL.md 文档及其目录结构。
 
 ## 触发条件 (Activation)
 当用户请求创建新技能、提及“create skill”（创建技能）、“generate SKILL.md”（生成 SKILL.md），或描述了一个可以转化为 Skill 技能的具体自动化需求时。
 
 ## 指令 (Instructions)
 1. **分析用户需求**，以理解期望的技能功能。
-2. **确定合适的类别**（Dev、Docs、Testing、Security、DevOps、Data）。
+2. **确定合适的类别**（GodotPlugn、GodotDoc、GameDesign、GameDevLog etc.）。
 3. **生成一个短横线命名（kebab-case）的技能名称**，需清晰代表该功能。
 4. **编写一段简明的描述**（一句话），解释该技能何时激活。
 5. **创建 SKILL.md 结构**，包含：
