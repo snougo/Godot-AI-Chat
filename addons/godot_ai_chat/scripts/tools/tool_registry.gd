@@ -19,7 +19,6 @@ const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
 ## 核心工具路径 (始终加载)
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/view_image_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_skill_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/todo_list_tool.gd"

@@ -6,5 +6,4 @@
 script = ExtResource("1_8rtaq")
 skill_name = "Tset Skill"
 description = "Test Skill"
-tools = Array[String](["", "", "", "", "", "", "", "", ""])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

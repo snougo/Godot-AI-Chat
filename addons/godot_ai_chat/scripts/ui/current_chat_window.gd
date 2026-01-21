@@ -33,9 +33,13 @@ func load_history_resource(_history: ChatMessageHistory) -> void:
 
 
 ## 追加用户消息到历史和 UI
-func append_user_message(_text: String) -> void:
-	chat_history.add_user_message(_text)
-	_add_block(ChatMessage.ROLE_USER, _text, true)
+#func append_user_message(_text: String) -> void:
+	#chat_history.add_user_message(_text)
+	#_add_block(ChatMessage.ROLE_USER, _text, true)
+
+func append_user_message(_text: String, _image_data: PackedByteArray = PackedByteArray(), _image_mime: String = "") -> void:
+	chat_history.add_user_message(_text, _image_data, _image_mime)
+	_add_block(ChatMessage.ROLE_USER, _text, true, [], _image_data, _image_mime)
 
 
 ## 追加错误消息到 UI

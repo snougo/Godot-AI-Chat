@@ -77,32 +77,40 @@ func _thread_task() -> void:
 	_err = _client.connect_to_host(_host, _port, _tls_opts)
 	if _err != OK:
 		_emit_failure("Connection failed: %s" % error_string(_err))
+		_client.close() # [Fix] 安全关闭
 		return
 	
 	# 等待连接
 	while _client.get_status() == HTTPClient.STATUS_CONNECTING or _client.get_status() == HTTPClient.STATUS_RESOLVING:
 		_client.poll()
-		if _stop_flag: return
+		if _stop_flag:
+			_client.close() # [Fix] 安全关闭
+			return
 		OS.delay_msec(10)
 	
 	if _client.get_status() != HTTPClient.STATUS_CONNECTED:
 		_emit_failure("Could not connect. Status: %d" % _client.get_status())
+		_client.close() # [Fix] 安全关闭
 		return
 	
 	# 3. 发送请求
 	_err = _client.request(HTTPClient.METHOD_POST, _path, _headers, _body_json)
 	if _err != OK:
 		_emit_failure("Request sending failed: %s" % error_string(_err))
+		_client.close() # [Fix] 安全关闭
 		return
 	
 	# 4. 等待响应
 	while _client.get_status() == HTTPClient.STATUS_REQUESTING:
 		_client.poll()
-		if _stop_flag: return
+		if _stop_flag:
+			_client.close() # [Fix] 安全关闭
+			return
 		OS.delay_msec(10)
 	
 	if not _client.has_response():
 		_emit_failure("No response from server.")
+		_client.close() # [Fix] 安全关闭
 		return
 	
 	var _response_code: int = _client.get_response_code()
@@ -112,14 +120,18 @@ func _thread_task() -> void:
 			if _client.get_status() != HTTPClient.STATUS_BODY:
 				break
 			var _dummy_chunk: PackedByteArray = _client.read_response_body_chunk()
+		
 		_emit_failure("HTTP Error %d" % _response_code)
+		_client.close() # [Fix] 安全关闭
 		return
 	
 	# 5. 流式读取循环
 	var _parser_type: BaseLLMProvider.StreamParserType = _provider.get_stream_parser_type()
 	
 	while _client.get_status() == HTTPClient.STATUS_BODY:
-		if _stop_flag: return
+		if _stop_flag:
+			_client.close() # [Fix] 安全关闭
+			return
 		
 		_client.poll()
 		
@@ -144,6 +156,7 @@ func _thread_task() -> void:
 		
 		OS.delay_msec(10)
 	
+	_client.close() # [Fix] 正常结束时的关闭
 	finished.emit.call_deferred()
 
 

@@ -2,12 +2,8 @@
 class_name ChatHub
 extends Control
 
-## 插件的主控制器，负责协调 UI、网络管理器、后端逻辑以及对话历史的管理。
-
-# --- Constants ---
-
-## 对话历史存档目录
-const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
+## 插件的主控制器（重构版），负责协调 UI、网络管理器、后端逻辑。
+## 文件管理已移交 SessionManager，上下文构建已移交 ContextBuilder。
 
 # --- @onready Vars ---
 
@@ -16,10 +12,11 @@ const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
 @onready var _chat_backend: ChatBackend = $ChatBackend
 @onready var _current_chat_window: CurrentChatWindow = $CurrentChatWindow
 
-# --- Public Vars ---
+# --- Private Vars ---
 
-## 当前绑定的资源文件路径 (用于自动保存)
-var current_history_path: String = ""
+## [Refactor] 会话管理器实例
+var _session_manager: SessionManager
+
 ## 状态锁，防止新建按钮连击导致逻辑错乱
 var is_creating_new_chat: bool = false
 
@@ -27,18 +24,18 @@ var is_creating_new_chat: bool = false
 # --- Built-in Functions ---
 
 func _ready() -> void:
-	# 在这里注册工具，确保环境已稳定
+	# 1. 环境准备
 	ToolRegistry.load_default_tools()
 	
-	# 确保目录存在
-	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
-		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
+	# [Refactor] 初始化 SessionManager
+	# 必须在逻辑开始前完成初始化
+	_session_manager = SessionManager.new(_chat_ui, _current_chat_window)
 	
+	# 2. 依赖注入
 	# [Refactor] 通过 ChatUI 接口获取节点引用
 	var _chat_list_container: VBoxContainer = _chat_ui.get_chat_list_container()
 	var _chat_scroll_container: ScrollContainer = _chat_ui.get_chat_scroll_container()
 	
-	# 依赖注入
 	_chat_backend.network_manager = _network_manager
 	_chat_backend.current_chat_window = _current_chat_window
 	_current_chat_window.chat_list_container = _chat_list_container
@@ -69,7 +66,19 @@ func _ready() -> void:
 	
 	# 网络事件 -> 发起对话
 	_network_manager.new_chat_request_sending.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.WAITING_RESPONSE))
-	_network_manager.new_stream_chunk_received.connect(_on_chunk_received)
+	#_network_manager.new_stream_chunk_received.connect(_on_chunk_received)
+	
+	# [Refactor] 修改：移除条件判断，强制状态同步
+	_network_manager.new_stream_chunk_received.connect(func(_chunk: Dictionary):
+		# 只要收到数据，就强制确保 UI 处于生成状态
+		# 为了避免每帧都调用 update_ui_state 导致 UI 刷新开销，加一个简单的状态检查
+		if _chat_ui.current_state != ChatUI.UIState.RESPONSE_GENERATING:
+			_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
+		
+		# 数据流转
+		_current_chat_window.handle_stream_chunk(_chunk, _network_manager.current_provider)
+	)
+	
 	_network_manager.chat_stream_request_completed.connect(_on_stream_completed)
 	_network_manager.chat_request_failed.connect(_on_chat_failed)
 	
@@ -89,8 +98,8 @@ func _ready() -> void:
 	# --- 初始化 ---
 	_network_manager.get_model_list()
 	
-	# 插件启动时，若无当前对话路径，提示用户操作
-	if current_history_path.is_empty():
+	# [Refactor] 初始状态检查
+	if not _session_manager.has_active_session():
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
 
 
@@ -107,93 +116,31 @@ func _create_new_chat_history() -> void:
 	if is_creating_new_chat:
 		return
 	
-	if current_history_path.is_empty() or is_creating_new_chat == false:
-		is_creating_new_chat = true
-		
-		# 停止当前可能的生成
-		_on_stop_requested()
-		
-		if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
-			DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
-		
-		# 文件名去重逻辑
-		var _now_time: Dictionary = Time.get_datetime_dict_from_system(false)
-		var _base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [_now_time.year, _now_time.month, _now_time.day, _now_time.hour, _now_time.minute, _now_time.second]
-		var _extension_type: String = ".tres"
-		var _final_path: String = ARCHIVE_DIR.path_join(_base_filename + _extension_type)
-		
-		var _counter: int = 1
-		while FileAccess.file_exists(_final_path):
-			_final_path = ARCHIVE_DIR.path_join("%s_%d%s" % [_base_filename, _counter, _extension_type])
-			_counter += 1
-		
-		current_history_path = _final_path
-		var _filename: String = _final_path.get_file()
-		
-		# 创建新资源并保存
-		var _new_history: ChatMessageHistory = ChatMessageHistory.new()
-		var _err: Error = ResourceSaver.save(_new_history, current_history_path)
-		if _err != OK:
-			_chat_ui.show_confirmation("Error: Failed to create chat file at %s" % current_history_path)
-			return
-		
-		await get_tree().create_timer(0.2).timeout
-		ToolBox.update_editor_filesystem(current_history_path)
-		
-		_chat_ui.select_archive_by_name(_filename)
-		_chat_ui.reset_token_cost_display()
-		
-		_current_chat_window.load_history_resource(_new_history)
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created: " + _filename)
-		
-		is_creating_new_chat = false
-		
-		if not _new_history.changed.is_connected(_auto_save_history):
-			_new_history.changed.connect(_auto_save_history)
-		
-		if not _new_history.changed.is_connected(_update_turn_info):
-			_new_history.changed.connect(_update_turn_info)
-		
-		_update_turn_info() # 立即刷新一次
-
-
-## 自动保存回调
-func _auto_save_history() -> void:
-	if current_history_path.is_empty():
-		return
+	is_creating_new_chat = true
+	_on_stop_requested()
 	
-	var _chat_history: ChatMessageHistory = _current_chat_window.chat_history
-	if _chat_history:
-		ResourceSaver.save(_chat_history, current_history_path)
+	var _new_filename: String = _session_manager.create_new_session()
+	
+	if not _new_filename.is_empty():
+		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created: " + _new_filename)
+		_connect_history_ui_signals() # <--- 新增调用
+	else:
+		_chat_ui.show_confirmation("Error: Failed to create chat session.")
+	
+	is_creating_new_chat = false
 
 
 ## 加载会话
 func _load_chat_history(_filename: String) -> void:
-	var _path: String = ARCHIVE_DIR.path_join(_filename)
+	_on_stop_requested()
 	
-	if not FileAccess.file_exists(_path):
-		_chat_ui.show_confirmation("Error: File not found: %s" % _path)
-		return
+	var _success: bool = _session_manager.load_session(_filename)
 	
-	var _chat_history: Resource = ResourceLoader.load(_path)
-	if _chat_history is ChatMessageHistory:
-		_on_stop_requested()
-		current_history_path = _path
-		
-		_chat_ui.select_archive_by_name(_filename)
-		_chat_ui.reset_token_cost_display()
-		_current_chat_window.load_history_resource(_chat_history)
+	if _success:
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % _filename)
-		
-		if not _chat_history.changed.is_connected(_auto_save_history):
-			_chat_history.changed.connect(_auto_save_history)
-		
-		if not _chat_history.changed.is_connected(_update_turn_info):
-			_chat_history.changed.connect(_update_turn_info)
-		
-		_update_turn_info() # 立即刷新一次
+		_connect_history_ui_signals() # <--- 新增调用
 	else:
-		_chat_ui.show_confirmation("Error: Invalid resource type.")
+		_chat_ui.show_confirmation("Error: Failed to load session: %s" % _filename)
 
 
 ## 更新 UI 上的轮数显示
@@ -212,45 +159,39 @@ func _update_turn_info() -> void:
 
 ## 用户点击发送
 func _on_user_send_message(_text: String) -> void:
-	if current_history_path.is_empty() or _current_chat_window.chat_history == null:
+	# [Refactor] 状态检查
+	if not _session_manager.has_active_session() or _current_chat_window.chat_history == null:
 		_chat_ui.show_confirmation("No chat active.\nPlease click 'New Button' or 'Load Button' to start.")
 		return
 	
 	_chat_ui.clear_user_input()
-	_current_chat_window.append_user_message(_text)
+	#_current_chat_window.append_user_message(_text)
+	
+	# [New] 处理附件
+	var processed: Dictionary = AttachmentProcessor.process_input(_text)
+	
+	# [Modify] 传入处理后的文本和图片数据
+	_current_chat_window.append_user_message(
+		processed.final_text, 
+		processed.image_data, 
+		processed.image_mime
+	)
 	
 	var _settings: PluginSettings = ToolBox.get_plugin_settings()
+	var _history: ChatMessageHistory = _current_chat_window.chat_history
 	
-	# --- 构建动态 System Prompt ---
-	var final_system_prompt = _settings.system_prompt
-	
-	# 获取所有已挂载技能的组合指令
-	var skill_instructions = ToolRegistry.get_combined_system_instructions()
-	
-	if not skill_instructions.is_empty():
-		final_system_prompt += "\n\n=== MOUNTED SKILL INSTRUCTIONS ===\n"
-		final_system_prompt += "The following specialized skills have been mounted to your capability set. Use them when appropriate.\n"
-		final_system_prompt += skill_instructions
-		final_system_prompt += "\n==================================\n"
-		final_system_prompt += "IMPERATIVE: You must strictly follow the guidelines above in your response."
-	
-	# ----------------------------
-	
-	var _context_history: Array[ChatMessage] = _current_chat_window.chat_history.get_truncated_messages(
-		_settings.max_chat_turns,
-		final_system_prompt
-	)
+	# [Refactor] 委托 ContextBuilder 构建上下文
+	var _context_history: Array[ChatMessage] = ContextBuilder.build_context(_history, _settings)
 	
 	_network_manager.start_chat_stream(_context_history)
 
 
-
-## 收到第一个 Chunk 时，更新 UI 状态
-func _on_chunk_received(_chunk: Dictionary) -> void:
-	if _chat_ui.current_state == ChatUI.UIState.WAITING_RESPONSE:
-		_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
+# 收到第一个 Chunk 时，更新 UI 状态
+#func _on_chunk_received(_chunk: Dictionary) -> void:
+	#if _chat_ui.current_state == ChatUI.UIState.WAITING_RESPONSE:
+		#_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
 	
-	_current_chat_window.handle_stream_chunk(_chunk, _network_manager.current_provider)
+	#_current_chat_window.handle_stream_chunk(_chunk, _network_manager.current_provider)
 
 
 ## 显示工具结果
@@ -282,10 +223,7 @@ func _on_stop_requested() -> void:
 	_network_manager.cancel_stream()
 	_chat_backend.cancel_workflow()
 	
-	# [Fix] 回滚未完成的消息，防止坏数据污染历史记录
-	# 修复逻辑：将 TOOLCALLING 状态加入回滚判断中。
-	# 当在工具调用阶段中断时，那条触发工具的 Assistant 消息是“无效”的，必须删除，
-	# 否则会留下一条悬空的 Tool Call，导致下一次对话因上下文结构错误而崩溃。
+	# [Fix] 回滚逻辑保持不变
 	var is_response_generating: bool = _chat_ui.current_state == ChatUI.UIState.RESPONSE_GENERATING
 	var is_waiting_response: bool = _chat_ui.current_state == ChatUI.UIState.WAITING_RESPONSE
 	var is_tool_calling: bool = _chat_ui.current_state == ChatUI.UIState.TOOLCALLING
@@ -319,3 +257,14 @@ func _export_markdown(_path: String) -> void:
 	var _success: bool = ChatArchive.save_to_markdown(_current_chat_window.chat_history.messages, _path)
 	if _success:
 		_chat_ui.show_confirmation("Exported to %s" % _path)
+
+
+func _connect_history_ui_signals() -> void:
+	var _history: ChatMessageHistory = _current_chat_window.chat_history
+	if _history:
+		# 确保不重复连接
+		if not _history.changed.is_connected(_update_turn_info):
+			_history.changed.connect(_update_turn_info)
+		
+		# 立即执行一次刷新
+		_update_turn_info()

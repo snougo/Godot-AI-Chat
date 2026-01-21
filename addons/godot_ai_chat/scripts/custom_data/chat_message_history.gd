@@ -18,8 +18,14 @@ func add_message(_msg: ChatMessage) -> void:
 
 
 ## 添加一条用户消息
-func add_user_message(_content: String) -> void:
-	add_message(ChatMessage.new(ChatMessage.ROLE_USER, _content))
+#func add_user_message(_content: String) -> void:
+	#add_message(ChatMessage.new(ChatMessage.ROLE_USER, _content))
+
+func add_user_message(_content: String, _image_data: PackedByteArray = PackedByteArray(), _image_mime: String = "") -> void:
+	var _msg = ChatMessage.new(ChatMessage.ROLE_USER, _content)
+	_msg.image_data = _image_data
+	_msg.image_mime = _image_mime
+	add_message(_msg)
 
 
 ## 添加一条助手消息
