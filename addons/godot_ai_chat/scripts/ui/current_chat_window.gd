@@ -33,10 +33,6 @@ func load_history_resource(_history: ChatMessageHistory) -> void:
 
 
 ## 追加用户消息到历史和 UI
-#func append_user_message(_text: String) -> void:
-	#chat_history.add_user_message(_text)
-	#_add_block(ChatMessage.ROLE_USER, _text, true)
-
 func append_user_message(_text: String, _image_data: PackedByteArray = PackedByteArray(), _image_mime: String = "") -> void:
 	chat_history.add_user_message(_text, _image_data, _image_mime)
 	_add_block(ChatMessage.ROLE_USER, _text, true, [], _image_data, _image_mime)
@@ -165,10 +161,12 @@ func update_token_usage(_usage: Dictionary) -> void:
 func _refresh_display() -> void:
 	for _c in chat_list_container.get_children():
 		_c.queue_free()
+	
 	for _msg in chat_history.messages:
 		if _msg.role == ChatMessage.ROLE_SYSTEM: 
 			continue
 		_add_block(_msg.role, _msg.content, true, _msg.tool_calls, _msg.image_data, _msg.image_mime, _msg.reasoning_content)
+	
 	_scroll_to_bottom()
 
 

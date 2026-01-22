@@ -22,6 +22,8 @@ signal model_selection_changed(model_name: String)
 signal save_as_markdown_button_pressed(file_path: String)
 ## 当用户选择一个聊天存档并点击加载按钮时发出
 signal load_chat_button_pressed(archive_name: String)
+## 当用户点击删除按钮时发出
+signal delete_chat_button_pressed(archive_name: String)
 
 # --- Enums ---
 
@@ -40,15 +42,20 @@ enum UIState {
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
 @onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTrunDisplay
 @onready var _current_token_cost: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenCost
-@onready var _user_input: TextEdit = $TabContainer/Chat/VBoxContainer/UserInput
+
+@onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
+@onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/DeleteButton
+@onready var _load_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/LoadChatButton
 @onready var _new_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/NewChatButton
-@onready var _reconnect_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ReconnectButton
+
 @onready var _send_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SendButton
 @onready var _save_as_markdown_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SaveAsMarkdownButton
-@onready var _load_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/LoadChatButton
+@onready var _user_input: TextEdit = $TabContainer/Chat/VBoxContainer/UserInput
+
 @onready var _model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelSelector
 @onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelNameFilterInput
-@onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
+@onready var _reconnect_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ReconnectButton
+
 @onready var _settings_panel: Control = $TabContainer/Settings/SettingsPanel
 @onready var _error_dialog: AcceptDialog = $AcceptDialog
 @onready var _file_dialog: FileDialog = $FileDialog
@@ -68,19 +75,26 @@ var model_list: Array[String] = []
 ## 用于判断是否为首次运行或初始化阶段
 var is_first_init: bool = false
 
+## 标记当前是否在等待删除确认
+var _pending_delete_archive_name: String = ""
+
 
 # --- Built-in Functions ---
 
 func _ready() -> void:
-	_send_button.pressed.connect(_on_send_button_pressed)
-	_new_chat_button.pressed.connect(_on_new_chat_button_pressed)
-	_model_selector.item_selected.connect(_on_model_selected)
-	_model_name_filter_input.text_changed.connect(_on_model_name_filter_text_changed)
 	_settings_panel.settings_saved.connect(_on_settings_save_button_pressed)
 	_file_dialog.file_selected.connect(_on_file_selected)
-	_save_as_markdown_button.pressed.connect(_on_save_as_markdown_button_pressed)
+	
+	_delete_chat_button.pressed.connect(_on_delete_chat_button_pressed)
 	_load_chat_button.pressed.connect(_on_load_chat_button_pressed)
+	_new_chat_button.pressed.connect(_on_new_chat_button_pressed)
+	
+	_model_selector.item_selected.connect(_on_model_selected)
+	_model_name_filter_input.text_changed.connect(_on_model_name_filter_text_changed)
 	_reconnect_button.pressed.connect(_on_reconnect_button_pressed)
+	
+	_save_as_markdown_button.pressed.connect(_on_save_as_markdown_button_pressed)
+	_send_button.pressed.connect(_on_send_button_pressed)
 	
 	_update_chat_archive_selector()
 	reset_token_cost_display()
@@ -119,55 +133,78 @@ func update_ui_state(_new_state: UIState, _payload: String = "") -> void:
 				_status_label.modulate = Color.GOLD
 			else:
 				_status_label.modulate = Color.WHITE
-			_send_button.text = "Send"
-			_send_button.disabled = false
 			_user_input.editable = true
 			_user_input.caret_blink = true
+			_send_button.text = "Send"
+			_send_button.disabled = false
+			_delete_chat_button.disabled = false
+			_load_chat_button.disabled = false
+			_save_as_markdown_button.disabled = false
 			_new_chat_button.disabled = false
 			_reconnect_button.disabled = false
 		
 		UIState.CONNECTING:
-			_status_label.text = "Connecting..."
+			#_status_label.text = "Connecting..."
 			_status_label.modulate = Color.WHITE
-			_send_button.disabled = true
 			_user_input.editable = false
+			_user_input.caret_blink = false
+			_send_button.text = "Send"
+			_send_button.disabled = true
+			_delete_chat_button.disabled = true
+			_load_chat_button.disabled = true
+			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
 		
 		UIState.WAITING_RESPONSE:
-			_status_label.text = "Waiting for AI response"
+			#_status_label.text = "Waiting for AI response"
 			_status_label.modulate = Color.AQUAMARINE
-			_send_button.text = "Stop"
-			_send_button.disabled = false
 			_user_input.editable = false
 			_user_input.caret_blink = false
+			_send_button.text = "Stop"
+			_send_button.disabled = false
+			_delete_chat_button.disabled = true
+			_load_chat_button.disabled = true
+			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
 		
 		UIState.RESPONSE_GENERATING:
-			_status_label.text = "AI is generating..."
+			#_status_label.text = "AI is generating..."
 			_status_label.modulate = Color.AQUAMARINE
+			_user_input.editable = false
+			_user_input.caret_blink = false
 			_send_button.text = "Stop"
 			_send_button.disabled = false
-			_user_input.editable = false
+			_delete_chat_button.disabled = true
+			_load_chat_button.disabled = true
+			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
 		
 		UIState.TOOLCALLING:
-			_status_label.text = "⚙️ Executing Tools... " + _payload
+			#_status_label.text = "⚙️ Executing Tools... " + _payload
 			_status_label.modulate = Color.GOLD
-			_send_button.text = "Stop"
-			_send_button.disabled = false
 			_user_input.editable = false
+			_user_input.caret_blink = false
+			_send_button.text = "Stop"
+			_send_button.disabled = true
+			_delete_chat_button.disabled = true
+			_load_chat_button.disabled = true
+			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
 		
 		UIState.ERROR:
-			_status_label.text = "Checking The Popup Window for Error Message"
+			#_status_label.text = "Checking The Popup Window for Error Message"
 			_status_label.modulate = Color.RED
+			_user_input.editable = false
+			_user_input.caret_blink = false
 			_send_button.text = "Send"
-			_send_button.disabled = false
-			_user_input.editable = true
+			_send_button.disabled = true
+			_delete_chat_button.disabled = false
+			_load_chat_button.disabled = false
+			_save_as_markdown_button.disabled = false
 			_new_chat_button.disabled = false
 			_reconnect_button.disabled = false
 			
@@ -239,6 +276,12 @@ func reset_token_cost_display() -> void:
 func show_confirmation(_message: String) -> void:
 	_error_dialog.title = "Notification"
 	_error_dialog.dialog_text = _message
+	
+	# 断开删除确认连接，避免干扰普通通知
+	if _error_dialog.confirmed.is_connected(_on_delete_confirmed):
+		_error_dialog.confirmed.disconnect(_on_delete_confirmed)
+		_pending_delete_archive_name = ""
+	
 	_error_dialog.popup_centered()
 
 
@@ -248,9 +291,9 @@ func _get_default_status_text(_state: UIState) -> String:
 	match _state:
 		UIState.IDLE: return "Ready"
 		UIState.CONNECTING: return "Connecting..."
-		UIState.WAITING_RESPONSE: return "Waiting for AI..."
-		UIState.RESPONSE_GENERATING: return "Generating..."
-		UIState.TOOLCALLING: return "Using Tools..."
+		UIState.WAITING_RESPONSE: return "Waiting for LLM response"
+		UIState.RESPONSE_GENERATING: return "LLM is generating"
+		UIState.TOOLCALLING: return "Executing Tools..."
 		UIState.ERROR: return "Error"
 	return ""
 
@@ -325,13 +368,47 @@ func _generate_default_filename(_extension: String) -> String:
 
 # --- Signal Callbacks ---
 
-func _on_send_button_pressed() -> void:
-	if current_state in [UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING, UIState.TOOLCALLING]:
-		stop_button_pressed.emit()
-	elif current_state == UIState.IDLE or current_state == UIState.ERROR:
-		var _user_prompt: String = _user_input.text.strip_edges()
-		if not _user_prompt.is_empty():
-			send_button_pressed.emit(_user_prompt)
+func _on_delete_chat_button_pressed() -> void:
+	var _selected_index: int = _chat_archive_selector.selected
+	if _selected_index == -1:
+		show_confirmation("Please select a chat archive to delete.")
+		return
+	
+	var _archive_name: String = _chat_archive_selector.get_item_text(_selected_index)
+	
+	# 设置确认对话框
+	_error_dialog.title = "Confirm Delete"
+	_error_dialog.dialog_text = "Are you sure you want to delete '%s'?\n\nThis action cannot be undone." % _archive_name
+	
+	# 保存待删除的存档名
+	_pending_delete_archive_name = _archive_name
+	
+	# 连接确认信号（确保只连接一次）
+	if not _error_dialog.confirmed.is_connected(_on_delete_confirmed):
+		_error_dialog.confirmed.connect(_on_delete_confirmed)
+	
+	_error_dialog.popup_centered()
+
+
+## 用户确认删除后的回调
+func _on_delete_confirmed() -> void:
+	if _pending_delete_archive_name.is_empty():
+		return
+	
+	# 发出删除信号
+	delete_chat_button_pressed.emit(_pending_delete_archive_name)
+	
+	# 清空待删除状态
+	_pending_delete_archive_name = ""
+
+
+func _on_load_chat_button_pressed() -> void:
+	var _selected_index: int = _chat_archive_selector.selected
+	if _selected_index == -1:
+		show_confirmation("Please select a chat archive to load.")
+		return
+	var _archive_name: String = _chat_archive_selector.get_item_text(_selected_index)
+	load_chat_button_pressed.emit(_archive_name)
 
 
 func _on_new_chat_button_pressed() -> void:
@@ -340,12 +417,6 @@ func _on_new_chat_button_pressed() -> void:
 
 func _on_reconnect_button_pressed() -> void:
 	reconnect_button_pressed.emit()
-
-
-func _on_settings_save_button_pressed() -> void:
-	settings_save_button_pressed.emit()
-	if _tab_container:
-		_tab_container.current_tab = 0
 
 
 func _on_model_selected(_index: int) -> void:
@@ -367,17 +438,23 @@ func _on_save_as_markdown_button_pressed() -> void:
 	_file_dialog.popup_centered()
 
 
-func _on_load_chat_button_pressed() -> void:
-	var _selected_index: int = _chat_archive_selector.selected
-	if _selected_index == -1:
-		show_confirmation("Please select a chat archive to load.")
-		return
-	var _archive_name: String = _chat_archive_selector.get_item_text(_selected_index)
-	load_chat_button_pressed.emit(_archive_name)
+func _on_send_button_pressed() -> void:
+	if current_state in [UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING, UIState.TOOLCALLING]:
+		stop_button_pressed.emit()
+	elif current_state == UIState.IDLE or current_state == UIState.ERROR:
+		var _user_prompt: String = _user_input.text.strip_edges()
+		if not _user_prompt.is_empty():
+			send_button_pressed.emit(_user_prompt)
 
 
 func _on_file_selected(_path: String) -> void:
 	save_as_markdown_button_pressed.emit(_path)
+
+
+func _on_settings_save_button_pressed() -> void:
+	settings_save_button_pressed.emit()
+	if _tab_container:
+		_tab_container.current_tab = 0
 
 
 func _on_filesystem_changed() -> void:

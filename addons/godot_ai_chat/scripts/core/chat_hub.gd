@@ -47,14 +47,18 @@ func _ready() -> void:
 	# --- 信号连接 ---
 	
 	# UI 操作
+	_chat_ui.delete_chat_button_pressed.connect(_delete_chat_history)
+	_chat_ui.load_chat_button_pressed.connect(_load_chat_history)
+	_chat_ui.new_chat_button_pressed.connect(_create_new_chat_history)
+	
+	_chat_ui.reconnect_button_pressed.connect(_network_manager.get_model_list)
+	
+	_chat_ui.save_as_markdown_button_pressed.connect(_export_markdown)
 	_chat_ui.send_button_pressed.connect(_on_user_send_message)
 	_chat_ui.stop_button_pressed.connect(_on_stop_requested)
-	_chat_ui.new_chat_button_pressed.connect(_create_new_chat_history)
-	_chat_ui.reconnect_button_pressed.connect(_network_manager.get_model_list)
-	_chat_ui.load_chat_button_pressed.connect(_load_chat_history)
+	
 	_chat_ui.settings_save_button_pressed.connect(_network_manager.get_model_list)
 	_chat_ui.settings_save_button_pressed.connect(_update_turn_info)
-	_chat_ui.save_as_markdown_button_pressed.connect(_export_markdown)
 	
 	# 模型与设置
 	_chat_ui.model_selection_changed.connect(func(_model_name: String): _network_manager.current_model_name = _model_name)
@@ -66,7 +70,6 @@ func _ready() -> void:
 	
 	# 网络事件 -> 发起对话
 	_network_manager.new_chat_request_sending.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.WAITING_RESPONSE))
-	#_network_manager.new_stream_chunk_received.connect(_on_chunk_received)
 	
 	# [Refactor] 修改：移除条件判断，强制状态同步
 	_network_manager.new_stream_chunk_received.connect(func(_chunk: Dictionary):
@@ -99,8 +102,28 @@ func _ready() -> void:
 	_network_manager.get_model_list()
 	
 	# [Refactor] 初始状态检查
+	#if not _session_manager.has_active_session():
+		#_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
+	
+	# 自动加载最近的对话存档
+	# 防御性检查：确保没有活动会话时才自动加载
 	if not _session_manager.has_active_session():
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
+		var archive_list := ChatArchive.get_archive_list()
+		if not archive_list.is_empty():
+			# 加载最新的存档（get_archive_list() 已按时间倒序排列）
+			var latest_archive = archive_list[0]
+			print("[Godot AI Chat] Auto-loading latest chat archive: " + latest_archive)
+			
+			var is_success: bool = _session_manager.load_session(latest_archive)
+			if is_success:
+				_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % latest_archive)
+				_connect_history_ui_signals()
+			else:
+				_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Failed to load latest archive")
+		else:
+			# 如果没有存档，保持原有行为
+			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
+
 
 
 # --- Public Functions ---
@@ -157,6 +180,41 @@ func _update_turn_info() -> void:
 
 # --- Signal Callbacks ---
 
+## 删除会话并加载最新存档
+func _delete_chat_history(filename: String) -> void:
+	# 检查被删除的是否是当前正在查看的会话
+	# 通过 SessionManager 获取当前路径的文件名进行比对
+	var is_deleting_current: bool = false
+	if _session_manager.current_history_path.get_file() == filename:
+		is_deleting_current = true
+	
+	# 调用 SessionManager 删除文件
+	var deleted: bool = _session_manager.delete_session(filename)
+	
+	if not deleted:
+		_chat_ui.show_confirmation("Error: Failed to delete session: %s" % filename)
+		return
+	
+	# 分情况处理 UI 更新
+	if is_deleting_current:
+		# 情况 A: 删除了当前会话 -> 需要加载一个新的来填补空白
+		var loaded_session: String = _session_manager.load_latest_session()
+		
+		if not loaded_session.is_empty():
+			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted %s, loaded: %s" % [filename, loaded_session])
+			_connect_history_ui_signals()
+		else:
+			# 情况 A-2: 删光了所有会话
+			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted %s. No chats remaining." % filename)
+			_chat_ui.update_turn_display(0, ToolBox.get_plugin_settings().max_chat_turns)
+	else:
+		# 情况 B: 删除了后台会话 -> 仅提示，不跳转，不打断当前阅读
+		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted archive: %s" % filename)
+	
+	# 无论哪种情况，都要刷新下拉列表以移除已删除的项
+	_chat_ui._update_chat_archive_selector()
+
+
 ## 用户点击发送
 func _on_user_send_message(_text: String) -> void:
 	# [Refactor] 状态检查
@@ -165,12 +223,11 @@ func _on_user_send_message(_text: String) -> void:
 		return
 	
 	_chat_ui.clear_user_input()
-	#_current_chat_window.append_user_message(_text)
 	
-	# [New] 处理附件
+	# 处理附件
 	var processed: Dictionary = AttachmentProcessor.process_input(_text)
 	
-	# [Modify] 传入处理后的文本和图片数据
+	# 传入处理后的文本和图片数据
 	_current_chat_window.append_user_message(
 		processed.final_text, 
 		processed.image_data, 
@@ -184,14 +241,6 @@ func _on_user_send_message(_text: String) -> void:
 	var _context_history: Array[ChatMessage] = ContextBuilder.build_context(_history, _settings)
 	
 	_network_manager.start_chat_stream(_context_history)
-
-
-# 收到第一个 Chunk 时，更新 UI 状态
-#func _on_chunk_received(_chunk: Dictionary) -> void:
-	#if _chat_ui.current_state == ChatUI.UIState.WAITING_RESPONSE:
-		#_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
-	
-	#_current_chat_window.handle_stream_chunk(_chunk, _network_manager.current_provider)
 
 
 ## 显示工具结果

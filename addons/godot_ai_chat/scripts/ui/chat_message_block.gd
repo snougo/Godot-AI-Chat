@@ -604,6 +604,9 @@ func _create_text_block(_initial_text: String, _instant: bool) -> RichTextLabel:
 	_rtl.fit_content = true
 	_rtl.selection_enabled = true
 	_rtl.focus_mode = Control.FOCUS_CLICK
+	# [Fix] 显式设置自动换行模式，确保在任何加载时序下都能正确换行
+	_rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	
 	if not _instant:
 		_rtl.visible_characters = 0
 	_content_container.add_child(_rtl)

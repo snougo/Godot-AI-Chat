@@ -7,7 +7,7 @@
 [ext_resource type="Script" uid="uid://dr3rrump555v0" path="res://addons/godot_ai_chat/scripts/ui/current_chat_window.gd" id="5_rbecq"]
 
 [node name="ChatHub" type="Control" unique_id=839420379]
-custom_minimum_size = Vector2(800, 800)
+custom_minimum_size = Vector2(700, 800)
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0

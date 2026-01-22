@@ -71,19 +71,19 @@ theme_override_constants/separation = 10
 
 [node name="StatusLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=2121040211]
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBoxFlat_a7m7s")
 text = "Ready"
 label_settings = SubResource("LabelSettings_2kdn8")
 vertical_alignment = 1
+text_overrun_behavior = 1
 
 [node name="ChatTrunDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
 layout_mode = 2
-size_flags_horizontal = 3
 theme_override_styles/normal = SubResource("StyleBoxFlat_w6mml")
 text = "Turn:"
 label_settings = SubResource("LabelSettings_qjs14")
 vertical_alignment = 1
+text_overrun_behavior = 1
 
 [node name="CurrentTokenCost" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
 layout_mode = 2
@@ -121,16 +121,17 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+disabled = true
 text_overrun_behavior = 1
-selected = 0
 fit_to_longest_item = false
-item_count = 3
-popup/item_0/text = "chat_2026-01-18_22-16-46.tres"
-popup/item_0/id = 0
-popup/item_1/text = "chat_2026-01-18_22-12-29.tres"
-popup/item_1/id = 1
-popup/item_2/text = "chat_2026-01-18_21-58-01.tres"
-popup/item_2/id = 2
+
+[node name="DeleteButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=887043830]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Delete Current Chat"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Delete"
+text_overrun_behavior = 2
 
 [node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=388608477]
 layout_mode = 2
@@ -157,7 +158,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
 disabled = true
-text_overrun_behavior = 2
+text_overrun_behavior = 1
 selected = 0
 fit_to_longest_item = false
 item_count = 1
@@ -176,7 +177,7 @@ right_icon = ExtResource("3_i3tmh")
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
-text = "Reconnect"
+text = "Reconnection"
 icon = ExtResource("7_grk0l")
 text_overrun_behavior = 1
 expand_icon = true

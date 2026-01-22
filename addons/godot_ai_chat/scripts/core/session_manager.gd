@@ -4,28 +4,31 @@ extends RefCounted
 
 ## [Refactor] 核心重构：负责管理聊天会话的生命周期（创建、加载、保存）
 
-# 存档目录
+## 存档目录
 const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
 
-# 当前活动的会话路径
+## 当前活动的会话路径
 var current_history_path: String = ""
 
 # 依赖注入：需要 ChatUI 和 Window 来更新界面和获取数据
 var _chat_ui: ChatUI
 var _current_chat_window: CurrentChatWindow
 
+
 func _init(chat_ui: ChatUI, current_chat_window: CurrentChatWindow) -> void:
 	_chat_ui = chat_ui
 	_current_chat_window = current_chat_window
 	_ensure_archive_dir()
 
-# 确保目录存在
+
+## 确保目录存在
 func _ensure_archive_dir() -> void:
 	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
 		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
 
-# 创建新会话
-# 返回：新创建的文件名，如果失败返回空字符串
+
+## 创建新会话
+## 返回：新创建的文件名，如果失败返回空字符串
 func create_new_session() -> String:
 	_ensure_archive_dir()
 	
@@ -59,7 +62,8 @@ func create_new_session() -> String:
 	
 	return _final_path.get_file()
 
-# 加载会话
+
+## 加载会话
 func load_session(filename: String) -> bool:
 	var _path: String = ARCHIVE_DIR.path_join(filename)
 	
@@ -74,11 +78,59 @@ func load_session(filename: String) -> bool:
 	
 	return false
 
-# 检查当前是否有活跃会话
+
+## 删除指定会话并返回是否成功
+func delete_session(filename: String) -> bool:
+	var archive_path: String = ARCHIVE_DIR.path_join(filename)
+	
+	# 检查文件是否存在
+	if not FileAccess.file_exists(archive_path):
+		push_error("[SessionManager] Archive file not found: %s" % filename)
+		return false
+	
+	# 删除文件
+	var err: Error = DirAccess.remove_absolute(archive_path)
+	if err != OK:
+		push_error("[SessionManager] Failed to delete archive: %s" % error_string(err))
+		return false
+	
+	# 如果删除的是当前会话，清除当前会话状态
+	if current_history_path == archive_path:
+		current_history_path = ""
+		_current_chat_window.chat_history = null
+		# 清空聊天显示
+		for child in _current_chat_window.chat_list_container.get_children():
+			child.queue_free()
+	
+	# 刷新编辑器文件系统
+	ToolBox.update_editor_filesystem(archive_path)
+	return true
+
+
+## 加载最新可用的会话
+## 返回：加载的会话文件名，如果没有可用会话返回空字符串
+func load_latest_session() -> String:
+	var archive_list := ChatArchive.get_archive_list()
+	
+	if archive_list.is_empty():
+		return ""
+	
+	var latest_archive = archive_list[0]
+	var success: bool = load_session(latest_archive)
+	
+	if success:
+		return latest_archive
+	else:
+		push_error("[SessionManager] Failed to load latest session: %s" % latest_archive)
+		return ""
+
+
+## 检查当前是否有活跃会话
 func has_active_session() -> bool:
 	return not current_history_path.is_empty()
 
-# [内部] 将资源应用到 UI 并建立自动保存连接
+
+## [内部] 将资源应用到 UI 并建立自动保存连接
 func _load_resource_to_ui(history: ChatMessageHistory, filename: String) -> void:
 	_chat_ui.select_archive_by_name(filename)
 	_chat_ui.reset_token_cost_display()
@@ -91,7 +143,8 @@ func _load_resource_to_ui(history: ChatMessageHistory, filename: String) -> void
 	
 	history.changed.connect(_auto_save)
 
-# 自动保存回调
+
+## 自动保存回调
 func _auto_save() -> void:
 	if current_history_path.is_empty():
 		return
