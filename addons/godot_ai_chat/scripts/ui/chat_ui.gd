@@ -43,18 +43,18 @@ enum UIState {
 @onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTrunDisplay
 @onready var _current_token_cost: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenCost
 
-@onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer/ChatArchiveSelector
-@onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/DeleteButton
-@onready var _load_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/LoadChatButton
-@onready var _new_chat_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/NewChatButton
+@onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/ChatArchiveSelector
+@onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/DeleteButton
+@onready var _load_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/LoadChatButton
+@onready var _new_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/NewChatButton
 
-@onready var _send_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SendButton
-@onready var _save_as_markdown_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer3/SaveAsMarkdownButton
+@onready var _send_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/SendButton
+@onready var _save_as_markdown_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/SaveAsMarkdownButton
 @onready var _user_input: TextEdit = $TabContainer/Chat/VBoxContainer/UserInput
 
-@onready var _model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelSelector
-@onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ModelNameFilterInput
-@onready var _reconnect_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer2/ReconnectButton
+@onready var _model_selector: OptionButton = $TabContainer/Chat/VBoxContainer/NetworkContainer/ModelSelector
+@onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/NetworkContainer/ModelNameFilterInput
+@onready var _reconnect_button: Button = $TabContainer/Chat/VBoxContainer/NetworkContainer/ReconnectButton
 
 @onready var _settings_panel: Control = $TabContainer/Settings/SettingsPanel
 @onready var _error_dialog: AcceptDialog = $AcceptDialog

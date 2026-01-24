@@ -3,113 +3,107 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "insert_script_code"
-	tool_description = "Inserts code into a slice. REQUIRES 'slice_index' from 'get_current_active_script'."
+	tool_description = "Inserts new code at a specific line number. Using `get_current_active_script` before inserting."
+
 
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
-			"path": {
+			"file_name": {
 				"type": "string",
-				"description": "The full path to the script file."
+				"description": "The name of the file (e.g., 'my_script.gd') to verify against the active script editor."
 			},
 			"new_code": {
 				"type": "string",
-				"description": "The GDScript code to insert."
-			},
-			"slice_index": {
-				"type": "integer",
-				"description": "The 0-based index of the logical slice (e.g., function block) to search in."
-			},
-			"anchor_code": {
-				"type": "string",
-				"description": "The EXACT code snippet in the slice to use as a reference point."
+				"description": "The new gdscript code to insert."
 			},
 			"insert_position": {
-				"type": "string",
-				"enum": ["after", "before"],
-				"description": "Insert 'after' (default) or 'before' the anchor code."
+				"type": "integer",
+				"description": "The 1-based line number where the code should be inserted."
 			}
 		},
-		"required": ["path", "new_code", "slice_index", "anchor_code"]
+		"required": ["file_name", "new_code", "insert_position"]
 	}
 
-func execute(args: Dictionary) -> Dictionary:
-	var path = args.get("path", "")
-	var new_code = args.get("new_code", "")
-	var slice_index = args.get("slice_index", -1)
-	var anchor_code = args.get("anchor_code", "")
-	var insert_pos = args.get("insert_position", "after")
-	
-	# --- 1. 安全与基本检查 ---
-	var security_error = validate_path_safety(path)
-	if not security_error.is_empty():
-		return {"success": false, "data": security_error}
-	
-	if not FileAccess.file_exists(path):
-		return {"success": false, "data": "File not found: " + path}
-	
-	if slice_index < 0:
-		return {"success": false, "data": "Invalid slice_index. Must be >= 0."}
-		
-	if anchor_code.strip_edges().is_empty():
-		return {"success": false, "data": "anchor_code cannot be empty."}
 
-	# --- 2. 加载编辑器 ---
-	var res = load(path)
-	if not res is Script:
-		return {"success": false, "data": "Resource is not a script."}
+func execute(args: Dictionary) -> Dictionary:
+	var target_file_name: String = args.get("file_name", "")
+	var new_code: String = args.get("new_code", "")
+	var insert_line_num: int = args.get("insert_position", -1) # 1-based
 	
-	EditorInterface.edit_resource(res)
-	var script_editor = EditorInterface.get_script_editor()
-	var current_editor = script_editor.get_current_editor()
-	if not current_editor:
-		return {"success": false, "data": "Could not access script editor."}
-	var base_editor = current_editor.get_base_editor()
+	if target_file_name.strip_edges().is_empty():
+		return {"success": false, "data": "file_name cannot be empty."}
 	
-	# --- 3. 切片定位 (基类) ---
-	# 获取当前编辑器文本进行实时解析
-	var current_text = base_editor.text
-	var slices = _parse_script_to_slices(current_text)
+	if insert_line_num < 1:
+		return {"success": false, "data": "insert_position must be a line number >= 1."}
 	
-	if slice_index >= slices.size():
-		return {"success": false, "data": "slice_index %d out of bounds. Total slices: %d" % [slice_index, slices.size()]}
+	var line_index: int = insert_line_num - 1
+
+	# --- 1. 获取当前编辑器并校验 ---
+	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
+	if not script_editor:
+		return {"success": false, "data": "Script Editor not found."}
 	
-	var target_slice = slices[slice_index]
+	var current_script: Script = script_editor.get_current_script()
+	if not current_script:
+		return {"success": false, "data": "No active script found. Using `open_script` to open target script."}
 	
-	# --- 4. 寻找锚点 (基类) ---
-	var anchor_match = _find_code_in_slice(base_editor, target_slice, anchor_code)
+	var script_path: String = current_script.resource_path
 	
-	if not anchor_match.found:
-		var msg = "Could not find 'anchor_code' in slice %d.\n" % slice_index
-		msg += "Slice Context (Lines %d-%d):\n%s\n...\n" % [target_slice.start_line + 1, target_slice.end_line + 1, _get_preview_lines(base_editor, target_slice, 5)]
-		msg += "ACTION: Verify 'anchor_code' exists in this slice."
-		return {"success": false, "data": msg}
+	# [新增] 安全检查：路径黑名单 (来自 AiTool)
+	var safety_error = validate_path_safety(script_path)
+	if not safety_error.is_empty():
+		return {"success": false, "data": safety_error}
 	
-	# --- 5. 计算插入行号 ---
-	var insertion_line_index = -1
-	if insert_pos == "before":
-		insertion_line_index = anchor_match.start_line
-	else:
-		insertion_line_index = anchor_match.end_line + 1
+	# [新增] 类型检查：扩展名白名单 (来自 BaseScriptTool)
+	var ext_error = validate_file_extension(script_path)
+	if not ext_error.is_empty():
+		return {"success": false, "data": ext_error}
 	
-	# --- 6. 执行插入 ---
-	if base_editor.has_method("begin_complex_operation"):
-		base_editor.begin_complex_operation()
+	var current_file_name: String = script_path.get_file()
+	if current_file_name != target_file_name:
+		return {
+			"success": false, 
+			"data": "Active script mismatch. Expected '%s', but found '%s'. Please open the correct file." % [target_file_name, current_file_name]
+		}
+	
+	var current_script_editor = script_editor.get_current_editor()
+	if not current_script_editor:
+		return {"success": false, "data": "No active script editor found."}
+	
+	var code_editor: CodeEdit = current_script_editor.get_base_editor()
+	var total_lines: int = code_editor.get_line_count()
+	
+	if line_index > total_lines:
+		return {"success": false, "data": "insert_position %d is out of bounds. Max lines: %d" % [insert_line_num, total_lines]}
+	
+	# --- 2. 执行插入 ---
+	if code_editor.has_method("begin_complex_operation"):
+		code_editor.begin_complex_operation()
 	
 	if not new_code.ends_with("\n"):
 		new_code += "\n"
 	
-	# 智能缩进 (基类)
-	var indent = _get_indentation(base_editor.get_line(anchor_match.start_line))
+	# 智能缩进
+	var indent_ref_line: int = line_index
+	if indent_ref_line >= total_lines:
+		indent_ref_line = total_lines - 1
+	elif indent_ref_line > 0:
+		indent_ref_line -= 1
+	
+	var indent := ""
+	if indent_ref_line >= 0 and indent_ref_line < total_lines:
+		indent = _get_indentation(code_editor.get_line(indent_ref_line))
+	
 	new_code = _apply_indentation(new_code, indent)
 	
-	base_editor.insert_text(new_code, insertion_line_index, 0)
+	code_editor.insert_text(new_code, line_index, 0)
 	
-	if base_editor.has_method("end_complex_operation"):
-		base_editor.end_complex_operation()
+	if code_editor.has_method("end_complex_operation"):
+		code_editor.end_complex_operation()
 	
 	return {
 		"success": true, 
-		"data": "Successfully inserted code %s slice %d (Line %d)." % [insert_pos, slice_index, insertion_line_index + 1]
+		"data": "Successfully inserted code at line %d in '%s'." % [insert_line_num, target_file_name]
 	}

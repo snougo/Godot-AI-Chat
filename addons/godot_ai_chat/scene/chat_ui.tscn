@@ -7,6 +7,7 @@
 [ext_resource type="Texture2D" uid="uid://vwlbuhvfugwf" path="res://addons/godot_ai_chat/assets/material-icon-theme--folder-markdown.svg" id="4_qoxj2"]
 [ext_resource type="Script" uid="uid://cb53othg76m5n" path="res://addons/godot_ai_chat/scripts/others/user_input.gd" id="5_p6hp2"]
 [ext_resource type="Texture2D" uid="uid://dh54j33ru0odc" path="res://addons/godot_ai_chat/assets/streamline-sharp-color--cloud-wifi-flat.svg" id="7_grk0l"]
+[ext_resource type="Texture2D" uid="uid://54q6istmwjt" path="res://addons/godot_ai_chat/assets/tool-screwdriver-svgrepo-com.svg" id="7_qjs14"]
 [ext_resource type="Texture2D" uid="uid://brk43jkprsfdw" path="res://addons/godot_ai_chat/assets/streamline-sharp-color--mail-send-email-message-flat.svg" id="9_ulynj"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a7m7s"]
@@ -114,10 +115,10 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 10
 
-[node name="HBoxContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=733507829]
+[node name="ChatArchiveContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=733507829]
 layout_mode = 2
 
-[node name="ChatArchiveSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=186243956]
+[node name="ChatArchiveSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=186243956]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
@@ -125,7 +126,7 @@ disabled = true
 text_overrun_behavior = 1
 fit_to_longest_item = false
 
-[node name="DeleteButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=887043830]
+[node name="DeleteButton" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=887043830]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Delete Current Chat"
@@ -133,7 +134,7 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text = "Delete"
 text_overrun_behavior = 2
 
-[node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=388608477]
+[node name="LoadChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=388608477]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Load Chat"
@@ -141,7 +142,7 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text = "Load"
 text_overrun_behavior = 2
 
-[node name="NewChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=1174113039]
+[node name="NewChatButton" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=1174113039]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "New Chat"
@@ -149,10 +150,10 @@ theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647,
 text = "New"
 text_overrun_behavior = 2
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=2081664670]
+[node name="NetworkContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=2081664670]
 layout_mode = 2
 
-[node name="ModelSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer2" unique_id=535508631]
+[node name="ModelSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/NetworkContainer" unique_id=535508631]
 custom_minimum_size = Vector2(0, 35)
 layout_mode = 2
 size_flags_horizontal = 3
@@ -165,7 +166,7 @@ item_count = 1
 popup/item_0/text = "Connecting..."
 popup/item_0/id = 0
 
-[node name="ModelNameFilterInput" type="LineEdit" parent="TabContainer/Chat/VBoxContainer/HBoxContainer2" unique_id=212915694]
+[node name="ModelNameFilterInput" type="LineEdit" parent="TabContainer/Chat/VBoxContainer/NetworkContainer" unique_id=212915694]
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "Filter Model Name"
@@ -173,7 +174,7 @@ clear_button_enabled = true
 caret_blink = true
 right_icon = ExtResource("3_i3tmh")
 
-[node name="ReconnectButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer2" unique_id=903059472]
+[node name="ReconnectButton" type="Button" parent="TabContainer/Chat/VBoxContainer/NetworkContainer" unique_id=903059472]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
@@ -194,10 +195,10 @@ scroll_smooth = true
 caret_blink = true
 script = ExtResource("5_p6hp2")
 
-[node name="HBoxContainer3" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=1128191836]
+[node name="HBoxContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=1128191836]
 layout_mode = 2
 
-[node name="SaveAsMarkdownButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer3" unique_id=1557382607]
+[node name="SaveAsMarkdownButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=1557382607]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Save Current Chat as Markdown"
@@ -207,7 +208,16 @@ icon = ExtResource("4_qoxj2")
 text_overrun_behavior = 1
 expand_icon = true
 
-[node name="SendButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer3" unique_id=1719100201]
+[node name="ToolSelectorButton" type="MenuButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=208769348]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Tools"
+icon = ExtResource("7_qjs14")
+text_overrun_behavior = 1
+expand_icon = true
+
+[node name="SendButton" type="Button" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=1719100201]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.3490821, 0.9490196, 0.412919, 1)

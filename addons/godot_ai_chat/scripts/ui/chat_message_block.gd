@@ -51,6 +51,9 @@ var _reasoning_label: RichTextLabel = null
 var _think_parse_buffer: String = ""
 var _is_parsing_think: bool = false
 
+# [新增] 标记是否禁用思考标签解析
+var _disable_think_parsing: bool = false
+
 # --- Built-in Functions ---
 
 func _ready() -> void:
@@ -84,11 +87,20 @@ func start_stream(_role: String, _model_name: String = "") -> void:
 	_set_title(_role, _model_name)
 	_clear_content()
 	visible = true
+	
+	# 检查当前 Provider，如果是 Gemini 则禁用思考解析
+	var _settings: PluginSettings = ToolBox.get_plugin_settings()
+	_disable_think_parsing = (_settings.api_provider == "Google Gemini")
 
 
 ## 追加流式文本块
 func append_chunk(_text: String) -> void:
 	if _text.is_empty(): 
+		return
+	
+	# 如果禁用了思考解析（例如 Gemini），直接走普通文本处理逻辑
+	if _disable_think_parsing:
+		_process_smart_chunk(_text, false)
 		return
 	
 	_think_parse_buffer += _text
@@ -273,8 +285,9 @@ func display_image(_data: PackedByteArray, _mime: String) -> void:
 		var _tex: ImageTexture = ImageTexture.create_from_image(_img)
 		var _rect: TextureRect = TextureRect.new()
 		_rect.texture = _tex
-		_rect.expand_mode = TextureRect.EXPAND_KEEP_SIZE
-		_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_rect.size = Vector2(400, 400)
+		_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		_rect.custom_minimum_size = Vector2(0, 250) 
 		
 		_content_container.add_child(_rect)

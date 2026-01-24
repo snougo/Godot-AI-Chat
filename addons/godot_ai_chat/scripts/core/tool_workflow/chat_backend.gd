@@ -47,7 +47,16 @@ func process_response(_msg: ChatMessage) -> void:
 	print("[ChatBackend] Processing response. Role: %s, Content len: %d, Tool calls: %d" % [_msg.role, _msg.content.length(), _msg.tool_calls.size()])
 	
 	# 使用 ToolBox 过滤掉思考过程中的幻觉工具调用
-	if not _msg.tool_calls.is_empty() and "<think>" in _msg.content:
+	#if not _msg.tool_calls.is_empty() and "<think>" in _msg.content:
+		#_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(_msg.content, _msg.tool_calls)
+	
+	# 获取当前设置，判断是否为 Gemini
+	var _settings: PluginSettings = ToolBox.get_plugin_settings()
+	var _is_gemini: bool = (_settings.api_provider == "Google Gemini")
+	
+	# 使用 ToolBox 过滤掉思考过程中的幻觉工具调用
+	# 增加判断：只有非 Gemini 且包含 <think> 时才执行过滤
+	if not _is_gemini and not _msg.tool_calls.is_empty() and "<think>" in _msg.content:
 		_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(_msg.content, _msg.tool_calls)
 	
 	# 数据清洗：移除工具调用中的 XML 标签和非法字符
