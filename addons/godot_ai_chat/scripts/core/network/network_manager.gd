@@ -2,6 +2,8 @@
 class_name NetworkManager
 extends Node
 
+## 网络管理器
+##
 ## 负责管理网络请求、Provider 初始化以及流式请求的生命周期。
 
 # --- Signals ---
@@ -35,12 +37,10 @@ var api_base_url: String = ""
 var temperature: float = 0.7
 var current_model_name: String = ""
 
-
 # --- Built-in Functions ---
 
 func _ready() -> void:
 	_http_request_node.timeout = 10.0
-
 
 # --- Public Functions ---
 
@@ -59,31 +59,31 @@ func get_model_list() -> void:
 	
 	# 特殊处理 ZhipuAI - 直接返回硬编码模型列表
 	if current_provider is ZhipuAIProvider:
-		var _model_list: Array[String] = current_provider.parse_model_list_response(PackedByteArray())
-		get_model_list_request_succeeded.emit(_model_list)
+		var model_list: Array[String] = current_provider.parse_model_list_response(PackedByteArray())
+		get_model_list_request_succeeded.emit(model_list)
 		return
 	
 	# 其他提供商的正常处理逻辑
-	var _url: String = current_provider.get_request_url(api_base_url, "", api_key, false)
+	var url: String = current_provider.get_request_url(api_base_url, "", api_key, false)
 	
 	# OpenAI 兼容接口特例修正 - 获取模型列表需要特殊URL
 	if current_provider is BaseOpenAIProvider:
-		_url = api_base_url.path_join("v1/models")
+		url = api_base_url.path_join("v1/models")
 	
-	var _headers: PackedStringArray = current_provider.get_request_headers(api_key, false)
+	var headers: PackedStringArray = current_provider.get_request_headers(api_key, false)
 	
 	if _http_request_node.request_completed.is_connected(_on_model_list_completed):
 		_http_request_node.request_completed.disconnect(_on_model_list_completed)
 	
 	_http_request_node.request_completed.connect(_on_model_list_completed, CONNECT_ONE_SHOT)
-	var _err: Error = _http_request_node.request(_url, _headers, HTTPClient.METHOD_GET)
+	var err: Error = _http_request_node.request(url, headers, HTTPClient.METHOD_GET)
 	
-	if _err != OK:
-		get_model_list_request_failed.emit("Request failed: %s" % error_string(_err))
+	if err != OK:
+		get_model_list_request_failed.emit("Request failed: %s" % error_string(err))
 
 
 ## 发起聊天流
-func start_chat_stream(_messages: Array[ChatMessage]) -> void:
+func start_chat_stream(p_messages: Array[ChatMessage]) -> void:
 	if current_model_name.is_empty():
 		chat_request_failed.emit("No model selected.")
 		return
@@ -92,18 +92,18 @@ func start_chat_stream(_messages: Array[ChatMessage]) -> void:
 		chat_request_failed.emit("Configuration Error")
 		return
 	
-	var _is_gemini: bool = (current_provider is GeminiProvider)
-	var _tools: Array = ToolRegistry.get_all_tool_definitions(_is_gemini)
+	var is_gemini: bool = (current_provider is GeminiProvider)
+	var tools: Array = ToolRegistry.get_all_tool_definitions(is_gemini)
 	
-	var _body: Dictionary = current_provider.build_request_body(current_model_name, _messages, temperature, true, _tools)
-	var _url: String = current_provider.get_request_url(api_base_url, current_model_name, api_key, true)
-	var _headers: PackedStringArray = current_provider.get_request_headers(api_key, true)
+	var body: Dictionary = current_provider.build_request_body(current_model_name, p_messages, temperature, true, tools)
+	var url: String = current_provider.get_request_url(api_base_url, current_model_name, api_key, true)
+	var headers: PackedStringArray = current_provider.get_request_headers(api_key, true)
 	
-	current_stream_request = StreamRequest.new(current_provider, _url, _headers, _body)
+	current_stream_request = StreamRequest.new(current_provider, url, headers, body)
 	
-	current_stream_request.chunk_received.connect(func(_chunk: Dictionary): new_stream_chunk_received.emit(_chunk))
-	current_stream_request.usage_received.connect(func(_usage: Dictionary): chat_usage_data_received.emit(_usage))
-	current_stream_request.failed.connect(func(_err_msg: String): chat_request_failed.emit(_err_msg))
+	current_stream_request.chunk_received.connect(func(chunk: Dictionary): new_stream_chunk_received.emit(chunk))
+	current_stream_request.usage_received.connect(func(usage: Dictionary): chat_usage_data_received.emit(usage))
+	current_stream_request.failed.connect(func(err_msg: String): chat_request_failed.emit(err_msg))
 	current_stream_request.finished.connect(func(): chat_stream_request_completed.emit())
 	
 	new_chat_request_sending.emit()
@@ -121,13 +121,13 @@ func cancel_stream() -> void:
 
 ## 初始化 Provider 配置
 func _update_provider_config() -> bool:
-	var _settings: PluginSettings = ToolBox.get_plugin_settings()
-	api_key = _settings.api_key
-	api_base_url = _settings.api_base_url
-	temperature = _settings.temperature
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
+	api_key = settings.api_key
+	api_base_url = settings.api_base_url
+	temperature = settings.temperature
 	
 	# 使用工厂创建实例
-	current_provider = ProviderFactory.create_provider(_settings.api_provider)
+	current_provider = ProviderFactory.create_provider(settings.api_provider)
 	if current_provider == null:
 		return false
 	
@@ -136,16 +136,16 @@ func _update_provider_config() -> bool:
 
 # --- Signal Callbacks ---
 
-func _on_model_list_completed(_result: int, _response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
-	if _result != HTTPRequest.RESULT_SUCCESS or _response_code != 200:
-		get_model_list_request_failed.emit("HTTP Error %d" % _response_code)
+func _on_model_list_completed(p_result: int, p_response_code: int, _p_headers: PackedStringArray, p_body: PackedByteArray) -> void:
+	if p_result != HTTPRequest.RESULT_SUCCESS or p_response_code != 200:
+		get_model_list_request_failed.emit("HTTP Error %d" % p_response_code)
 		return
 	
 	# 使用 Provider 进行多态解析
-	var _list: Array[String] = current_provider.parse_model_list_response(_body)
+	var list: Array[String] = current_provider.parse_model_list_response(p_body)
 	
-	if not _list.is_empty():
-		_list.sort() # 顺手排个序
-		get_model_list_request_succeeded.emit(_list)
+	if not list.is_empty():
+		list.sort()
+		get_model_list_request_succeeded.emit(list)
 	else:
 		get_model_list_request_failed.emit("No models found or invalid response format")

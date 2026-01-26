@@ -1,156 +1,171 @@
 @tool
-extends AiTool
 class_name BaseSceneTool
+extends AiTool
 
-const PROPERTY_BLACKLIST = ["scale"]
+## 场景工具的基类。
+## 提供节点属性应用、类型转换和场景树遍历的通用功能。
+
+# --- Enums / Constants ---
+
+## 属性黑名单，禁止修改的属性
+const PROPERTY_BLACKLIST: Array[String] = ["scale"]
 
 
-func apply_properties(node: Node, props: Dictionary) -> void:
-	for key in props:
-		if key in PROPERTY_BLACKLIST: continue
-		var target_type = TYPE_NIL
+# --- Public Functions ---
+
+## 将属性字典应用到节点
+## [param p_node]: 目标节点
+## [param p_props]: 属性字典
+func apply_properties(p_node: Node, p_props: Dictionary) -> void:
+	for key in p_props:
+		if key in PROPERTY_BLACKLIST:
+			continue
 		
-		# 尝试获取属性类型
-		var prop_list = node.get_property_list()
+		var target_type: int = TYPE_NIL
+		var prop_list: Array[Dictionary] = p_node.get_property_list()
+		
 		for p in prop_list:
 			if p.name == key:
 				target_type = p.type
 				break
 		
-		var raw_val = props[key]
-		var final_val = raw_val
+		var raw_val: Variant = p_props[key]
+		var final_val: Variant = raw_val
 		
-		# 如果我们知道目标类型，尝试强制转换
 		if target_type != TYPE_NIL:
 			final_val = convert_to_type(raw_val, target_type)
 		else:
-			# 如果不知道目标类型（例如动态属性），尝试智能推断
 			final_val = try_infer_type_from_string(raw_val)
 		
-		node.set(key, final_val)
+		p_node.set(key, final_val)
 
 
-func set_owner_recursive(node: Node, owner: Node):
-	if node != owner:
-		node.owner = owner
+## 递归设置节点的 owner
+## [param p_node]: 要设置的节点
+## [param p_owner]: 目标 owner
+func set_owner_recursive(p_node: Node, p_owner: Node) -> void:
+	if p_node != p_owner:
+		p_node.owner = p_owner
 	
-	if node != owner and not node.scene_file_path.is_empty():
+	if p_node != p_owner and not p_node.scene_file_path.is_empty():
 		return
 	
-	for child in node.get_children():
-		set_owner_recursive(child, owner)
+	for child in p_node.get_children():
+		set_owner_recursive(child, p_owner)
 
 
-# --- 通用类型处理函数 (来源于 set_node_property_tool) ---
-
-func is_type_compatible(target_type: int, value_type: int) -> bool:
-	if target_type == value_type:
+## 检查类型是否兼容
+## [param p_target_type]: 目标类型
+## [param p_value_type]: 值类型
+## [return]: 是否兼容
+func is_type_compatible(p_target_type: int, p_value_type: int) -> bool:
+	if p_target_type == p_value_type:
 		return true
-	if (target_type == TYPE_INT or target_type == TYPE_FLOAT) and (value_type == TYPE_INT or value_type == TYPE_FLOAT):
+	if (p_target_type == TYPE_INT or p_target_type == TYPE_FLOAT) and (p_value_type == TYPE_INT or p_value_type == TYPE_FLOAT):
 		return true
-	if target_type == TYPE_OBJECT and value_type == TYPE_OBJECT:
+	if p_target_type == TYPE_OBJECT and p_value_type == TYPE_OBJECT:
 		return true
 	return false
 
 
-func is_value_approx_equal(a: Variant, b: Variant) -> bool:
-	if a == null and b == null: return true
-	if a == null or b == null: return false
+## 检查两个值是否近似相等
+## [param p_a]: 第一个值
+## [param p_b]: 第二个值
+## [return]: 是否近似相等
+func is_value_approx_equal(p_a: Variant, p_b: Variant) -> bool:
+	if p_a == null and p_b == null:
+		return true
+	if p_a == null or p_b == null:
+		return false
 	
-	var type_a = typeof(a)
-	var type_b = typeof(b)
+	var type_a: int = typeof(p_a)
+	var type_b: int = typeof(p_b)
 	
-	if not is_type_compatible(type_a, type_b): return false
+	if not is_type_compatible(type_a, type_b):
+		return false
 	
 	match type_a:
 		TYPE_FLOAT, TYPE_INT:
-			return is_equal_approx(float(a), float(b))
+			return is_equal_approx(float(p_a), float(p_b))
 		TYPE_VECTOR2:
-			return a.is_equal_approx(b)
+			return p_a.is_equal_approx(p_b)
 		TYPE_VECTOR3:
-			return a.is_equal_approx(b)
+			return p_a.is_equal_approx(p_b)
 		TYPE_COLOR:
-			return a.is_equal_approx(b)
+			return p_a.is_equal_approx(p_b)
 		TYPE_OBJECT:
-			return a == b
+			return p_a == p_b
 		_:
-			return a == b
+			return p_a == p_b
 
 
-func convert_to_type(value: Variant, target_type: int) -> Variant:
-	if typeof(value) == target_type:
-		return value
+## 将值转换为目标类型
+## [param p_value]: 原始值
+## [param p_target_type]: 目标类型
+## [return]: 转换后的值
+func convert_to_type(p_value: Variant, p_target_type: int) -> Variant:
+	if typeof(p_value) == p_target_type:
+		return p_value
 	
-	match target_type:
-		TYPE_BOOL: return str(value).to_lower() == "true"
-		TYPE_INT: return str(value).to_int()
-		TYPE_FLOAT: return str(value).to_float()
-		TYPE_STRING: return str(value)
-		TYPE_STRING_NAME: return StringName(str(value))
+	match p_target_type:
+		TYPE_BOOL:
+			return str(p_value).to_lower() == "true"
+		TYPE_INT:
+			return str(p_value).to_int()
+		TYPE_FLOAT:
+			return str(p_value).to_float()
+		TYPE_STRING:
+			return str(p_value)
+		TYPE_STRING_NAME:
+			return StringName(str(p_value))
 		TYPE_VECTOR2:
-			if value is Array and value.size() >= 2: return Vector2(value[0], value[1])
-			if value is String:
-				var clean_str = value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
-				var parts = clean_str.split(",")
-				if parts.size() >= 2: return Vector2(parts[0].to_float(), parts[1].to_float())
+			return _convert_to_vector2(p_value)
 		TYPE_VECTOR3:
-			if value is Array and value.size() >= 3: return Vector3(value[0], value[1], value[2])
-			if value is String:
-				var clean_str = value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
-				var parts = clean_str.split(",")
-				if parts.size() >= 3: return Vector3(parts[0].to_float(), parts[1].to_float(), parts[2].to_float())
+			return _convert_to_vector3(p_value)
 		TYPE_COLOR:
-			if value is Array and value.size() >= 3: 
-				if value.size() == 4: return Color(value[0], value[1], value[2], value[3])
-				return Color(value[0], value[1], value[2])
-			if value is String:
-				if "," in value:
-					var clean_str = value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
-					var parts = clean_str.split(",")
-					if parts.size() >= 3:
-						var r = parts[0].to_float()
-						var g = parts[1].to_float()
-						var b = parts[2].to_float()
-						if parts.size() >= 4:
-							return Color(r, g, b, parts[3].to_float())
-						return Color(r, g, b)
-				return Color(value)
+			return _convert_to_color(p_value)
 		TYPE_OBJECT:
-			if value is String:
-				if value.begins_with("res://"):
-					if ResourceLoader.exists(value):
-						return ResourceLoader.load(value)
-				# 增强：支持 new:ClassName
-				elif value.begins_with("new:"):
-					var type_name = value.substr(4)
-					if ClassDB.class_exists(type_name):
-						return ClassDB.instantiate(type_name)
-				# 增强：支持直接 ClassName
-				elif ClassDB.class_exists(value):
-					return ClassDB.instantiate(value)
-	return value
+			return _convert_to_object(p_value)
+		_:
+			return p_value
 
 
-func try_infer_type_from_string(val_str: Variant) -> Variant:
-	if not val_str is String: return val_str
-	if val_str.begins_with("[") and val_str.ends_with("]"):
-		var json = JSON.new()
-		if json.parse(val_str) == OK:
-			var arr = json.data
-			if arr is Array:
-				if arr.size() == 2: return Vector2(arr[0], arr[1])
-				if arr.size() == 3: return Vector3(arr[0], arr[1], arr[2])
-				if arr.size() == 4: return Color(arr[0], arr[1], arr[2], arr[3])
-	if val_str.is_valid_float():
-		if val_str.is_valid_int(): return val_str.to_int()
-		return val_str.to_float()
-	if val_str == "true": return true
-	if val_str == "false": return false
-	return val_str
+## 从字符串推断类型
+## [param p_val_str]: 字符串值
+## [return]: 推断后的值
+func try_infer_type_from_string(p_val_str: Variant) -> Variant:
+	if not p_val_str is String:
+		return p_val_str
+	
+	if p_val_str.begins_with("[") and p_val_str.ends_with("]"):
+		var json := JSON.new()
+		if json.parse(p_val_str) == OK and json.data is Array:
+			var arr: Array = json.data
+			if arr.size() == 2:
+				return Vector2(arr[0], arr[1])
+			if arr.size() == 3:
+				return Vector3(arr[0], arr[1], arr[2])
+			if arr.size() == 4:
+				return Color(arr[0], arr[1], arr[2], arr[3])
+	
+	if p_val_str.is_valid_float():
+		if p_val_str.is_valid_int():
+			return p_val_str.to_int()
+		return p_val_str.to_float()
+	
+	if p_val_str == "true":
+		return true
+	if p_val_str == "false":
+		return false
+	
+	return p_val_str
 
 
-func get_type_name(type_int: int) -> String:
-	match type_int:
+## 获取类型名称
+## [param p_type_int]: 类型整数
+## [return]: 类型名称字符串
+func get_type_name(p_type_int: int) -> String:
+	match p_type_int:
 		TYPE_BOOL: return "bool"
 		TYPE_INT: return "int"
 		TYPE_FLOAT: return "float"
@@ -165,3 +180,72 @@ func get_type_name(type_int: int) -> String:
 		TYPE_ARRAY: return "Array"
 		TYPE_DICTIONARY: return "Dictionary"
 		_: return "Variant"
+
+# --- Private Functions ---
+
+## 转换为 Vector2
+## [param p_value]: 原始值
+## [return]: Vector2 值
+func _convert_to_vector2(p_value: Variant) -> Variant:
+	if p_value is Array and p_value.size() >= 2:
+		return Vector2(p_value[0], p_value[1])
+	if p_value is String:
+		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
+		var parts: PackedStringArray = clean_str.split(",")
+		if parts.size() >= 2:
+			return Vector2(parts[0].to_float(), parts[1].to_float())
+	return p_value
+
+
+## 转换为 Vector3
+## [param p_value]: 原始值
+## [return]: Vector3 值
+func _convert_to_vector3(p_value: Variant) -> Variant:
+	if p_value is Array and p_value.size() >= 3:
+		return Vector3(p_value[0], p_value[1], p_value[2])
+	if p_value is String:
+		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
+		var parts: PackedStringArray = clean_str.split(",")
+		if parts.size() >= 3:
+			return Vector3(parts[0].to_float(), parts[1].to_float(), parts[2].to_float())
+	return p_value
+
+
+## 转换为 Color
+## [param p_value]: 原始值
+## [return]: Color 值
+func _convert_to_color(p_value: Variant) -> Variant:
+	if p_value is Array and p_value.size() >= 3:
+		if p_value.size() == 4:
+			return Color(p_value[0], p_value[1], p_value[2], p_value[3])
+		return Color(p_value[0], p_value[1], p_value[2])
+	if p_value is String:
+		if "," in p_value:
+			var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
+			var parts: PackedStringArray = clean_str.split(",")
+			if parts.size() >= 3:
+				var r: float = parts[0].to_float()
+				var g: float = parts[1].to_float()
+				var b: float = parts[2].to_float()
+				if parts.size() >= 4:
+					return Color(r, g, b, parts[3].to_float())
+				return Color(r, g, b)
+		return Color(p_value)
+	return p_value
+
+
+## 转换为 Object
+## [param p_value]: 原始值
+## [return]: Object 值
+func _convert_to_object(p_value: Variant) -> Variant:
+	if p_value is String:
+		if p_value.begins_with("res://"):
+			if ResourceLoader.exists(p_value):
+				return ResourceLoader.load(p_value)
+		elif p_value.begins_with("new:"):
+			var type_name: String = p_value.substr(4)
+			if ClassDB.class_exists(type_name):
+				return ClassDB.instantiate(type_name)
+		elif ClassDB.class_exists(p_value):
+			return ClassDB.instantiate(p_value)
+	return p_value

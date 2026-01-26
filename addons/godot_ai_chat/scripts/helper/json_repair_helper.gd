@@ -2,29 +2,30 @@
 class_name JSONRepairHelper
 extends RefCounted
 
+## JSON 修复工具
+##
 ## 专门用于修复和清洗 LLM 输出的 JSON 数据的工具类。
 ## 能够处理 Markdown 包裹、未闭合的括号以及转义字符干扰。
 
+# --- Public Functions ---
 
 ## 尝试从任意文本中提取并修复 JSON
 ## [return]: 修复后的 JSON 字符串。如果无法提取有效对象，返回 "{}"
-static func repair_json(text: String) -> String:
-	if text.is_empty():
+static func repair_json(p_text: String) -> String:
+	if p_text.is_empty():
 		return "{}"
 	
 	# 1. 预处理：剥离 Markdown 代码块
-	var clean_text: String = _strip_markdown(text)
+	var clean_text: String = _strip_markdown(p_text)
 	
 	# 2. 尝试寻找最外层的 JSON 对象/数组边界
 	# LLM 有时会在 JSON 前后说废话，我们需要找到第一个 { 或 [
 	var start_idx: int = -1
-	var first_char: String = ""
 	
 	for i in range(clean_text.length()):
 		var c: String = clean_text[i]
 		if c == "{" or c == "[":
 			start_idx = i
-			first_char = c
 			break
 	
 	if start_idx == -1:
@@ -41,9 +42,11 @@ static func repair_json(text: String) -> String:
 	return _repair_truncated_json(candidate)
 
 
+# --- Private Functions ---
+
 ## 剥离 ```json ... ``` 包裹
-static func _strip_markdown(text: String) -> String:
-	var result: String = text.strip_edges()
+static func _strip_markdown(p_text: String) -> String:
+	var result: String = p_text.strip_edges()
 	
 	if result.begins_with("```"):
 		var newline_idx: int = result.find("\n")
@@ -62,15 +65,15 @@ static func _strip_markdown(text: String) -> String:
 
 
 ## 核心算法：修复被截断的 JSON 字符串
-static func _repair_truncated_json(json_str: String) -> String:
+static func _repair_truncated_json(p_json_str: String) -> String:
 	var stack: Array[String] = []
 	var in_string: bool = false
 	var is_escaped: bool = false
-	var result: String = json_str
+	var result: String = p_json_str
 	
 	# 遍历字符串以维护栈状态
-	for i in range(json_str.length()):
-		var char: String = json_str[i]
+	for i in range(p_json_str.length()):
+		var char: String = p_json_str[i]
 		
 		if is_escaped:
 			is_escaped = false

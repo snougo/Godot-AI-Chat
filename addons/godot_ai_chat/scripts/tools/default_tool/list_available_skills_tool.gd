@@ -1,11 +1,20 @@
 @tool
 extends AiTool
 
+## 列出所有可用的 AI 技能及其当前状态（已挂载/激活或未激活）。
+## 用于查看当前可用的功能或可以学习的新技能。
+
+
+# --- Built-in Functions ---
+
 func _init() -> void:
 	tool_name = "list_available_skills"
-	tool_description = "Lists all available AI skills (capabilities) and their current status (mounted/active or not). Use this to see what you can do or what you can learn."
+	tool_description = "Lists all available AI skills and their current status."
 
 
+# --- Public Functions ---
+
+## 获取工具参数的 JSON Schema
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -14,8 +23,10 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary) -> Dictionary:
-	# 直接访问 ToolRegistry 静态成员
+## 执行工具逻辑，列出所有可用技能
+## [param p_args]: 参数字典（此工具不需要参数）
+## [return]: 包含成功状态和技能列表的字典
+func execute(p_args: Dictionary) -> Dictionary:
 	var all_skills: Array = ToolRegistry.get_available_skill_names()
 	
 	if all_skills.is_empty():
@@ -28,7 +39,6 @@ func execute(_args: Dictionary) -> Dictionary:
 		var status_icon: String = "✅" if is_active else "⬜"
 		var status_text: String = "**Active (Mounted)**" if is_active else "Inactive (Unmounted)"
 		
-		# 获取描述信息
 		var skill_res = ToolRegistry.available_skills.get(skill_name)
 		var desc := ""
 		if skill_res and "description" in skill_res:

@@ -2,6 +2,8 @@
 class_name ChatMessage
 extends Resource
 
+## 聊天消息数据结构
+##
 ## 定义单条聊天消息的数据结构，支持多模态和工具调用。
 
 # --- Constants ---
@@ -17,10 +19,10 @@ const ROLE_TOOL: String = "tool"
 
 # --- @export Vars ---
 
-## 角色定义：使用 export_enum 限制编辑器内的选择
+## 角色定义
 @export_enum("user", "assistant", "system", "tool") var role: String = ROLE_USER
 
-## 发送者的名称。
+## 发送者的名称
 ## 1. 对于 role="tool"，这里必须存储工具的名称 (Gemini 必需)。
 ## 2. 对于 role="user"，可以存储用户名 (OpenAI 支持)。
 @export var name: String = "" 
@@ -51,7 +53,7 @@ const ROLE_TOOL: String = "tool"
 
 # --- Built-in Functions ---
 
-func _init(_role: String = ROLE_USER, _content: String = "", _name: String = "") -> void:
-	role = _role
-	content = _content
-	name = _name
+func _init(p_role: String = ROLE_USER, p_content: String = "", p_name: String = "") -> void:
+	role = p_role
+	content = p_content
+	name = p_name

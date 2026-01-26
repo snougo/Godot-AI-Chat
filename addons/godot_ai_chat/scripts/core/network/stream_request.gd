@@ -2,13 +2,15 @@
 class_name StreamRequest
 extends RefCounted
 
-## 负责底层的 HTTP 流式请求处理，支持 SSE 和 JSON List 协议。
+## HTTP 流式请求处理类
+##
+## 负责底层的 HTTP 流式请求处理，支持 SSE 和 JSON List 协议，在后台线程中运行。
 
 # --- Signals ---
 
 ## 当接收到一个完整的 JSON 数据块时触发
 signal chunk_received(raw_json: Dictionary)
-## 当接收到 Usage 数据时触发（部分 Provider 可能单独发送）
+## 当接收到 Usage 数据时触发
 signal usage_received(usage: Dictionary)
 ## 请求正常结束时触发
 signal finished
@@ -28,16 +30,14 @@ var _task_id: int = -1
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
 ## 双层缓冲机制：文本缓冲
 var _incoming_text_buffer: String = ""
-## 专门用于处理跨行 SSE 数据的持久化缓冲区
-var _sse_buffer: String = "" 
 
 # --- Built-in Functions ---
 
-func _init(_provider_inst: BaseLLMProvider, _request_url: String, _request_headers: PackedStringArray, _body_dict: Dictionary) -> void:
-	_provider = _provider_inst
-	_url = _request_url
-	_headers = _request_headers
-	_body_json = JSON.stringify(_body_dict)
+func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringArray, p_body_dict: Dictionary) -> void:
+	_provider = p_provider
+	_url = p_url
+	_headers = p_headers
+	_body_json = JSON.stringify(p_body_dict)
 
 # --- Public Functions ---
 
@@ -51,266 +51,266 @@ func start() -> void:
 func cancel() -> void:
 	_stop_flag = true
 
+
 # --- Private Functions ---
 
 ## 线程任务主循环
 func _thread_task() -> void:
-	var _client: HTTPClient = HTTPClient.new()
-	var _err: Error = OK
+	var client: HTTPClient = HTTPClient.new()
+	var err: Error = OK
 	
 	# 1. 解析 URL
-	var _protocol_pos: int = _url.find("://")
-	var _protocol: String = _url.substr(0, _protocol_pos)
-	var _rest: String = _url.substr(_protocol_pos + 3)
-	var _host_end: int = _rest.find("/")
-	var _host: String = _rest.substr(0, _host_end) if _host_end != -1 else _rest
-	var _path: String = _rest.substr(_host_end) if _host_end != -1 else "/"
-	var _port: int = 443 if _protocol == "https" else 80
+	var protocol_pos: int = _url.find("://")
+	var protocol: String = _url.substr(0, protocol_pos)
+	var rest: String = _url.substr(protocol_pos + 3)
+	var host_end: int = rest.find("/")
+	var host: String = rest.substr(0, host_end) if host_end != -1 else rest
+	var path: String = rest.substr(host_end) if host_end != -1 else "/"
+	var port: int = 443 if protocol == "https" else 80
 	
-	if ":" in _host:
-		var _parts: PackedStringArray = _host.split(":")
-		_host = _parts[0]
-		_port = _parts[1].to_int()
+	if ":" in host:
+		var parts: PackedStringArray = host.split(":")
+		host = parts[0]
+		port = parts[1].to_int()
 	
 	# 2. 连接服务器
-	var _tls_opts: TLSOptions = TLSOptions.client() if _protocol == "https" else null
-	_err = _client.connect_to_host(_host, _port, _tls_opts)
-	if _err != OK:
-		_emit_failure("Connection failed: %s" % error_string(_err))
-		_client.close() # [Fix] 安全关闭
+	var tls_opts: TLSOptions = TLSOptions.client() if protocol == "https" else null
+	err = client.connect_to_host(host, port, tls_opts)
+	if err != OK:
+		_emit_failure("Connection failed: %s" % error_string(err))
+		client.close() 
 		return
 	
 	# 等待连接
-	while _client.get_status() == HTTPClient.STATUS_CONNECTING or _client.get_status() == HTTPClient.STATUS_RESOLVING:
-		_client.poll()
+	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
+		client.poll()
 		if _stop_flag:
-			_client.close() # [Fix] 安全关闭
+			client.close() 
 			return
 		OS.delay_msec(10)
 	
-	if _client.get_status() != HTTPClient.STATUS_CONNECTED:
-		_emit_failure("Could not connect. Status: %d" % _client.get_status())
-		_client.close() # [Fix] 安全关闭
+	if client.get_status() != HTTPClient.STATUS_CONNECTED:
+		_emit_failure("Could not connect. Status: %d" % client.get_status())
+		client.close() 
 		return
 	
 	# 3. 发送请求
-	_err = _client.request(HTTPClient.METHOD_POST, _path, _headers, _body_json)
-	if _err != OK:
-		_emit_failure("Request sending failed: %s" % error_string(_err))
-		_client.close() # [Fix] 安全关闭
+	err = client.request(HTTPClient.METHOD_POST, path, _headers, _body_json)
+	if err != OK:
+		_emit_failure("Request sending failed: %s" % error_string(err))
+		client.close() 
 		return
 	
 	# 4. 等待响应
-	while _client.get_status() == HTTPClient.STATUS_REQUESTING:
-		_client.poll()
+	while client.get_status() == HTTPClient.STATUS_REQUESTING:
+		client.poll()
 		if _stop_flag:
-			_client.close() # [Fix] 安全关闭
+			client.close() 
 			return
 		OS.delay_msec(10)
 	
-	if not _client.has_response():
+	if not client.has_response():
 		_emit_failure("No response from server.")
-		_client.close() # [Fix] 安全关闭
+		client.close() 
 		return
 	
-	var _response_code: int = _client.get_response_code()
-	if _response_code != 200:
-		while _client.get_status() == HTTPClient.STATUS_BODY:
-			_client.poll()
-			if _client.get_status() != HTTPClient.STATUS_BODY:
+	var response_code: int = client.get_response_code()
+	if response_code != 200:
+		while client.get_status() == HTTPClient.STATUS_BODY:
+			client.poll()
+			if client.get_status() != HTTPClient.STATUS_BODY:
 				break
-			var _dummy_chunk: PackedByteArray = _client.read_response_body_chunk()
+			var _dummy: PackedByteArray = client.read_response_body_chunk()
 		
-		_emit_failure("HTTP Error %d" % _response_code)
-		_client.close() # [Fix] 安全关闭
+		_emit_failure("HTTP Error %d" % response_code)
+		client.close() 
 		return
 	
 	# 5. 流式读取循环
-	var _parser_type: BaseLLMProvider.StreamParserType = _provider.get_stream_parser_type()
+	var parser_type: BaseLLMProvider.StreamParserType = _provider.get_stream_parser_type()
 	
-	while _client.get_status() == HTTPClient.STATUS_BODY:
+	while client.get_status() == HTTPClient.STATUS_BODY:
 		if _stop_flag:
-			_client.close() # [Fix] 安全关闭
+			client.close() 
 			return
 		
-		_client.poll()
+		client.poll()
 		
-		# poll() 可能会改变状态，如果不再是 STATUS_BODY，读取 chunk 会报错
-		if _client.get_status() != HTTPClient.STATUS_BODY:
+		if client.get_status() != HTTPClient.STATUS_BODY:
 			break
 		
-		var _chunk: PackedByteArray = _client.read_response_body_chunk()
+		var chunk: PackedByteArray = client.read_response_body_chunk()
 		
-		if _chunk.size() > 0:
-			_incoming_byte_buffer.append_array(_chunk)
+		if chunk.size() > 0:
+			_incoming_byte_buffer.append_array(chunk)
 			
 			if _is_buffer_safe_for_utf8(_incoming_byte_buffer):
-				var _new_text: String = _incoming_byte_buffer.get_string_from_utf8()
+				var new_text: String = _incoming_byte_buffer.get_string_from_utf8()
 				_incoming_byte_buffer.clear()
-				_incoming_text_buffer += _new_text
+				_incoming_text_buffer += new_text
 				
-				if _parser_type == BaseLLMProvider.StreamParserType.SSE or _parser_type == BaseLLMProvider.StreamParserType.LOCAL_SSE:
+				if parser_type == BaseLLMProvider.StreamParserType.SSE or parser_type == BaseLLMProvider.StreamParserType.LOCAL_SSE:
 					_process_sse_buffer()
-				elif _parser_type == BaseLLMProvider.StreamParserType.JSON_LIST:
+				elif parser_type == BaseLLMProvider.StreamParserType.JSON_LIST:
 					_process_json_list_buffer()
 		
 		OS.delay_msec(10)
 	
-	_client.close() # [Fix] 正常结束时的关闭
+	client.close() 
 	finished.emit.call_deferred()
 
 
 ## 处理 SSE 协议缓冲区
 func _process_sse_buffer() -> void:
 	while true:
-		var _newline_pos: int = _incoming_text_buffer.find("\n")
-		if _newline_pos == -1:
+		var newline_pos: int = _incoming_text_buffer.find("\n")
+		if newline_pos == -1:
 			break
 		
-		var _line: String = _incoming_text_buffer.substr(0, _newline_pos).strip_edges()
-		_incoming_text_buffer = _incoming_text_buffer.substr(_newline_pos + 1)
+		var line: String = _incoming_text_buffer.substr(0, newline_pos).strip_edges()
+		_incoming_text_buffer = _incoming_text_buffer.substr(newline_pos + 1)
 		
-		if _line.begins_with("data:"):
-			var _json_raw: String = _line.substr(5).strip_edges()
+		if line.begins_with("data:"):
+			var json_raw: String = line.substr(5).strip_edges()
 			
-			if _json_raw == "[DONE]":
+			if json_raw == "[DONE]":
 				continue
 			
-			if not _json_raw.is_empty():
-				var _result: Dictionary = _try_parse_one_json(_json_raw)
-				if _result.success:
-					if _result.data is Dictionary:
-						_emit_raw_json(_result.data)
+			if not json_raw.is_empty():
+				var result: Dictionary = _try_parse_one_json(json_raw)
+				if result.success:
+					if result.data is Dictionary:
+						_emit_raw_json(result.data)
 				else:
-					var _json_obj: JSON = JSON.new()
-					var _err: Error = _json_obj.parse(_json_raw)
-					if _err == OK:
-						if _json_obj.data is Dictionary:
-							_emit_raw_json(_json_obj.data)
+					var json_obj: JSON = JSON.new()
+					var err: Error = json_obj.parse(json_raw)
+					if err == OK:
+						if json_obj.data is Dictionary:
+							_emit_raw_json(json_obj.data)
 					else:
-						push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + _json_raw)
+						push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
 
 
 ## 处理 JSON List 协议缓冲区 (Gemini)
 func _process_json_list_buffer() -> void:
-	var _search_offset: int = 0
+	var search_offset: int = 0
 	while true:
-		var _open_brace: int = _incoming_text_buffer.find("{", _search_offset)
-		if _open_brace == -1:
-			var _stripped: String = _incoming_text_buffer.strip_edges()
-			if _stripped == "]" or _stripped == "," or _stripped.is_empty():
+		var open_brace: int = _incoming_text_buffer.find("{", search_offset)
+		if open_brace == -1:
+			var stripped: String = _incoming_text_buffer.strip_edges()
+			if stripped == "]" or stripped == "," or stripped.is_empty():
 				_incoming_text_buffer = ""
 			break
 		
-		if _open_brace > 0:
-			_incoming_text_buffer = _incoming_text_buffer.substr(_open_brace)
-			_open_brace = 0
+		if open_brace > 0:
+			_incoming_text_buffer = _incoming_text_buffer.substr(open_brace)
+			open_brace = 0
 			
-		var _brace_level: int = 0
-		var _close_brace: int = -1
-		var _in_string: bool = false
-		var _escape: bool = false
+		var brace_level: int = 0
+		var close_brace: int = -1
+		var in_string: bool = false
+		var escape: bool = false
 		
-		for _i in range(_open_brace, _incoming_text_buffer.length()):
-			var _char: String = _incoming_text_buffer[_i]
-			if _escape: 
-				_escape = false
+		for i in range(open_brace, _incoming_text_buffer.length()):
+			var char: String = _incoming_text_buffer[i]
+			if escape: 
+				escape = false
 				continue
-			if _char == "\\": 
-				_escape = true
+			if char == "\\": 
+				escape = true
 				continue
-			if _char == '"': 
-				_in_string = not _in_string
+			if char == '"': 
+				in_string = not in_string
 				continue
-			if not _in_string:
-				if _char == "{": 
-					_brace_level += 1
-				elif _char == "}":
-					_brace_level -= 1
-					if _brace_level == 0:
-						_close_brace = _i
+			if not in_string:
+				if char == "{": 
+					brace_level += 1
+				elif char == "}":
+					brace_level -= 1
+					if brace_level == 0:
+						close_brace = i
 						break
 		
-		if _close_brace != -1:
-			var _json_str: String = _incoming_text_buffer.substr(_open_brace, _close_brace - _open_brace + 1)
-			var _json_val: Variant = JSON.parse_string(_json_str)
-			if _json_val is Dictionary:
-				_emit_raw_json(_json_val)
+		if close_brace != -1:
+			var json_str: String = _incoming_text_buffer.substr(open_brace, close_brace - open_brace + 1)
+			var json_val: Variant = JSON.parse_string(json_str)
+			if json_val is Dictionary:
+				_emit_raw_json(json_val)
 			
-			_search_offset = _close_brace + 1
-			_incoming_text_buffer = _incoming_text_buffer.substr(_search_offset)
-			_search_offset = 0
+			search_offset = close_brace + 1
+			_incoming_text_buffer = _incoming_text_buffer.substr(search_offset)
+			search_offset = 0
 		else:
 			break
 
 
 ## 延迟发射 JSON 数据信号
-func _emit_raw_json(_json: Dictionary) -> void:
-	chunk_received.emit.call_deferred(_json)
+func _emit_raw_json(p_json: Dictionary) -> void:
+	chunk_received.emit.call_deferred(p_json)
 
 
 ## 延迟发射失败信号
-func _emit_failure(_msg: String) -> void:
-	failed.emit.call_deferred(_msg)
+func _emit_failure(p_msg: String) -> void:
+	failed.emit.call_deferred(p_msg)
 
 
 ## 尝试从字符串开头解析一个完整的 JSON 对象
-func _try_parse_one_json(_s: String) -> Dictionary:
-	if _s.is_empty() or _s[0] != "{":
+func _try_parse_one_json(p_s: String) -> Dictionary:
+	if p_s.is_empty() or p_s[0] != "{":
 		return { "success": false, "length": 0 }
 	
-	var _balance: int = 0
-	var _in_string: bool = false
-	var _escaped: bool = false
-	var _length: int = 0
+	var balance: int = 0
+	var in_string: bool = false
+	var escaped: bool = false
+	var length: int = 0
 	
-	for _i in range(_s.length()):
-		var _char: String = _s[_i]
-		_length += 1
+	for i in range(p_s.length()):
+		var char: String = p_s[i]
+		length += 1
 		
-		if _escaped:
-			_escaped = false
+		if escaped:
+			escaped = false
 			continue
-		if _char == "\\":
-			_escaped = true
+		if char == "\\":
+			escaped = true
 			continue
-		if _char == '"':
-			_in_string = not _in_string
+		if char == '"':
+			in_string = not in_string
 			continue
 		
-		if not _in_string:
-			if _char == '{':
-				_balance += 1
-			elif _char == '}':
-				_balance -= 1
-				if _balance == 0:
-					var _candidate: String = _s.substr(0, _length)
-					var _json_obj: JSON = JSON.new()
-					if _json_obj.parse(_candidate) == OK:
-						return { "success": true, "data": _json_obj.data, "length": _length }
+		if not in_string:
+			if char == '{':
+				balance += 1
+			elif char == '}':
+				balance -= 1
+				if balance == 0:
+					var candidate: String = p_s.substr(0, length)
+					var json_obj: JSON = JSON.new()
+					if json_obj.parse(candidate) == OK:
+						return { "success": true, "data": json_obj.data, "length": length }
 					return { "success": false, "length": 0 }
 	
 	return { "success": false, "length": 0 }
 
 
-## 检查缓冲区是否可以安全地转换为 UTF-8 字符串（防止截断多字节字符）
-func _is_buffer_safe_for_utf8(_buffer: PackedByteArray) -> bool:
-	if _buffer.is_empty(): return true
-	var _len: int = _buffer.size()
-	var _last_byte: int = _buffer[_len - 1]
-	if (_last_byte & 0x80) == 0: return true
-	if (_last_byte & 0xC0) == 0x80:
-		var _i: int = 1
-		while _i < 4 and (_len - 1 - _i) >= 0:
-			var _b: int = _buffer[_len - 1 - _i]
-			if (_b & 0xC0) == 0xC0:
-				var _expected_len: int = 0
-				if (_b & 0xE0) == 0xC0: _expected_len = 2
-				elif (_b & 0xF0) == 0xE0: _expected_len = 3
-				elif (_b & 0xF8) == 0xF0: _expected_len = 4
-				if (_i + 1) < _expected_len: return false
+## 检查缓冲区是否可以安全地转换为 UTF-8 字符串
+func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
+	if p_buffer.is_empty(): return true
+	var len_val: int = p_buffer.size()
+	var last_byte: int = p_buffer[len_val - 1]
+	if (last_byte & 0x80) == 0: return true
+	if (last_byte & 0xC0) == 0x80:
+		var i: int = 1
+		while i < 4 and (len_val - 1 - i) >= 0:
+			var b: int = p_buffer[len_val - 1 - i]
+			if (b & 0xC0) == 0xC0:
+				var expected_len: int = 0
+				if (b & 0xE0) == 0xC0: expected_len = 2
+				elif (b & 0xF0) == 0xE0: expected_len = 3
+				elif (b & 0xF8) == 0xF0: expected_len = 4
+				if (i + 1) < expected_len: return false
 				else: return true
-			_i += 1
+			i += 1
 		return true
-	if (_last_byte & 0xC0) == 0xC0: return false
+	if (last_byte & 0xC0) == 0xC0: return false
 	return true

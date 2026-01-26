@@ -2,9 +2,11 @@
 extends EditorPlugin
 
 # 主场景路径
-const CHAT_HUB_SCENE_PATH = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
+const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
 # 对话历史存档文件夹
-const ARCHIVE_DIR = "res://addons/godot_ai_chat/chat_archives/"
+const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
+
+const PLUGIN_SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 # 插件主实例
 var chat_hub_instance: Control = null
@@ -73,8 +75,7 @@ func _initialize_plugin_file_environment() -> void:
 	# 确保插件配置文件存在
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
 	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
-	var settings_path: String = "res://addons/godot_ai_chat/plugin_settings.tres"
-	if not FileAccess.file_exists(settings_path):
+	if not FileAccess.file_exists(PLUGIN_SETTINGS_PATH):
 		print("[Godot AI Chat] Settings file not found, creating default...")
 		ToolBox.get_plugin_settings() # 这会创建默认文件
 		need_scan = true

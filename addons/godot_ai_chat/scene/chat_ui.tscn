@@ -81,7 +81,7 @@ text_overrun_behavior = 1
 [node name="ChatTrunDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_w6mml")
-text = "Turn:"
+text = "Turns:"
 label_settings = SubResource("LabelSettings_qjs14")
 vertical_alignment = 1
 text_overrun_behavior = 1
@@ -209,6 +209,7 @@ text_overrun_behavior = 1
 expand_icon = true
 
 [node name="ToolSelectorButton" type="MenuButton" parent="TabContainer/Chat/VBoxContainer/HBoxContainer" unique_id=208769348]
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)

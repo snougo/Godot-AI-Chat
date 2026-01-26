@@ -1,6 +1,8 @@
 class_name PluginSettings
 extends Resource
 
+## 插件设置数据类
+##
 ## 存储和管理插件的所有用户可配置项。
 
 # --- @export Vars ---

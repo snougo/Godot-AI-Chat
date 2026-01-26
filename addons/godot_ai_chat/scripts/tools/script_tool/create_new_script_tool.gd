@@ -1,12 +1,19 @@
 @tool
 extends BaseScriptTool
 
+## 创建新的空脚本文件。
+
+
+# --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "create_new_script"
 	tool_description = "Creates a new empty script. NEXT STEP: Use 'fill_empty_script' to add content."
 
 
+# --- Public Functions ---
+
+## 获取工具参数的 JSON Schema
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -20,55 +27,70 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(_args: Dictionary) -> Dictionary:
-	var new_script_path: String = _args.get("path", "")
-	var content: String = "" 
+## 执行创建脚本操作
+## [param p_args]: 包含 path 的参数字典
+## [return]: 操作结果字典
+func execute(p_args: Dictionary) -> Dictionary:
+	var new_script_path: String = p_args.get("path", "")
 	
-	# 1. 路径安全检查
-	# 调用AiTool基类方法进行安全检查
-	# 如果通过路径安全检查，则返回一个空字符串
-	# 如果安全检查失败，则返回对应的错误信息
-	var security_error = validate_path_safety(new_script_path)
-	if not security_error.is_empty():
-		return {"success": false, "data": security_error}
+	var validation_result: Dictionary = _validate_script_path(new_script_path)
+	if not validation_result.get("success", false):
+		return validation_result
 	
-	# 2. 扩展名检查
-	# 调用BaseScriptTool基类方法进行安全检查
-	var ext_error = validate_file_extension(new_script_path)
-	if not ext_error.is_empty():
-		return {"success": false, "data": ext_error}
-	
-	# 3. 额外的安全性检查：禁止路径遍历
-	if ".." in new_script_path:
-		return {"success": false, "data": "Error: Path traversal ('..') is not allowed."}
-	
-	# 4. 防止覆盖 (核心约束)
 	if FileAccess.file_exists(new_script_path):
 		return {"success": false, "data": "Error: File '%s' already exists. this tool cannot overwrite existing files." % new_script_path}
 	
-	# 5. 自动创建目录
-	#var base_dir: String = new_script_path.get_base_dir()
-	#var dir_access: DirAccess = DirAccess.open("res://")
-	#if not dir_access.dir_exists(base_dir):
-		#var err: Error = dir_access.make_dir_recursive(base_dir)
-		#if err != OK:
-			#return {"success": false, "data": "Error: Failed to create directory " + base_dir}
+	var dir_check_result: Dictionary = _check_directory_exists(new_script_path)
+	if not dir_check_result.get("success", false):
+		return dir_check_result
 	
-	# 5. 检查目录是否存在
-	var base_dir: String = new_script_path.get_base_dir()
+	return _create_empty_script(new_script_path)
+
+
+# --- Private Functions ---
+
+## 验证脚本路径和文件扩展名
+## [param p_path]: 脚本路径
+## [return]: 验证结果字典
+func _validate_script_path(p_path: String) -> Dictionary:
+	var security_error: String = validate_path_safety(p_path)
+	if not security_error.is_empty():
+		return {"success": false, "data": security_error}
+	
+	var ext_error: String = validate_file_extension(p_path)
+	if not ext_error.is_empty():
+		return {"success": false, "data": ext_error}
+	
+	if ".." in p_path:
+		return {"success": false, "data": "Error: Path traversal ('..') is not allowed."}
+	
+	return {"success": true}
+
+
+## 检查目录是否存在
+## [param p_path]: 脚本路径
+## [return]: 检查结果字典
+func _check_directory_exists(p_path: String) -> Dictionary:
+	var base_dir: String = p_path.get_base_dir()
 	var dir_access: DirAccess = DirAccess.open("res://")
+	
 	if not dir_access.dir_exists(base_dir):
 		return {"success": false, "data": "Directory not found: %s. Please use 'create_folder' tool first." % base_dir}
 	
-	# 6. 写入文件
-	var file: FileAccess = FileAccess.open(new_script_path, FileAccess.WRITE)
+	return {"success": true}
+
+
+## 创建空脚本文件
+## [param p_path]: 脚本路径
+## [return]: 操作结果字典
+func _create_empty_script(p_path: String) -> Dictionary:
+	var file: FileAccess = FileAccess.open(p_path, FileAccess.WRITE)
 	if file == null:
 		return {"success": false, "data": "Error: Failed to open file: " + str(FileAccess.get_open_error())}
 	
-	file.store_string(content)
+	file.store_string("")
 	file.close()
 	
-	# 7. 刷新编辑器资源系统
-	ToolBox.update_editor_filesystem(new_script_path)
+	ToolBox.update_editor_filesystem(p_path)
 	
-	return {"success": true, "data": "Empty file created successfully at: " + new_script_path}
+	return {"success": true, "data": "Empty file created successfully at: " + p_path}

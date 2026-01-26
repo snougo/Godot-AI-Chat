@@ -2,17 +2,18 @@
 class_name ChatMessageBlock
 extends FoldableContainer
 
+## 消息显示块
+##
 ## 负责单条消息的 UI 渲染，支持 Markdown 解析、代码高亮、打字机效果和工具调用展示。
+## 包含对流式传输内容的智能分块处理。
 
-# --- Enums ---
+# --- Enums / Constants ---
 
 ## 解析状态
 enum ParseState { 
 	TEXT, ## 正在解析普通文本
 	CODE  ## 正在解析代码块
 }
-
-# --- Constants ---
 
 ## 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload("res://addons/godot_ai_chat/assets/code_hightlight.tres")
@@ -23,6 +24,7 @@ const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload("res://addons/godot_ai_c
 
 # --- Private Vars ---
 
+## 当前解析状态
 var _current_state: ParseState = ParseState.TEXT
 
 ## 混合缓冲区：只有当遇到潜在的 ``` 标记时，文本才会被暂时存入这里等待换行确认
@@ -34,9 +36,10 @@ var _last_ui_node: Control = null
 ## 正则匹配：代码块开始 (锚定行首，但是允许行首出现空格)
 var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*(.*)\\s*$")
 
-## 正则匹配：代码块结束 (锚定行首，但是允许行首出现空格)
-#var _re_code_end: RegEx = RegEx.create_from_string("^```\\s*$")
-var _re_code_end: RegEx = RegEx.create_from_string("^\\s*```\\s*$")
+# 正则匹配：代码块结束 (锚定行首，但是允许行首出现空格)
+#var _re_code_end: RegEx = RegEx.create_from_string("^\\s*```\\s*$")
+## 正则匹配：代码块结束 (锚定行首，且仅允许水平空白字符)
+var _re_code_end: RegEx = RegEx.create_from_string("^[ \\t]*```[ \\t]*$")
 
 ## 打字机状态
 var _typing_active: bool = false
@@ -47,129 +50,134 @@ var _current_typing_node: RichTextLabel = null
 var _reasoning_container: FoldableContainer = null
 var _reasoning_label: RichTextLabel = null
 
-# [新增] 专门用于处理 <think> 标签的缓冲区和状态
+## 专门用于处理 <think> 标签的缓冲区
 var _think_parse_buffer: String = ""
+## 当前是否正在解析思考内容
 var _is_parsing_think: bool = false
-
-# [新增] 标记是否禁用思考标签解析
+## 标记是否禁用思考标签解析
 var _disable_think_parsing: bool = false
 
 # --- Built-in Functions ---
 
 func _ready() -> void:
 	if not _content_container:
+		# 等待一帧以确保节点就绪 (主要用于 Tool 模式下的实例化)
 		await get_tree().process_frame
 
 # --- Public Functions ---
 
 ## 设置消息内容（静态加载）
-## [param _role]: 消息角色
-## [param _content]: 消息正文
-## [param _model_name]: 模型名称
-## [param _tool_calls]: 工具调用列表
-## [param _reasoning]: 思考内容
-func set_content(_role: String, _content: String, _model_name: String = "", _tool_calls: Array = [], _reasoning: String = "") -> void:
-	_set_title(_role, _model_name)
+## [param p_role]: 消息角色
+## [param p_content]: 消息正文
+## [param p_model_name]: 模型名称
+## [param p_tool_calls]: 工具调用列表
+## [param p_reasoning]: 思考内容
+func set_content(p_role: String, p_content: String, p_model_name: String = "", p_tool_calls: Array = [], p_reasoning: String = "") -> void:
+	_set_title(p_role, p_model_name)
 	_clear_content()
 	
-	if not _reasoning.is_empty():
-		append_reasoning(_reasoning)
+	if not p_reasoning.is_empty():
+		append_reasoning(p_reasoning)
 	
 	# 静态加载时，直接一次性处理，并在最后强制换行确保闭合
-	_process_smart_chunk(_content + "\n", true)
+	_process_smart_chunk(p_content + "\n", true)
 	
-	for _tc in _tool_calls:
-		show_tool_call(_tc)
+	for tc in p_tool_calls:
+		show_tool_call(tc)
 
 
 ## 开始流式接收消息
-func start_stream(_role: String, _model_name: String = "") -> void:
-	_set_title(_role, _model_name)
+## [param p_role]: 消息角色
+## [param p_model_name]: 模型名称
+func start_stream(p_role: String, p_model_name: String = "") -> void:
+	_set_title(p_role, p_model_name)
 	_clear_content()
 	visible = true
 	
 	# 检查当前 Provider，如果是 Gemini 则禁用思考解析
-	var _settings: PluginSettings = ToolBox.get_plugin_settings()
-	_disable_think_parsing = (_settings.api_provider == "Google Gemini")
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
+	_disable_think_parsing = (settings.api_provider == "Google Gemini")
 
 
 ## 追加流式文本块
-func append_chunk(_text: String) -> void:
-	if _text.is_empty(): 
+## [param p_text]: 新增的文本片段
+func append_chunk(p_text: String) -> void:
+	if p_text.is_empty(): 
 		return
 	
 	# 如果禁用了思考解析（例如 Gemini），直接走普通文本处理逻辑
 	if _disable_think_parsing:
-		_process_smart_chunk(_text, false)
+		_process_smart_chunk(p_text, false)
 		return
 	
-	_think_parse_buffer += _text
+	_think_parse_buffer += p_text
 	
 	while true:
 		if _is_parsing_think:
-			var _end_idx: int = _think_parse_buffer.find("</think>")
-			if _end_idx != -1:
+			var end_idx: int = _think_parse_buffer.find("</think>")
+			if end_idx != -1:
 				# 思考结束
-				var _think_content: String = _think_parse_buffer.substr(0, _end_idx)
-				append_reasoning(_think_content)
+				var think_content: String = _think_parse_buffer.substr(0, end_idx)
+				append_reasoning(think_content)
 				
 				_is_parsing_think = false
-				_think_parse_buffer = _think_parse_buffer.substr(_end_idx + 8)
+				_think_parse_buffer = _think_parse_buffer.substr(end_idx + 8)
 				continue
 			else:
 				# 还没结束，尽量刷新缓冲区到思考UI，只留一点尾巴防止切断 </think>
-				var _keep_len: int = 8 # </think> 长度
-				if _think_parse_buffer.length() > _keep_len:
-					var _flush_len: int = _think_parse_buffer.length() - _keep_len
-					var _content: String = _think_parse_buffer.left(_flush_len)
-					append_reasoning(_content)
-					_think_parse_buffer = _think_parse_buffer.right(-_flush_len)
+				var keep_len: int = 8 # </think> 长度
+				if _think_parse_buffer.length() > keep_len:
+					var flush_len: int = _think_parse_buffer.length() - keep_len
+					var content: String = _think_parse_buffer.left(flush_len)
+					append_reasoning(content)
+					_think_parse_buffer = _think_parse_buffer.right(-flush_len)
 				break
 		
 		else: # 正常文本模式
-			var _start_idx: int = _think_parse_buffer.find("<think>")
-			if _start_idx != -1:
+			var start_idx: int = _think_parse_buffer.find("<think>")
+			if start_idx != -1:
 				# 发现思考开始
 				# 1. 先把 <think> 之前的内容当作普通文本处理
-				if _start_idx > 0:
-					var _normal_text: String = _think_parse_buffer.substr(0, _start_idx)
-					_process_smart_chunk(_normal_text, false) # 调用原有的处理逻辑
+				if start_idx > 0:
+					var normal_text: String = _think_parse_buffer.substr(0, start_idx)
+					_process_smart_chunk(normal_text, false) # 调用原有的处理逻辑
 				
 				# 2. 切换状态
 				_is_parsing_think = true
-				_think_parse_buffer = _think_parse_buffer.substr(_start_idx + 7)
+				_think_parse_buffer = _think_parse_buffer.substr(start_idx + 7)
 				continue
 			else:
 				# 没发现 <think>，检查是否有潜在的半个 <think>
 				# 类似 <, <t, <th ...
-				var _safe_idx: int = _think_parse_buffer.length()
+				var safe_idx: int = _think_parse_buffer.length()
 				# 简单粗暴点：如果不包含 <，则全部安全
 				# 如果包含 <，则保留 < 及其后面的内容到下次处理
-				var _last_lt: int = _think_parse_buffer.rfind("<")
-				if _last_lt != -1:
+				var last_lt: int = _think_parse_buffer.rfind("<")
+				if last_lt != -1:
 					# 检查后面是否可能构成 <think>
-					var _potential: String = _think_parse_buffer.substr(_last_lt)
-					if "<think>".begins_with(_potential):
-						_safe_idx = _last_lt
+					var potential: String = _think_parse_buffer.substr(last_lt)
+					if "<think>".begins_with(potential):
+						safe_idx = last_lt
 				
-				if _safe_idx > 0:
-					var _safe_text: String = _think_parse_buffer.left(_safe_idx)
-					_process_smart_chunk(_safe_text, false) # 调用原有的处理逻辑
-					_think_parse_buffer = _think_parse_buffer.right(-_safe_idx)
+				if safe_idx > 0:
+					var safe_text: String = _think_parse_buffer.left(safe_idx)
+					_process_smart_chunk(safe_text, false) # 调用原有的处理逻辑
+					_think_parse_buffer = _think_parse_buffer.right(-safe_idx)
 				
 				break
 
 
 ## 追加流式思考内容
-func append_reasoning(_text: String) -> void:
-	if _text.is_empty(): 
+## [param p_text]: 新增的思考内容片段
+func append_reasoning(p_text: String) -> void:
+	if p_text.is_empty(): 
 		return
 	
 	if not is_instance_valid(_reasoning_container):
 		_create_reasoning_ui()
 	
 	if is_instance_valid(_reasoning_label):
-		_reasoning_label.text += _text
+		_reasoning_label.text += p_text
 
 
 ## 结束流式接收，刷新缓冲区
@@ -185,10 +193,10 @@ func finish_stream() -> void:
 	
 	if not _pending_buffer.is_empty():
 		if _pending_buffer.begins_with("```"):
-			var _line: String = _pending_buffer
-			if _line.ends_with("\r"): 
-				_line = _line.left(-1)
-			_parse_fence_line(_line, false)
+			var line: String = _pending_buffer
+			if line.ends_with("\r"): 
+				line = line.left(-1)
+			_parse_fence_line(line, false)
 		else:
 			_append_content(_pending_buffer, false)
 		
@@ -198,11 +206,12 @@ func finish_stream() -> void:
 
 
 ## 设置错误信息显示
-func set_error(_text: String) -> void:
+## [param p_text]: 错误信息文本
+func set_error(p_text: String) -> void:
 	title = "❌ Error"
 	_clear_content()
-	var _label: RichTextLabel = _create_text_block(_text, true)
-	_label.modulate = Color(1, 0.4, 0.4)
+	var label: RichTextLabel = _create_text_block(p_text, true)
+	label.modulate = Color(1, 0.4, 0.4)
 
 
 ## 获取当前消息的角色
@@ -211,102 +220,105 @@ func get_role() -> String:
 
 
 ## 展示工具调用详情
-func show_tool_call(_tool_call: Dictionary) -> void:
-	var _call_id: String = _tool_call.get("id", "no-id")
-	var _safe_node_name: String = ("Tool_" + _call_id).validate_node_name()
+## [param p_tool_call]: 工具调用信息字典
+func show_tool_call(p_tool_call: Dictionary) -> void:
+	var call_id: String = p_tool_call.get("id", "no-id")
+	var safe_node_name: String = ("Tool_" + call_id).validate_node_name()
 	
-	var _shown_calls: Array = _content_container.get_meta("shown_calls", [])
-	if _call_id in _shown_calls:
-		_update_tool_call_ui(_safe_node_name, _tool_call)
+	var shown_calls: Array = _content_container.get_meta("shown_calls", [])
+	if call_id in shown_calls:
+		_update_tool_call_ui(safe_node_name, p_tool_call)
 		return
 	
-	_shown_calls.append(_call_id)
-	_content_container.set_meta("shown_calls", _shown_calls)
+	shown_calls.append(call_id)
+	_content_container.set_meta("shown_calls", shown_calls)
 	
 	# 1. 创建外观容器
-	var _panel: PanelContainer = PanelContainer.new()
-	_panel.name = _safe_node_name
+	var panel: PanelContainer = PanelContainer.new()
+	panel.name = safe_node_name
 	
-	var _style: StyleBoxFlat = StyleBoxFlat.new()
-	_style.bg_color = Color(0.12, 0.13, 0.16, 0.9)
-	_style.set_corner_radius_all(6)
-	_style.set_content_margin_all(10)
-	_style.border_width_left = 4
-	_style.border_color = Color.GOLD
-	_panel.add_theme_stylebox_override("panel", _style)
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.13, 0.16, 0.9)
+	style.set_corner_radius_all(6)
+	style.set_content_margin_all(10)
+	style.border_width_left = 4
+	style.border_color = Color.GOLD
+	panel.add_theme_stylebox_override("panel", style)
 	
-	var _vbox: VBoxContainer = VBoxContainer.new()
-	_panel.add_child(_vbox)
+	var vbox: VBoxContainer = VBoxContainer.new()
+	panel.add_child(vbox)
 	
 	# 2. 标题
-	var _title_label: RichTextLabel = RichTextLabel.new()
-	_title_label.bbcode_enabled = true
-	_title_label.fit_content = true
-	_title_label.selection_enabled = false
+	var title_label: RichTextLabel = RichTextLabel.new()
+	title_label.bbcode_enabled = true
+	title_label.fit_content = true
+	title_label.selection_enabled = false
 	
-	var _tool_name: String = ""
-	if _tool_call.has("function"):
-		_tool_name = _tool_call.function.get("name", "unknown")
+	var tool_name: String = ""
+	if p_tool_call.has("function"):
+		tool_name = p_tool_call.function.get("name", "unknown")
 	else:
-		_tool_name = _tool_call.get("name", "unknown")
+		tool_name = p_tool_call.get("name", "unknown")
 	
-	_title_label.append_text("[b][color=cyan]🔧 Tool Call:[/color][/b] [color=yellow]%s[/color]" % _tool_name)
-	_vbox.add_child(_title_label)
+	title_label.append_text("[b][color=cyan]🔧 Tool Call:[/color][/b] [color=yellow]%s[/color]" % tool_name)
+	vbox.add_child(title_label)
 	
 	# 3. 参数详情
-	var _args_label: RichTextLabel = RichTextLabel.new()
-	_args_label.name = "ArgsLabel"
-	_args_label.bbcode_enabled = true
-	_args_label.fit_content = true
-	_vbox.add_child(_args_label)
+	var args_label: RichTextLabel = RichTextLabel.new()
+	args_label.name = "ArgsLabel"
+	args_label.bbcode_enabled = true
+	args_label.fit_content = true
+	vbox.add_child(args_label)
 	
-	_update_args_display(_args_label, _tool_call)
+	_update_args_display(args_label, p_tool_call)
 	
-	_content_container.add_child(_panel)
+	_content_container.add_child(panel)
 	_last_ui_node = null
 
 
 ## 显示图片内容
-func display_image(_data: PackedByteArray, _mime: String) -> void:
-	if _data.is_empty(): 
+## [param p_data]: 图片数据
+## [param p_mime]: 图片 MIME 类型
+func display_image(p_data: PackedByteArray, p_mime: String) -> void:
+	if p_data.is_empty(): 
 		return
 	
-	var _img: Image = Image.new()
-	var _err: Error = OK
+	var img: Image = Image.new()
+	var err: Error = OK
 	
-	match _mime:
-		"image/png": _err = _img.load_png_from_buffer(_data)
-		"image/jpeg", "image/jpg": _err = _img.load_jpg_from_buffer(_data)
-		"image/webp": _err = _img.load_webp_from_buffer(_data)
-		"image/svg+xml": _err = _img.load_svg_from_buffer(_data)
-		_: _err = _img.load_png_from_buffer(_data)
+	match p_mime:
+		"image/png": err = img.load_png_from_buffer(p_data)
+		"image/jpeg", "image/jpg": err = img.load_jpg_from_buffer(p_data)
+		"image/webp": err = img.load_webp_from_buffer(p_data)
+		"image/svg+xml": err = img.load_svg_from_buffer(p_data)
+		_: err = img.load_png_from_buffer(p_data)
 	
-	if _err == OK:
-		var _tex: ImageTexture = ImageTexture.create_from_image(_img)
-		var _rect: TextureRect = TextureRect.new()
-		_rect.texture = _tex
-		_rect.size = Vector2(400, 400)
-		_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-		_rect.custom_minimum_size = Vector2(0, 250) 
+	if err == OK:
+		var tex: ImageTexture = ImageTexture.create_from_image(img)
+		var rect: TextureRect = TextureRect.new()
+		rect.texture = tex
+		rect.size = Vector2(400, 400)
+		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+		rect.custom_minimum_size = Vector2(0, 250) 
 		
-		_content_container.add_child(_rect)
+		_content_container.add_child(rect)
 		_last_ui_node = null
 	else:
-		push_error("Failed to load image buffer in ChatMessageBlock, error code: %d" % _err)
+		push_error("Failed to load image buffer in ChatMessageBlock, error code: %d" % err)
 
 # --- Private Functions ---
 
 ## 设置标题和角色元数据
-func _set_title(_role: String, _model_name: String) -> void:
-	set_meta("role", _role)
-	match _role:
+func _set_title(p_role: String, p_model_name: String) -> void:
+	set_meta("role", p_role)
+	match p_role:
 		ChatMessage.ROLE_USER: 
 			title = "🧑‍💻 You"
 			if is_folded(): expand() 
 		
 		ChatMessage.ROLE_ASSISTANT: 
-			title = "🤖 Assistant" + ("/" + _model_name if not _model_name.is_empty() else "")
+			title = "🤖 Assistant" + ("/" + p_model_name if not p_model_name.is_empty() else "")
 			if is_folded(): expand()
 		
 		ChatMessage.ROLE_TOOL: 
@@ -318,48 +330,48 @@ func _set_title(_role: String, _model_name: String) -> void:
 			if not is_folded(): fold()
 		
 		_: 
-			title = _role.capitalize()
+			title = p_role.capitalize()
 			if is_folded(): expand()
 
 
 ## 更新流式工具调用参数 UI
-func _update_tool_call_ui(_node_name: String, _tool_call: Dictionary) -> void:
-	var _panel: Node = _content_container.get_node_or_null(_node_name)
-	if _panel:
-		var _args_label: RichTextLabel = _panel.find_child("ArgsLabel", true, false)
-		if _args_label:
-			_update_args_display(_args_label, _tool_call)
+func _update_tool_call_ui(p_node_name: String, p_tool_call: Dictionary) -> void:
+	var panel: Node = _content_container.get_node_or_null(p_node_name)
+	if panel:
+		var args_label: RichTextLabel = panel.find_child("ArgsLabel", true, false)
+		if args_label:
+			_update_args_display(args_label, p_tool_call)
 
 
 ## 解析并格式化参数显示
-func _update_args_display(_label: RichTextLabel, _tool_call: Dictionary) -> void:
-	var _args_str: String = ""
-	if _tool_call.has("function"):
-		_args_str = _tool_call.function.get("arguments", "")
+func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> void:
+	var args_str: String = ""
+	if p_tool_call.has("function"):
+		args_str = p_tool_call.function.get("arguments", "")
 	else:
-		_args_str = str(_tool_call.get("arguments", ""))
+		args_str = str(p_tool_call.get("arguments", ""))
 	
-	_label.clear()
-	_label.push_color(Color(0.7, 0.7, 0.7))
+	p_label.clear()
+	p_label.push_color(Color(0.7, 0.7, 0.7))
 	
-	if _args_str.strip_edges().begins_with("{"):
-		var _json_obj: JSON = JSON.new()
-		var _err: Error = _json_obj.parse(_args_str)
+	if args_str.strip_edges().begins_with("{"):
+		var json_obj: JSON = JSON.new()
+		var err: Error = json_obj.parse(args_str)
 		
-		if _err == OK:
-			_label.add_text(JSON.stringify(_json_obj.data, "  "))
+		if err == OK:
+			p_label.add_text(JSON.stringify(json_obj.data, "  "))
 		else:
-			_label.add_text(_args_str)
+			p_label.add_text(args_str)
 	else:
-		_label.add_text(_args_str)
+		p_label.add_text(args_str)
 	
-	_label.pop()
+	p_label.pop()
 
 
 ## 清空所有内容
 func _clear_content() -> void:
-	for _c in _content_container.get_children():
-		_c.queue_free()
+	for c in _content_container.get_children():
+		c.queue_free()
 	
 	if _content_container.has_meta("shown_calls"):
 		_content_container.set_meta("shown_calls", [])
@@ -375,73 +387,73 @@ func _clear_content() -> void:
 
 ## 智能分块处理逻辑
 ## 核心职责：在流式传输中检测 Markdown 代码块标记（```），解决缩进导致的解析错误
-func _process_smart_chunk(_incoming_text: String, _instant: bool) -> void:
-	_pending_buffer += _incoming_text
+func _process_smart_chunk(p_incoming_text: String, p_instant: bool) -> void:
+	_pending_buffer += p_incoming_text
 	
 	while true:
 		# 1. 查找缓冲区中是否存在代码块标记
-		var _fence_idx: int = _pending_buffer.find("```")
+		var fence_idx: int = _pending_buffer.find("```")
 		
-		if _fence_idx != -1:
+		if fence_idx != -1:
 			# 2. 回溯检查：判断 ``` 之前是否只有空白字符（空格/制表符）
 			# 这是为了支持缩进的代码块（例如 "  ```gdscript"）
-			var _line_start_idx: int = -1
-			var _is_valid_fence: bool = false
-			var _ptr: int = _fence_idx - 1
+			var line_start_idx: int = -1
+			var is_valid_fence: bool = false
+			var ptr: int = fence_idx - 1
 			
-			while _ptr >= 0:
-				var _char: String = _pending_buffer[_ptr]
-				if _char == '\n':
+			while ptr >= 0:
+				var char_code: String = _pending_buffer[ptr]
+				if char_code == '\n':
 					# 找到上一个换行符，确认是新的一行
-					_line_start_idx = _ptr + 1
-					_is_valid_fence = true
+					line_start_idx = ptr + 1
+					is_valid_fence = true
 					break
-				elif _char == ' ' or _char == '\t':
+				elif char_code == ' ' or char_code == '\t':
 					# 允许空白字符，继续回溯
-					_ptr -= 1
+					ptr -= 1
 				else:
 					# 遇到非空白字符（如 "abc ```"），说明不是行首标记
-					_is_valid_fence = false
+					is_valid_fence = false
 					break
 			
-			if _ptr < 0: # 回溯到了 buffer 开头，说明是第一行且符合条件
-				_line_start_idx = 0
-				_is_valid_fence = true
+			if ptr < 0: # 回溯到了 buffer 开头，说明是第一行且符合条件
+				line_start_idx = 0
+				is_valid_fence = true
 			
 			# 3. 分支处理：无效标记 vs 有效标记
-			if not _is_valid_fence:
+			if not is_valid_fence:
 				# 情况 A: 标记前有杂质，视为普通文本
 				# 将 ``` 及其之前的部分作为文本追加，然后继续处理剩余部分
-				var _safe_len: int = _fence_idx + 3
-				var _safe_part: String = _pending_buffer.substr(0, _safe_len)
-				_append_content(_safe_part, _instant)
-				_pending_buffer = _pending_buffer.substr(_safe_len)
+				var safe_len: int = fence_idx + 3
+				var safe_part: String = _pending_buffer.substr(0, safe_len)
+				_append_content(safe_part, p_instant)
+				_pending_buffer = _pending_buffer.substr(safe_len)
 				continue
 			
 			# 情况 B: 是有效的代码块标记行（可能是开始或结束）
 			
 			# 4. 先把这一行之前的普通文本（如果有）刷新出去
-			if _line_start_idx > 0:
-				var _pre_fence_content: String = _pending_buffer.substr(0, _line_start_idx)
-				_append_content(_pre_fence_content, _instant)
-				_pending_buffer = _pending_buffer.substr(_line_start_idx)
-				# 注意：此时 buffer 已被截断，开头即为（缩进 + ```），无需更新 _fence_idx
+			if line_start_idx > 0:
+				var pre_fence_content: String = _pending_buffer.substr(0, line_start_idx)
+				_append_content(pre_fence_content, p_instant)
+				_pending_buffer = _pending_buffer.substr(line_start_idx)
+				# 注意：此时 buffer 已被截断，开头即为（缩进 + ```），无需更新 fence_idx
 				# 直接进入下一步处理这一行
 			
 			# 5. 检查这一行是否完整（是否有换行符）
-			var _newline_pos: int = _pending_buffer.find("\n")
+			var newline_pos: int = _pending_buffer.find("\n")
 			
-			if _newline_pos != -1:
+			if newline_pos != -1:
 				# 提取完整的一行（包含缩进、``` 和可能的语言标识符）
-				var _line_with_fence: String = _pending_buffer.substr(0, _newline_pos)
-				_pending_buffer = _pending_buffer.substr(_newline_pos + 1) # 剩余部分留给下一次循环
+				var line_with_fence: String = _pending_buffer.substr(0, newline_pos)
+				_pending_buffer = _pending_buffer.substr(newline_pos + 1) # 剩余部分留给下一次循环
 				
 				# 处理回车符兼容性
-				if _line_with_fence.ends_with("\r"):
-					_line_with_fence = _line_with_fence.left(-1)
+				if line_with_fence.ends_with("\r"):
+					line_with_fence = line_with_fence.left(-1)
 				
 				# 交给解析器判断是“开始”还是“结束”
-				_parse_fence_line(_line_with_fence, _instant)
+				_parse_fence_line(line_with_fence, p_instant)
 				continue
 			else:
 				# 这一行还没传输完整（例如只收到了 "  ```gds"），等待下一个 chunk
@@ -449,53 +461,61 @@ func _process_smart_chunk(_incoming_text: String, _instant: bool) -> void:
 		else:
 			# 6. 没有找到 ```，安全刷新缓冲区
 			# 需要保留末尾可能的半个标记（如 "`" 或 "``"），防止被切断
-			var _safe_len: int = _pending_buffer.length()
+			var safe_len: int = _pending_buffer.length()
 			if _pending_buffer.ends_with("``"):
-				_safe_len -= 2
+				safe_len -= 2
 			elif _pending_buffer.ends_with("`"):
-				_safe_len -= 1
+				safe_len -= 1
 			
-			if _safe_len < _pending_buffer.length():
+			if safe_len < _pending_buffer.length():
 				# 有潜在的半个标记，只刷新前面的安全部分
-				if _safe_len > 0:
-					var _safe_part: String = _pending_buffer.left(_safe_len)
-					_append_content(_safe_part, _instant)
-					_pending_buffer = _pending_buffer.right(-_safe_len)
+				if safe_len > 0:
+					var safe_part: String = _pending_buffer.left(safe_len)
+					_append_content(safe_part, p_instant)
+					_pending_buffer = _pending_buffer.right(-safe_len)
 			else:
 				# 没有潜在标记，全部刷新
 				if not _pending_buffer.is_empty():
-					_append_content(_pending_buffer, _instant)
+					_append_content(_pending_buffer, p_instant)
 					_pending_buffer = ""
 			break
 
 
 ## 解析包含 ``` 的特定行
-func _parse_fence_line(_line: String, _instant: bool) -> void:
+func _parse_fence_line(p_line: String, p_instant: bool) -> void:
 	if _current_state == ParseState.TEXT:
-		var _match_start: RegExMatch = _re_code_start.search(_line)
-		if _match_start:
+		var match_start: RegExMatch = _re_code_start.search(p_line)
+		if match_start:
 			_finish_typing()
 			_current_state = ParseState.CODE
-			var _lang: String = _match_start.get_string(1)
-			_create_code_block(_lang)
+			var lang: String = match_start.get_string(1)
+			_create_code_block(lang)
 		else:
-			_append_content(_line + "\n", _instant)
-			
+			_append_content(p_line + "\n", p_instant)
+	
 	elif _current_state == ParseState.CODE:
-		var _match_end: RegExMatch = _re_code_end.search(_line)
-		if _match_end:
+		#var match_end: RegExMatch = _re_code_end.search(p_line)
+		#if match_end:
+			#_current_state = ParseState.TEXT
+			#_last_ui_node = null
+		#else:
+			#_append_content(p_line + "\n", p_instant)
+			# 使用正则严格检测结束标记
+		
+		var match_end: RegExMatch = _re_code_end.search(p_line)
+		if match_end:
 			_current_state = ParseState.TEXT
 			_last_ui_node = null
 		else:
-			_append_content(_line + "\n", _instant)
+			_append_content(p_line + "\n", p_instant)
 
 
 ## 统一渲染入口
-func _append_content(_text: String, _instant: bool) -> void:
+func _append_content(p_text: String, p_instant: bool) -> void:
 	if _current_state == ParseState.CODE:
-		_append_to_code(_text)
+		_append_to_code(p_text)
 	else:
-		_append_to_text(_text, _instant)
+		_append_to_text(p_text, p_instant)
 
 
 ## 创建思考内容 UI 结构
@@ -508,127 +528,123 @@ func _create_reasoning_ui() -> void:
 	_content_container.add_child(_reasoning_container)
 	_content_container.move_child(_reasoning_container, 0)
 	
-	var _margin: MarginContainer = MarginContainer.new()
-	_margin.add_theme_constant_override("margin_left", 12)
-	_margin.add_theme_constant_override("margin_right", 12)
-	_margin.add_theme_constant_override("margin_bottom", 12)
-	_reasoning_container.add_child(_margin)
+	var margin: MarginContainer = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 12)
+	margin.add_theme_constant_override("margin_right", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	_reasoning_container.add_child(margin)
 	
 	_reasoning_label = RichTextLabel.new()
 	_reasoning_label.bbcode_enabled = false
 	_reasoning_label.fit_content = true
 	_reasoning_label.selection_enabled = true
 	_reasoning_label.modulate = Color(0.6, 0.6, 0.6)
-	_margin.add_child(_reasoning_label)
+	margin.add_child(_reasoning_label)
 	
 	_last_ui_node = null
 
 
 ## 创建代码块 UI
-func _create_code_block(_lang: String) -> void:
+func _create_code_block(p_lang: String) -> void:
 	_finish_typing()
 	
-	var _code_edit: CodeEdit = CodeEdit.new()
-	_code_edit.editable = false
-	_code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
-	_code_edit.scroll_fit_content_height = true
-	_code_edit.draw_tabs = true
-	_code_edit.gutters_draw_line_numbers = true
-	_code_edit.minimap_draw = false
-	_code_edit.wrap_mode = TextEdit.LINE_WRAPPING_NONE
-	_code_edit.mouse_filter = Control.MOUSE_FILTER_PASS
+	var code_edit: CodeEdit = CodeEdit.new()
+	code_edit.editable = false
+	code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
+	code_edit.scroll_fit_content_height = true
+	code_edit.draw_tabs = true
+	code_edit.gutters_draw_line_numbers = true
+	code_edit.minimap_draw = false
+	code_edit.wrap_mode = TextEdit.LINE_WRAPPING_NONE
+	code_edit.mouse_filter = Control.MOUSE_FILTER_PASS
 	
-	_content_container.add_child(_code_edit)
-	_last_ui_node = _code_edit
+	_content_container.add_child(code_edit)
+	_last_ui_node = code_edit
 	
-	var _header: HBoxContainer = HBoxContainer.new()
-	var _lang_label: Label = Label.new()
-	_lang_label.text = _lang if not _lang.is_empty() else "Code"
-	_lang_label.modulate = Color(0.7, 0.7, 0.7)
+	var header: HBoxContainer = HBoxContainer.new()
+	var lang_label: Label = Label.new()
+	lang_label.text = p_lang if not p_lang.is_empty() else "Code"
+	lang_label.modulate = Color(0.7, 0.7, 0.7)
 	
-	var _copy_btn: Button = Button.new()
-	_copy_btn.text = "Copy"
-	_copy_btn.flat = true
-	_copy_btn.focus_mode = Control.FOCUS_NONE
-	#_copy_btn.pressed.connect(func(): DisplayServer.clipboard_set(_code_edit.text))
-	# --- [修改开始] 增强的复制反馈逻辑 ---
-	_copy_btn.pressed.connect(func():
-		DisplayServer.clipboard_set(_code_edit.text)
+	var copy_btn: Button = Button.new()
+	copy_btn.text = "Copy"
+	copy_btn.flat = true
+	copy_btn.focus_mode = Control.FOCUS_NONE
+	
+	copy_btn.pressed.connect(func():
+		DisplayServer.clipboard_set(code_edit.text)
 		
 		# 记录原始文本，防止多次点击导致逻辑混乱
-		if _copy_btn.text != "Copied ✓":
-			var _original_text: String = "Copy"
-			_copy_btn.text = "Copied ✓"
-			_copy_btn.modulate = Color.GREEN_YELLOW # 可选：稍微变色提示
+		if copy_btn.text != "Copied ✓":
+			var original_text: String = "Copy"
+			copy_btn.text = "Copied ✓"
+			copy_btn.modulate = Color.GREEN_YELLOW 
 			
 			# 等待 3 秒
-			if _copy_btn.is_inside_tree():
-				await _copy_btn.get_tree().create_timer(3.0).timeout
+			if copy_btn.is_inside_tree():
+				await copy_btn.get_tree().create_timer(3.0).timeout
 			
 			# 恢复状态 (需检查节点是否仍有效)
-			if is_instance_valid(_copy_btn):
-				_copy_btn.text = _original_text
-				_copy_btn.modulate = Color.WHITE
+			if is_instance_valid(copy_btn):
+				copy_btn.text = original_text
+				copy_btn.modulate = Color.WHITE
 	)
-	# --- [修改结束] ---
 	
-	_header.add_child(_lang_label)
-	_header.add_child(Control.new())
-	_header.get_child(1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_header.add_child(_copy_btn)
+	header.add_child(lang_label)
+	header.add_child(Control.new())
+	header.get_child(1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(copy_btn)
 	
-	_content_container.move_child(_code_edit, _content_container.get_child_count() - 1)
-	_content_container.add_child(_header)
-	_content_container.move_child(_header, _content_container.get_child_count() - 2)
+	_content_container.move_child(code_edit, _content_container.get_child_count() - 1)
+	_content_container.add_child(header)
+	_content_container.move_child(header, _content_container.get_child_count() - 2)
 
 
 ## 追加内容到代码块
-func _append_to_code(_text: String) -> void:
+func _append_to_code(p_text: String) -> void:
 	if _last_ui_node is CodeEdit:
-		#_last_ui_node.text += _text
-		# 使用 insert_text_at_caret 替代 text +=
-		_last_ui_node.insert_text_at_caret(_text)
+		_last_ui_node.insert_text_at_caret(p_text)
 
 
 ## 追加内容到文本块
-func _append_to_text(_text: String, _instant: bool) -> void:
+func _append_to_text(p_text: String, p_instant: bool) -> void:
 	if not _last_ui_node is RichTextLabel:
 		_finish_typing()
-		_last_ui_node = _create_text_block("", _instant)
+		_last_ui_node = _create_text_block("", p_instant)
 	
-	var _safe_text: String = _text.replace("[", "[lb]")
+	#var safe_text: String = p_text.replace("[", "[lb]")
 	
-	if _instant:
-		_last_ui_node.text += _text
+	if p_instant:
+		_last_ui_node.text += p_text
 	else:
-		var _old_total: int = _last_ui_node.get_total_character_count()
+		var old_total: int = _last_ui_node.get_total_character_count()
 		if _last_ui_node.visible_characters == -1:
-			_last_ui_node.visible_characters = _old_total
+			_last_ui_node.visible_characters = old_total
 		
-		_last_ui_node.text += _text
+		_last_ui_node.text += p_text
 		_trigger_typewriter(_last_ui_node)
 
 
 ## 创建文本块 UI
-func _create_text_block(_initial_text: String, _instant: bool) -> RichTextLabel:
-	var _rtl: RichTextLabel = RichTextLabel.new()
-	_rtl.bbcode_enabled = true
-	_rtl.text = _initial_text
-	_rtl.fit_content = true
-	_rtl.selection_enabled = true
-	_rtl.focus_mode = Control.FOCUS_CLICK
+func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabel:
+	var rtl: RichTextLabel = RichTextLabel.new()
+	rtl.bbcode_enabled = true
+	rtl.text = p_initial_text
+	rtl.fit_content = true
+	rtl.selection_enabled = true
+	rtl.focus_mode = Control.FOCUS_CLICK
 	# [Fix] 显式设置自动换行模式，确保在任何加载时序下都能正确换行
-	_rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	
-	if not _instant:
-		_rtl.visible_characters = 0
-	_content_container.add_child(_rtl)
-	return _rtl
+	if not p_instant:
+		rtl.visible_characters = 0
+	_content_container.add_child(rtl)
+	return rtl
 
 
 ## 触发打字机效果
-func _trigger_typewriter(_node: RichTextLabel) -> void:
-	_current_typing_node = _node
+func _trigger_typewriter(p_node: RichTextLabel) -> void:
+	_current_typing_node = p_node
 	if not _typing_active:
 		_typing_active = true
 		_typewriter_loop()
@@ -647,26 +663,26 @@ func _typewriter_loop() -> void:
 		_typing_active = false
 		return
 	
-	var _total: int = _current_typing_node.get_total_character_count()
-	var _current: int = _current_typing_node.visible_characters
+	var total: int = _current_typing_node.get_total_character_count()
+	var current: int = _current_typing_node.visible_characters
 	
-	if _current == -1:
-		_current = _total
+	if current == -1:
+		current = total
 	
-	var _lag: int = _total - _current
+	var lag: int = total - current
 	
-	if _lag <= 0:
+	if lag <= 0:
 		_current_typing_node.visible_characters = -1
 		_typing_active = false
 		return
 	
-	var _step: int = 1
-	if _lag > 100: _step = 20
-	elif _lag > 50: _step = 10
-	elif _lag > 20: _step = 5
-	elif _lag > 5: _step = 2
-	else: _step = 1
+	var step: int = 1
+	if lag > 100: step = 20
+	elif lag > 50: step = 10
+	elif lag > 20: step = 5
+	elif lag > 5: step = 2
+	else: step = 1
 	
-	_current_typing_node.visible_characters += _step
+	_current_typing_node.visible_characters += step
 	
 	get_tree().create_timer(0.016).timeout.connect(_typewriter_loop)

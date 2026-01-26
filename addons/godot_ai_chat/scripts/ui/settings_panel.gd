@@ -2,6 +2,8 @@
 class_name SettingsPanel
 extends Control
 
+## 设置面板
+##
 ## 负责管理插件的设置界面，包括加载、显示和保存用户配置。
 
 # --- Signals ---
@@ -11,15 +13,13 @@ signal settings_saved
 ## 当请求关闭面板时发出
 signal close_requested
 
-# --- Enums ---
+# --- Enums / Constants ---
 
 ## 保存按钮的内部状态
 enum SaveButtonState {
 	IDLE,   ## 空闲状态
 	SAVING  ## 正在保存状态
 }
-
-# --- Constants ---
 
 ## 插件设置资源文件的固定路径
 const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
@@ -83,8 +83,8 @@ func _ready() -> void:
 # --- Private Functions ---
 
 ## 根据新的状态更新 UI 元素
-func _update_ui(_new_state: SaveButtonState) -> void:
-	match _new_state:
+func _update_ui(p_new_state: SaveButtonState) -> void:
+	match p_new_state:
 		SaveButtonState.IDLE:
 			_save_button.disabled = false
 			_save_button.text = "Save and Close"
@@ -107,13 +107,13 @@ func _load_and_display_settings() -> void:
 
 ## 将从资源文件加载的设置值填充到各个 UI 控件中
 func _populate_ui_from_resource() -> void:
-	var _selected_index: int = -1
-	for _i in range(_api_provider_options.item_count):
-		if _api_provider_options.get_item_text(_i) == settings_resource.api_provider:
-			_selected_index = _i
+	var selected_index: int = -1
+	for i in range(_api_provider_options.item_count):
+		if _api_provider_options.get_item_text(i) == settings_resource.api_provider:
+			selected_index = i
 			break
-	if _selected_index != -1:
-		_api_provider_options.select(_selected_index)
+	if selected_index != -1:
+		_api_provider_options.select(selected_index)
 	
 	_base_url_input.text = settings_resource.api_base_url
 	_api_key_input.text = settings_resource.api_key
@@ -126,12 +126,13 @@ func _populate_ui_from_resource() -> void:
 
 # --- Signal Callbacks ---
 
-func _on_temperature_value_changed(_value: float) -> void:
-	_temperature_value_label.text = "%.2f" % _value
+func _on_temperature_value_changed(p_value: float) -> void:
+	_temperature_value_label.text = "%.2f" % p_value
 
 
 func _on_save_button_pressed() -> void:
 	_update_ui(SaveButtonState.SAVING)
+	# 模拟保存延迟，给用户视觉反馈
 	await get_tree().create_timer(0.2).timeout
 	
 	settings_resource.api_provider = _api_provider_options.get_item_text(_api_provider_options.selected)

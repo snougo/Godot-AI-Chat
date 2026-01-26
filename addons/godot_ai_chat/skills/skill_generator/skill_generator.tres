@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_w2n1e")
-skill_name = "Auto Skill Generator"
+skill_name = "Skill Generator"
 description = "根据用户需求自动创建自定义Skill。
 
 具体的 Skill.md 的规范格式请自行查阅 `res://addons/godot_ai_chat/skills/auto_skill_generator/reference/` 文件夹中的引用文档"
