@@ -96,7 +96,7 @@ func _get_skill_tools(p_skill_name: String) -> Array:
 	var new_tools := []
 	
 	if ToolRegistry.available_skills.has(p_skill_name):
-		var skill: Dictionary = ToolRegistry.available_skills[p_skill_name]
+		var skill: Object = ToolRegistry.available_skills[p_skill_name]
 		if "tools" in skill:
 			for tool_path in skill.tools:
 				var script: Resource = load(tool_path)

@@ -88,7 +88,7 @@ func _validate_path(p_path: String) -> String:
 ## 验证文件扩展名是否匹配上下文类型
 ## [param p_path]: 文件路径
 ## [param p_context_type]: 上下文类型
-## [return]: 空字符串表示有效，否则返回错误字典
+## [return]: 空字典表示验证通过，否则返回错误字典
 func _validate_file_extension(p_path: String, p_context_type: String) -> Dictionary:
 	var allowed_extensions: Array = EXTENSION_MAP[p_context_type]
 	var ext: String = p_path.get_extension().to_lower()
@@ -98,7 +98,7 @@ func _validate_file_extension(p_path: String, p_context_type: String) -> Diction
 			"success": false, 
 			"data": "Error: Extension '%s' is not allowed for context_type '%s'. Allowed: %s" % [ext, p_context_type, allowed_extensions]
 		}
-	return {"success": true}
+	return {}
 
 
 ## 处理文件夹结构检索
