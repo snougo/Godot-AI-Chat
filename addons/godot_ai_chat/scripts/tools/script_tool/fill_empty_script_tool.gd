@@ -8,7 +8,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "fill_empty_script"
-	tool_description = "Writes code to a NEW empty file. Using 'insert_script_code' for existing files."
+	tool_description = "Only support writing code to a NEW EMPTY file. Using 'insert_script_code' for existing files."
 
 
 # --- Public Functions ---

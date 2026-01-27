@@ -28,12 +28,12 @@ func _ready() -> void:
 	# 1. 环境准备
 	ToolRegistry.load_default_tools()
 	
-	# [Refactor] 初始化 SessionManager
+	# 初始化 SessionManager
 	# 必须在逻辑开始前完成初始化
 	_session_manager = SessionManager.new(_chat_ui, _current_chat_window)
 	
 	# 2. 依赖注入
-	# [Refactor] 通过 ChatUI 接口获取节点引用
+	# 通过 ChatUI 接口获取节点引用
 	var chat_list_container: VBoxContainer = _chat_ui.get_chat_list_container()
 	var chat_scroll_container: ScrollContainer = _chat_ui.get_chat_scroll_container()
 	
@@ -46,11 +46,12 @@ func _ready() -> void:
 	await get_tree().process_frame
 	
 	# --- 信号连接 ---
+	_chat_ui.mouse_entered.connect(_on_chat_ui_mouse_entered)
 	
 	# UI 操作
-	_chat_ui.delete_chat_button_pressed.connect(_delete_chat_history)
-	_chat_ui.load_chat_button_pressed.connect(_load_chat_history)
-	_chat_ui.new_chat_button_pressed.connect(_create_new_chat_history)
+	_chat_ui.delete_chat_button_pressed.connect(_on_delete_chat_history)
+	_chat_ui.load_chat_button_pressed.connect(_on_load_chat_history)
+	_chat_ui.new_chat_button_pressed.connect(_on_create_new_chat)
 	
 	_chat_ui.reconnect_button_pressed.connect(_network_manager.get_model_list)
 	
@@ -72,7 +73,7 @@ func _ready() -> void:
 	# 网络事件 -> 发起对话
 	_network_manager.new_chat_request_sending.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.WAITING_RESPONSE))
 	
-	# [Refactor] 修改：移除条件判断，强制状态同步
+	# 移除条件判断，强制状态同步
 	_network_manager.new_stream_chunk_received.connect(func(chunk: Dictionary):
 		# 只要收到数据，就强制确保 UI 处于生成状态
 		# 为了避免每帧都调用 update_ui_state 导致 UI 刷新开销，加一个简单的状态检查
@@ -93,15 +94,37 @@ func _ready() -> void:
 	_chat_backend.tool_message_generated.connect(_on_tool_message_generated)
 	
 	# Token 统计
-	if not _network_manager.chat_usage_data_received.is_connected(_chat_ui.update_token_cost_display):
-		_network_manager.chat_usage_data_received.connect(_chat_ui.update_token_cost_display)
-	
-	if not _current_chat_window.token_usage_updated.is_connected(_chat_ui.update_token_cost_display):
-		_current_chat_window.token_usage_updated.connect(_chat_ui.update_token_cost_display)
+	_network_manager.chat_usage_data_received.connect(_chat_ui.update_token_cost_display)
+	_current_chat_window.token_usage_updated.connect(_chat_ui.update_token_cost_display)
 	
 	# --- 初始化 ---
 	_network_manager.get_model_list()
+
+
+# --- Public Functions ---
+
+func get_chat_ui() -> ChatUI:
+	return _chat_ui
+
+
+# --- Private Functions ---
+
+## 更新 UI 上的轮数显示
+func _update_turn_info() -> void:
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
+	var history: ChatMessageHistory = _current_chat_window.chat_history
 	
+	if history and settings:
+		var count: int = history.get_turn_count()
+		_chat_ui.update_turn_display(count, settings.max_chat_turns)
+	elif settings:
+		_chat_ui.update_turn_display(0, settings.max_chat_turns)
+
+
+# --- Signal Callbacks ---
+
+## 当鼠标进入ChatUI时触发
+func _on_chat_ui_mouse_entered() -> void:
 	# 自动加载最近的对话存档
 	# 防御性检查：确保没有活动会话时才自动加载
 	if not _session_manager.has_active_session():
@@ -109,7 +132,7 @@ func _ready() -> void:
 		if not archive_list.is_empty():
 			# 加载最新的存档（get_archive_list() 已按时间倒序排列）
 			var latest_archive = archive_list[0]
-			print("[Godot AI Chat] Auto-loading latest chat archive: " + latest_archive)
+			AIChatLogger.debug("[Godot AI Chat] Auto-loading latest chat archive: " + latest_archive)
 			
 			var is_success: bool = _session_manager.load_session(latest_archive)
 			if is_success:
@@ -122,16 +145,8 @@ func _ready() -> void:
 			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
 
 
-# --- Public Functions ---
-
-func get_chat_ui() -> ChatUI:
-	return _chat_ui
-
-
-# --- Private Functions ---
-
 ## 新建会话
-func _create_new_chat_history() -> void:
+func _on_create_new_chat() -> void:
 	if _is_creating_new_chat:
 		return
 	
@@ -150,7 +165,7 @@ func _create_new_chat_history() -> void:
 
 
 ## 加载会话
-func _load_chat_history(p_filename: String) -> void:
+func _on_load_chat_history(p_filename: String) -> void:
 	_on_stop_requested()
 	
 	var success: bool = _session_manager.load_session(p_filename)
@@ -162,22 +177,8 @@ func _load_chat_history(p_filename: String) -> void:
 		_chat_ui.show_confirmation("Error: Failed to load session: %s" % p_filename)
 
 
-## 更新 UI 上的轮数显示
-func _update_turn_info() -> void:
-	var settings: PluginSettings = ToolBox.get_plugin_settings()
-	var history: ChatMessageHistory = _current_chat_window.chat_history
-	
-	if history and settings:
-		var count: int = history.get_turn_count()
-		_chat_ui.update_turn_display(count, settings.max_chat_turns)
-	elif settings:
-		_chat_ui.update_turn_display(0, settings.max_chat_turns)
-
-
-# --- Signal Callbacks ---
-
 ## 删除会话并加载最新存档
-func _delete_chat_history(p_filename: String) -> void:
+func _on_delete_chat_history(p_filename: String) -> void:
 	# 检查被删除的是否是当前正在查看的会话
 	# 通过 SessionManager 获取当前路径的文件名进行比对
 	var is_deleting_current: bool = false

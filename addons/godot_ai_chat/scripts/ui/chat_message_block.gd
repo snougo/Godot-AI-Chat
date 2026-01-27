@@ -21,6 +21,7 @@ const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload("res://addons/godot_ai_c
 # --- @onready Vars ---
 
 @onready var _content_container: VBoxContainer = $MarginContainer/VBoxContainer
+@onready var _main_margin_container: Control = $MarginContainer
 
 # --- Private Vars ---
 
@@ -36,8 +37,6 @@ var _last_ui_node: Control = null
 ## 正则匹配：代码块开始 (锚定行首，但是允许行首出现空格)
 var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*(.*)\\s*$")
 
-# 正则匹配：代码块结束 (锚定行首，但是允许行首出现空格)
-#var _re_code_end: RegEx = RegEx.create_from_string("^\\s*```\\s*$")
 ## 正则匹配：代码块结束 (锚定行首，且仅允许水平空白字符)
 var _re_code_end: RegEx = RegEx.create_from_string("^[ \\t]*```[ \\t]*$")
 
@@ -56,6 +55,9 @@ var _think_parse_buffer: String = ""
 var _is_parsing_think: bool = false
 ## 标记是否禁用思考标签解析
 var _disable_think_parsing: bool = false
+## 消息块是否被挂起
+var _is_suspended: bool = false
+
 
 # --- Built-in Functions ---
 
@@ -63,6 +65,7 @@ func _ready() -> void:
 	if not _content_container:
 		# 等待一帧以确保节点就绪 (主要用于 Tool 模式下的实例化)
 		await get_tree().process_frame
+
 
 # --- Public Functions ---
 
@@ -307,6 +310,41 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 	else:
 		push_error("Failed to load image buffer in ChatMessageBlock, error code: %d" % err)
 
+
+## 挂起内容渲染（用于视口外优化）
+## 将内容隐藏并用最小高度占位，减少 Draw Calls 和 Update 开销
+func suspend_content() -> void:
+	# 如果正在打字（生成中）或已经挂起，则不执行
+	if _is_suspended or _typing_active:
+		return
+	
+	# 1. 锁定高度：将当前实际高度设为最小高度，防止布局塌陷
+	custom_minimum_size.y = size.y
+	
+	# 2. 隐藏内容：隐藏内部高消耗节点
+	_main_margin_container.visible = false
+	_is_suspended = true
+
+
+## 恢复内容渲染（用于进入视口）
+func resume_content() -> void:
+	if not _is_suspended:
+		return
+	
+	# 1. 恢复显示
+	_main_margin_container.visible = true
+	
+	# 2. 解除高度锁定（设为0允许自适应，或者保持原状）
+	# 通常设为 0 是安全的，因为内容撑开的高度应该是一样的
+	custom_minimum_size.y = 0
+	_is_suspended = false
+
+
+## 查询是否处于挂起状态
+func is_suspended() -> bool:
+	return _is_suspended
+
+
 # --- Private Functions ---
 
 ## 设置标题和角色元数据
@@ -494,14 +532,6 @@ func _parse_fence_line(p_line: String, p_instant: bool) -> void:
 			_append_content(p_line + "\n", p_instant)
 	
 	elif _current_state == ParseState.CODE:
-		#var match_end: RegExMatch = _re_code_end.search(p_line)
-		#if match_end:
-			#_current_state = ParseState.TEXT
-			#_last_ui_node = null
-		#else:
-			#_append_content(p_line + "\n", p_instant)
-			# 使用正则严格检测结束标记
-		
 		var match_end: RegExMatch = _re_code_end.search(p_line)
 		if match_end:
 			_current_state = ParseState.TEXT

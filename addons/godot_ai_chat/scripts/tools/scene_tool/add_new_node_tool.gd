@@ -2,7 +2,6 @@
 extends BaseSceneTool
 
 ## 向活动场景添加新节点。
-## 需要从 'get_current_active_scene' 获取 'parent_path'。
 
 
 # --- Built-in Functions ---
@@ -87,7 +86,9 @@ func _instantiate_node(p_type_str: String) -> Node:
 		if ResourceLoader.exists(p_type_str):
 			var res = ResourceLoader.load(p_type_str)
 			if res is PackedScene:
-				return res.instantiate()
+				# 显式转换为 Node 类型，避免类型不匹配错误
+				var instantiated_node: Node = res.instantiate()
+				return instantiated_node
 			else:
 				return null
 		else:

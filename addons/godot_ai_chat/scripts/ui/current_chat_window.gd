@@ -12,20 +12,35 @@ extends Node
 ## 当 Token 使用量更新时发出
 signal token_usage_updated(usage: Dictionary)
 
+# --- Constants ---
+const CULLING_INTERVAL: float = 0.15 # 每秒检测约 6-7 次，足够平滑且低耗
+## 消息块场景
+const chat_message_block_scene: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
+
 # --- Public Vars ---
 
 ## 消息列表容器引用
 var chat_list_container: VBoxContainer
 ## 滚动容器引用
 var chat_scroll_container: ScrollContainer
-
 ## 当前加载的聊天历史资源
 var chat_history: ChatMessageHistory
-## 消息块场景
-var chat_message_block_scene: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
-
 ## 当前使用的模型名称
 var current_model_name: String = ""
+
+# --- Private Vars ---
+
+var _culling_timer: float = 0.0
+
+
+# --- Built-in Functions ---
+
+func _process(delta: float) -> void:
+	_culling_timer += delta
+	if _culling_timer >= CULLING_INTERVAL:
+		_culling_timer = 0.0
+		_update_visibility_culling()
+
 
 # --- Public Functions ---
 
@@ -130,43 +145,54 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 
 
 ## 回滚未完成的消息（用于停止生成时）
-## 现在支持递归回滚工具链，防止留下悬空的 Tool Output 或 Tool Call
+## [Refactor] 采用数据优先策略：先清理 history，再根据 history 重绘 UI
 func rollback_incomplete_message() -> void:
+	# 即使历史为空，也可能存在游离的 UI 块（例如第一条消息生成时停止），所以仍需刷新
 	if chat_history.messages.is_empty():
+		_refresh_display()
 		return
 	
 	var safety_count: int = 0
 	
+	# 1. 纯数据回滚循环
 	while not chat_history.messages.is_empty() and safety_count < 10:
 		var last_msg: ChatMessage = chat_history.messages.back()
 		var should_continue_rollback: bool = false
+		var should_pop: bool = false
 		
-		# 1. 正在生成的纯文本 Assistant 消息 -> 删除并结束
+		# 情况 A: 正在生成的纯文本 Assistant 消息 -> 删除并结束
 		if last_msg.role == ChatMessage.ROLE_ASSISTANT and last_msg.tool_calls.is_empty():
-			print("[CurrentChatWindow] Rolling back text message.")
-			_pop_last_message_and_ui()
-			break 
+			AIChatLogger.debug("[CurrentChatWindow] Rolling back text message in history.")
+			should_pop = true
+			should_continue_rollback = false 
 		
-		# 2. 工具输出消息 (Tool) -> 删除，并继续检查上一条
+		# 情况 B: 工具输出消息 (Tool) -> 删除，并继续检查上一条
 		elif last_msg.role == ChatMessage.ROLE_TOOL:
-			print("[CurrentChatWindow] Rolling back tool output.")
-			_pop_last_message_and_ui()
+			AIChatLogger.debug("[CurrentChatWindow] Rolling back tool output in history.")
+			should_pop = true
 			should_continue_rollback = true
 		
-		# 3. 包含工具调用的 Assistant 消息 -> 删除并结束 (这是这一轮的源头)
+		# 情况 C: 包含工具调用的 Assistant 消息 -> 删除并结束 (这是这一轮的源头)
 		elif last_msg.role == ChatMessage.ROLE_ASSISTANT and not last_msg.tool_calls.is_empty():
-			print("[CurrentChatWindow] Rolling back tool call.")
-			_pop_last_message_and_ui()
-			break
+			AIChatLogger.debug("[CurrentChatWindow] Rolling back tool call in history.")
+			should_pop = true
+			should_continue_rollback = false
 		
-		# 4. User 或 System -> 停止
+		# 情况 D: User 或 System -> 停止
 		else:
 			break
+		
+		if should_pop:
+			chat_history.messages.pop_back()
 		
 		if not should_continue_rollback:
 			break
 		
 		safety_count += 1
+	
+	# 2. 强制重绘 UI
+	# 这会消除所有“游离”的、未入库的 UI Block，保证视图与数据绝对一致
+	_refresh_display()
 
 
 ## 提交 Agent 历史记录（占位符，逻辑已在 ChatHub 处理）
@@ -181,6 +207,52 @@ func update_token_usage(p_usage: Dictionary) -> void:
 
 
 # --- Private Functions ---
+
+## 执行可视性剔除逻辑
+func _update_visibility_culling() -> void:
+	if not is_instance_valid(chat_scroll_container) or not is_instance_valid(chat_list_container):
+		return
+	
+	# 1. 获取视口范围
+	# scroll_vertical 代表可视区域顶部的偏移量
+	var scroll_offset: float = chat_scroll_container.scroll_vertical
+	var viewport_height: float = chat_scroll_container.size.y
+	
+	# 2. 设置缓冲区 (Buffer)
+	# 上下各预留 600 像素，确保快速滚动时不会看到空白
+	var buffer: float = 100.0
+	var visible_top: float = scroll_offset - buffer
+	var visible_bottom: float = scroll_offset + viewport_height + buffer
+	
+	# --- Debug 统计变量 ---
+	var total_count: int = 0
+	var suspended_count: int = 0
+	var visible_count: int = 0
+	# --------------------
+	
+	# 3. 遍历并切换状态
+	for child in chat_list_container.get_children():
+		if child is ChatMessageBlock:
+			total_count += 1 # 统计总数
+			# VBoxContainer 中，子节点的 position.y 是相对于容器顶部的偏移
+			var child_top: float = child.position.y
+			var child_bottom: float = child_top + child.size.y
+			
+			# 判断是否与扩充后的视口相交
+			# 如果 (子节点底部 < 视口顶部) 或 (子节点顶部 > 视口底部)，则完全在视口外
+			if child_bottom < visible_top or child_top > visible_bottom:
+				child.suspend_content()
+				suspended_count += 1 # 统计挂起数
+			else:
+				child.resume_content()
+				visible_count += 1 # 统计可见数
+	
+	# --- 打印 Debug 信息 ---
+	# 只有当数据发生变化或者每隔一定时间打印一次，避免刷屏
+	# 这里为了演示简单，我们只在总数大于 0 时打印
+	if visible_count > 8:
+		AIChatLogger.debug("Debug: Total: %d | Visible: %d | Suspended: %d" % [total_count, visible_count, suspended_count])
+
 
 ## 刷新整个消息列表显示
 func _refresh_display() -> void:
@@ -226,11 +298,3 @@ func _scroll_to_bottom() -> void:
 	await get_tree().process_frame
 	if chat_scroll_container.get_v_scroll_bar():
 		chat_scroll_container.scroll_vertical = chat_scroll_container.get_v_scroll_bar().max_value
-
-
-## 辅助：移除最后一条数据和 UI
-func _pop_last_message_and_ui() -> void:
-	chat_history.messages.pop_back()
-	var last_block: Node = _get_last_block()
-	if last_block:
-		last_block.queue_free()

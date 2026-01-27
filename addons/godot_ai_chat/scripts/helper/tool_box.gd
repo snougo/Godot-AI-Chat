@@ -63,17 +63,17 @@ static func estimate_tokens_for_messages(p_messages: Array) -> int:
 
 ## 用于结构化打印聊天历史上下文的调试函数
 static func print_structured_context(p_title: String, p_messages: Array, p_context_info: Dictionary = {}) -> void:
-	print("\n--- [调试] 上下文报告: %s ---" % p_title)
+	AIChatLogger.debug("\n--- [调试] 上下文报告: %s ---" % p_title)
 	
 	if not p_context_info.is_empty():
 		for key in p_context_info:
-			print("    - %s: %s" % [key, str(p_context_info[key])])
+			AIChatLogger.debug("    - %s: %s" % [key, str(p_context_info[key])])
 	
-	print("    - 消息总数: %d" % p_messages.size())
-	print("--- 上下文内容 (角色 | 内容片段) ---")
+	AIChatLogger.debug("    - 消息总数: %d" % p_messages.size())
+	AIChatLogger.debug("--- 上下文内容 (角色 | 内容片段) ---")
 	
 	if p_messages.is_empty():
-		print("    [上下文为空]")
+		AIChatLogger.debug("    [上下文为空]")
 	else:
 		for i in range(p_messages.size()):
 			var msg: Variant = p_messages[i]
@@ -91,9 +91,9 @@ static func print_structured_context(p_title: String, p_messages: Array, p_conte
 			if snippet.length() > 100:
 				snippet = snippet.left(100) + "..."
 				
-			print("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [i, role, snippet])
+			AIChatLogger.debug("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [i, role, snippet])
 	
-	print("--- 报告结束 ---\n")
+	AIChatLogger.debug("--- 报告结束 ---\n")
 
 
 ## 检查文件是否已在 ScriptEditor 中打开
@@ -145,7 +145,7 @@ static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Arra
 	# 如果找到了 <think> 但没找到 </think>，说明思考过程尚未结束
 	# 此时产生的所有工具调用都应视为不稳定或幻觉，予以拦截
 	if think_start != -1 and think_end == -1:
-		print("[ToolBox] Intercepted %d tool calls during unclosed <think> block." % p_tool_calls.size())
+		AIChatLogger.debug("[ToolBox] Intercepted %d tool calls during unclosed <think> block." % p_tool_calls.size())
 		return []
 	
 	# 如果 <think> 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）

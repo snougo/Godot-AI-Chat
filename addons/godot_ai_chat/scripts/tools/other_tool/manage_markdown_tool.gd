@@ -2,7 +2,7 @@
 extends AiTool
 
 ## 管理 Markdown 文件。
-## 支持创建、追加、覆盖和读取操作。
+## 支持创建（带覆盖保护）和读取操作。
 
 # --- Enums / Constants ---
 
@@ -14,7 +14,8 @@ const ALLOWED_EXTENSIONS: Array[String] = ["md"]
 
 func _init() -> void:
 	tool_name = "manage_markdown"
-	tool_description = "Manage Markdown files. Requires."
+	tool_description = "Manage GENERIC Markdown files. Do NOT use this for 'TODO.md'; use 'todo_list' tool instead."
+
 
 # --- Public Functions ---
 
@@ -25,8 +26,8 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"operation": {
 				"type": "string",
-				"enum": ["create", "append", "overwrite", "read"],
-				"description": "The operation to perform: 'create', 'append', 'overwrite', or 'read'."
+				"enum": ["create", "read"],
+				"description": "The operation to perform: 'create' or 'read'."
 			},
 			"path": {
 				"type": "string",
@@ -38,7 +39,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"content": {
 				"type": "string",
-				"description": "The text content. Required for 'create', 'append', and 'overwrite'. Ignored for 'read'."
+				"description": "The text content. Required for 'create'. Ignored for 'read'."
 			}
 		},
 		"required": ["operation", "path", "file_name"]
@@ -60,21 +61,17 @@ func execute(p_args: Dictionary) -> Dictionary:
 	folder_path = _ensure_trailing_slash(folder_path)
 	var full_path: String = folder_path + file_name
 	
-	var validation_result: Dictionary = _validate_path_and_extension(full_path)
+	var validation_result: Dictionary = _validate_extension(full_path)
 	if not validation_result.get("success", false):
 		return validation_result
 	
 	match operation:
 		"create":
 			return _create_file(full_path, folder_path, content)
-		"append":
-			return _append_to_file(full_path, content)
-		"overwrite":
-			return _overwrite_file(full_path, folder_path, content)
 		"read":
 			return _read_file(full_path)
 		_:
-			return {"success": false, "data": "Error: Unknown operation '" + operation + "'."}
+			return {"success": false, "data": "Error: Unknown operation '" + operation + "'. Allowed: 'create', 'read'."}
 
 
 # --- Private Functions ---
@@ -88,14 +85,10 @@ func _ensure_trailing_slash(p_path: String) -> String:
 	return p_path
 
 
-## 验证路径安全性和文件扩展名
+## 验证文件扩展名
 ## [param p_full_path]: 完整文件路径
 ## [return]: 验证结果字典
-func _validate_path_and_extension(p_full_path: String) -> Dictionary:
-	var safety_error: String = validate_path_safety(p_full_path)
-	if not safety_error.is_empty():
-		return {"success": false, "data": safety_error}
-	
+func _validate_extension(p_full_path: String) -> Dictionary:
 	var ext: String = p_full_path.get_extension().to_lower()
 	if ext not in ALLOWED_EXTENSIONS:
 		return {"success": false, "data": "Security Error: Only %s files are allowed." % str(ALLOWED_EXTENSIONS)}
@@ -103,14 +96,14 @@ func _validate_path_and_extension(p_full_path: String) -> Dictionary:
 	return {"success": true}
 
 
-## 创建新文件
+## 创建新文件（带覆盖保护）
 ## [param p_full_path]: 完整文件路径
 ## [param p_folder_path]: 目录路径
 ## [param p_content]: 文件内容
 ## [return]: 操作结果字典
 func _create_file(p_full_path: String, p_folder_path: String, p_content: String) -> Dictionary:
 	if FileAccess.file_exists(p_full_path):
-		return {"success": false, "data": "Error: File already exists at " + p_full_path + ". Use 'overwrite' or 'append'."}
+		return {"success": false, "data": "Error: File already exists at " + p_full_path + ". Overwriting is not allowed."}
 	
 	if not DirAccess.dir_exists_absolute(p_folder_path):
 		var err: Error = DirAccess.make_dir_recursive_absolute(p_folder_path)
@@ -125,49 +118,6 @@ func _create_file(p_full_path: String, p_folder_path: String, p_content: String)
 	file.close()
 	ToolBox.refresh_editor_filesystem()
 	return {"success": true, "data": "File created successfully: " + p_full_path}
-
-
-## 追加内容到文件
-## [param p_full_path]: 完整文件路径
-## [param p_content]: 要追加的内容
-## [return]: 操作结果字典
-func _append_to_file(p_full_path: String, p_content: String) -> Dictionary:
-	if not FileAccess.file_exists(p_full_path):
-		return {"success": false, "data": "Error: File does not exist at " + p_full_path + ". Use 'create' first."}
-	
-	var file: FileAccess = FileAccess.open(p_full_path, FileAccess.READ_WRITE)
-	if file == null:
-		return {"success": false, "data": "Failed to open file for appending: " + str(FileAccess.get_open_error())}
-	
-	file.seek_end()
-	if file.get_length() > 0:
-		file.store_string("\n")
-	
-	file.store_string(p_content)
-	file.close()
-	ToolBox.refresh_editor_filesystem()
-	return {"success": true, "data": "Content appended to " + p_full_path}
-
-
-## 覆盖文件内容
-## [param p_full_path]: 完整文件路径
-## [param p_folder_path]: 目录路径
-## [param p_content]: 新的文件内容
-## [return]: 操作结果字典
-func _overwrite_file(p_full_path: String, p_folder_path: String, p_content: String) -> Dictionary:
-	if not DirAccess.dir_exists_absolute(p_folder_path):
-		var err: Error = DirAccess.make_dir_recursive_absolute(p_folder_path)
-		if err != OK:
-			return {"success": false, "data": "Failed to create directory: " + p_folder_path}
-	
-	var file: FileAccess = FileAccess.open(p_full_path, FileAccess.WRITE)
-	if file == null:
-		return {"success": false, "data": "Failed to open file for writing: " + str(FileAccess.get_open_error())}
-	
-	file.store_string(p_content)
-	file.close()
-	ToolBox.refresh_editor_filesystem()
-	return {"success": true, "data": "File overwritten: " + p_full_path}
 
 
 ## 读取文件内容

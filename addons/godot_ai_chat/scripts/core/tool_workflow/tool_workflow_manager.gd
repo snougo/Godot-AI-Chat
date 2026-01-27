@@ -71,13 +71,13 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 		if call_id.is_empty():
 			call_id = "call_%d_%d" % [Time.get_ticks_msec(), i]
 			call["id"] = call_id
-			print("[Workflow] Fixed missing tool_call_id: %s" % call_id)
+			AIChatLogger.debug("[Workflow] Fixed missing tool_call_id: %s" % call_id)
 		
 		var func_def: Dictionary = call.get("function", {})
 		var tool_name: String = func_def.get("name", "")
 		var raw_args_str: String = func_def.get("arguments", "{}")
 		
-		print("[Workflow] Executing tool: %s (ID: %s)" % [tool_name, call_id])
+		AIChatLogger.debug("[Workflow] Executing tool: %s (ID: %s)" % [tool_name, call_id])
 		
 		# 1. 清洗参数
 		# 使用 JSONRepairHelper 直接修复
@@ -159,7 +159,7 @@ func _attach_image_to_last_user_message(p_data: PackedByteArray, p_mime: String)
 		if workflow_messages[i].role == ChatMessage.ROLE_USER:
 			workflow_messages[i].image_data = p_data
 			workflow_messages[i].image_mime = p_mime
-			print("[Workflow] Attached image to Workflow User message index: %d" % i)
+			AIChatLogger.debug("[Workflow] Attached image to Workflow User message index: %d" % i)
 			return
 	
 	# 然后检查基础历史记录 (倒序)
@@ -167,10 +167,10 @@ func _attach_image_to_last_user_message(p_data: PackedByteArray, p_mime: String)
 		if base_history[i].role == ChatMessage.ROLE_USER:
 			base_history[i].image_data = p_data
 			base_history[i].image_mime = p_mime
-			print("[Workflow] Attached image to Base History User message index: %d" % i)
+			AIChatLogger.debug("[Workflow] Attached image to Base History User message index: %d" % i)
 			return
 	
-	print("[Workflow] Warning: No User message found to attach image.")
+	AIChatLogger.debug("[Workflow] Warning: No User message found to attach image.")
 
 
 ## 请求 AI 进行下一步决策或最终回复

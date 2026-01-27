@@ -26,24 +26,30 @@ const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 # --- @onready Vars ---
 
-@onready var _api_provider_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer/APIProviderLabel
-@onready var _base_url_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer2/BaseUrlLabel
-@onready var _api_key_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer3/APIKeyLabel
-@onready var _tavily_api_key_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer7/TavilyAPIKeyLabel
-@onready var _max_chat_turns_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer4/MaxChatTurnsLabel
-@onready var _timeout_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer5/TimeoutLabel
-@onready var _temperature_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureLabel
-@onready var _temperature_value_label: Label = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureValueLabel
+@onready var _api_provider_label: Label = $Panel/MarginContainer/VBoxContainer/APIProvider/APIProviderLabel
+@onready var _base_url_label: Label = $Panel/MarginContainer/VBoxContainer/BaseUrl/BaseUrlLabel
+@onready var _api_key_label: Label = $Panel/MarginContainer/VBoxContainer/APIKey/APIKeyLabel
+@onready var _tavily_api_key_label: Label = $Panel/MarginContainer/VBoxContainer/TavilyAPIKey/TavilyAPIKeyLabel
+@onready var _max_chat_turns_label: Label = $Panel/MarginContainer/VBoxContainer/MaxChatTurns/MaxChatTurnsLabel
+@onready var _timeout_label: Label = $Panel/MarginContainer/VBoxContainer/Timeout/TimeoutLabel
+@onready var _temperature_label: Label = $Panel/MarginContainer/VBoxContainer/Temperature/TemperatureLabel
+@onready var _temperature_value_label: Label = $Panel/MarginContainer/VBoxContainer/Temperature/HBoxContainer/TemperatureValueLabel
 @onready var _system_prompt_label: Label = $Panel/MarginContainer/VBoxContainer/SystemPromptLabel
 
-@onready var _api_provider_options: OptionButton = $Panel/MarginContainer/VBoxContainer/HBoxContainer/APIProviderOptions
-@onready var _base_url_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer2/BaseUrlInput
-@onready var _api_key_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer3/APIKeyInput
-@onready var _tavily_api_key_input: LineEdit = $Panel/MarginContainer/VBoxContainer/HBoxContainer7/TavilyAPIKeyInput
-@onready var _max_chat_turns_value: SpinBox = $Panel/MarginContainer/VBoxContainer/HBoxContainer4/MaxChatTurnsValue
-@onready var _timeout_value: SpinBox = $Panel/MarginContainer/VBoxContainer/HBoxContainer5/TimeoutValue
-@onready var _temperature_value: HSlider = $Panel/MarginContainer/VBoxContainer/HBoxContainer6/TemperatureValue
+@onready var _api_provider_options: OptionButton = $Panel/MarginContainer/VBoxContainer/APIProvider/APIProviderOptions
+@onready var _base_url_input: LineEdit = $Panel/MarginContainer/VBoxContainer/BaseUrl/BaseUrlInput
+@onready var _api_key_input: LineEdit = $Panel/MarginContainer/VBoxContainer/APIKey/APIKeyInput
+@onready var _tavily_api_key_input: LineEdit = $Panel/MarginContainer/VBoxContainer/TavilyAPIKey/TavilyAPIKeyInput
+@onready var _max_chat_turns_value: SpinBox = $Panel/MarginContainer/VBoxContainer/MaxChatTurns/MaxChatTurnsValue
+@onready var _timeout_value: SpinBox = $Panel/MarginContainer/VBoxContainer/Timeout/TimeoutValue
+@onready var _temperature_value: HSlider = $Panel/MarginContainer/VBoxContainer/Temperature/HBoxContainer/TemperatureValue
 @onready var _system_prompt_input: TextEdit = $Panel/MarginContainer/VBoxContainer/SystemPromptInput
+
+@onready var _log_level: Label = $Panel/MarginContainer/VBoxContainer/LogLevel/LogLevelLabel
+@onready var _check_debug: CheckBox = $Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer/DebugCheckBox
+@onready var _check_info: CheckBox = $Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer/InfoCheckBox
+@onready var _check_warn: CheckBox = $Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer/WarnCheckBox
+@onready var _check_error: CheckBox = $Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer/ErrorCheckBox
 
 @onready var _save_button: Button = $Panel/MarginContainer/VBoxContainer/CenterContainer/SaveButton
 
@@ -51,6 +57,7 @@ const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 ## 持有加载后的设置资源对象
 var settings_resource: PluginSettings
+
 
 # --- Built-in Functions ---
 
@@ -66,6 +73,7 @@ func _ready() -> void:
 	_max_chat_turns_label.text = "Max Chat Turns:"
 	_timeout_label.text = "Timeout (sec):"
 	_temperature_label.text = "Temperature:"
+	_log_level.text = "Log Level:"
 	_system_prompt_label.text = "System Prompt:"
 	
 	_temperature_value.value_changed.connect(_on_temperature_value_changed)
@@ -79,6 +87,7 @@ func _ready() -> void:
 
 	_load_and_display_settings()
 	_update_ui(SaveButtonState.IDLE)
+
 
 # --- Private Functions ---
 
@@ -123,6 +132,20 @@ func _populate_ui_from_resource() -> void:
 	_temperature_value.value = settings_resource.temperature
 	_on_temperature_value_changed(settings_resource.temperature)
 	_system_prompt_input.text = settings_resource.system_prompt
+	
+	# --- 新增：解析位掩码到 CheckBox ---
+	var flags: int = settings_resource.log_flags
+	# AIChatLogger.FLAG_DEBUG = 1
+	_check_debug.button_pressed = (flags & 1) != 0
+	# AIChatLogger.FLAG_INFO = 2
+	_check_info.button_pressed = (flags & 2) != 0
+	# AIChatLogger.FLAG_WARN = 4
+	_check_warn.button_pressed = (flags & 4) != 0
+	# AIChatLogger.FLAG_ERROR = 8
+	_check_error.button_pressed = (flags & 8) != 0
+	# 立即应用到 Logger (确保编辑器启动时就生效)
+	AIChatLogger.set_flags(flags)
+
 
 # --- Signal Callbacks ---
 
@@ -143,6 +166,21 @@ func _on_save_button_pressed() -> void:
 	settings_resource.network_timeout = int(_timeout_value.value)
 	settings_resource.temperature = _temperature_value.value
 	settings_resource.system_prompt = _system_prompt_input.text
+	
+	# --- 新增：从 CheckBox 构建位掩码 ---
+	var new_flags: int = 0
+	if _check_debug.button_pressed:
+		new_flags |= 1
+	if _check_info.button_pressed:
+		new_flags |= 2
+	if _check_warn.button_pressed:
+		new_flags |= 4
+	if _check_error.button_pressed:
+		new_flags |= 8
+	
+	settings_resource.log_flags = new_flags
+	# 立即应用更改
+	AIChatLogger.set_flags(new_flags)
 	
 	if ResourceSaver.save(settings_resource, SETTINGS_PATH) == OK:
 		settings_saved.emit()

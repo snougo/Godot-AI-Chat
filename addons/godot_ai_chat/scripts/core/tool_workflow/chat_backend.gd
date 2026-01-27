@@ -45,7 +45,7 @@ func cancel_workflow() -> void:
 ## 处理新的助手响应（流程入口）
 ## [param p_msg]: 从流中构建完整的 ChatMessage 对象
 func process_response(p_msg: ChatMessage) -> void:
-	print("[ChatBackend] Processing response. Role: %s, Content len: %d, Tool calls: %d" % [p_msg.role, p_msg.content.length(), p_msg.tool_calls.size()])
+	AIChatLogger.debug("[ChatBackend] Processing response. Role: %s, Content len: %d, Tool calls: %d" % [p_msg.role, p_msg.content.length(), p_msg.tool_calls.size()])
 	
 	# 获取当前设置，判断是否为 Gemini
 	var settings: PluginSettings = ToolBox.get_plugin_settings()

@@ -40,18 +40,18 @@ theme_override_constants/margin_bottom = 10
 layout_mode = 2
 theme_override_constants/separation = 20
 
-[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1040485962]
+[node name="APIProvider" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1040485962]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="APIProviderLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=202017400]
+[node name="APIProviderLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/APIProvider" unique_id=202017400]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "API Provider:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="APIProviderOptions" type="OptionButton" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer" unique_id=1234724774]
+[node name="APIProviderOptions" type="OptionButton" parent="Panel/MarginContainer/VBoxContainer/APIProvider" unique_id=1234724774]
 layout_mode = 2
 size_flags_horizontal = 3
 text_overrun_behavior = 1
@@ -66,11 +66,11 @@ popup/item_2/id = 2
 popup/item_3/text = "Google Gemini"
 popup/item_3/id = 3
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=242663543]
+[node name="BaseUrl" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=242663543]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="BaseUrlLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2" unique_id=827480794]
+[node name="BaseUrlLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/BaseUrl" unique_id=827480794]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "When using openRouter as API Service Provider, You should input https://openrouter.ai/api, not https://openrouter.ai"
@@ -79,18 +79,18 @@ text = "Base Url:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="BaseUrlInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer2" unique_id=843428671]
+[node name="BaseUrlInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/BaseUrl" unique_id=843428671]
 layout_mode = 2
 size_flags_horizontal = 3
 placeholder_text = "LM Studio: http://127.0.0.1:1234"
 context_menu_enabled = false
 clear_button_enabled = true
 
-[node name="HBoxContainer3" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1606662049]
+[node name="APIKey" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1606662049]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="APIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3" unique_id=54320686]
+[node name="APIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/APIKey" unique_id=54320686]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "When using LM Studio or Ollama, You don't need to provide an API Key."
@@ -99,18 +99,18 @@ text = "API Key(optional):"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="APIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer3" unique_id=777802144]
+[node name="APIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/APIKey" unique_id=777802144]
 layout_mode = 2
 size_flags_horizontal = 3
 context_menu_enabled = false
 clear_button_enabled = true
 secret = true
 
-[node name="HBoxContainer7" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=852785332]
+[node name="TavilyAPIKey" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=852785332]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TavilyAPIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer7" unique_id=1976447385]
+[node name="TavilyAPIKeyLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/TavilyAPIKey" unique_id=1976447385]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Web Search need API Key to work."
@@ -119,18 +119,18 @@ text = "Tavily API Key(optional):"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="TavilyAPIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer7" unique_id=2132418160]
+[node name="TavilyAPIKeyInput" type="LineEdit" parent="Panel/MarginContainer/VBoxContainer/TavilyAPIKey" unique_id=2132418160]
 layout_mode = 2
 size_flags_horizontal = 3
 context_menu_enabled = false
 clear_button_enabled = true
 secret = true
 
-[node name="HBoxContainer4" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1011201739]
+[node name="MaxChatTurns" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1011201739]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="MaxChatTurnsLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4" unique_id=1631490628]
+[node name="MaxChatTurnsLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/MaxChatTurns" unique_id=1631490628]
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Sets the maximum number of dialogue turns to keep in memory.
@@ -140,56 +140,97 @@ text = "Max Chat Turns:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="MaxChatTurnsValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer4" unique_id=472753440]
+[node name="MaxChatTurnsValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/MaxChatTurns" unique_id=472753440]
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 1.0
 value = 8.0
 alignment = 2
 
-[node name="HBoxContainer5" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=783722443]
+[node name="Timeout" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=783722443]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TimeoutLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5" unique_id=758610451]
+[node name="TimeoutLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/Timeout" unique_id=758610451]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Timeout (sec):"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="TimeoutValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer5" unique_id=1675549865]
+[node name="TimeoutValue" type="SpinBox" parent="Panel/MarginContainer/VBoxContainer/Timeout" unique_id=1675549865]
 layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1800.0
 value = 180.0
 alignment = 2
 
-[node name="HBoxContainer6" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=2122965445]
+[node name="Temperature" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=2122965445]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="TemperatureLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=1119834549]
+[node name="TemperatureLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/Temperature" unique_id=1119834549]
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Temperature:"
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="TemperatureValue" type="HSlider" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=451349427]
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer/Temperature" unique_id=1152687733]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_stretch_ratio = 0.93
+alignment = 2
+
+[node name="TemperatureValue" type="HSlider" parent="Panel/MarginContainer/VBoxContainer/Temperature/HBoxContainer" unique_id=451349427]
+layout_mode = 2
+size_flags_horizontal = 3
 max_value = 1.0
 step = 0.09999999999126884
 value = 0.999999999650544
 
-[node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/HBoxContainer6" unique_id=570670142]
+[node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/Temperature/HBoxContainer" unique_id=570670142]
 custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
 text = "1.00"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="LogLevel" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=1424556989]
+layout_mode = 2
+
+[node name="LogLevelLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/LogLevel" unique_id=2117584745]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Log Level:"
+vertical_alignment = 1
+text_overrun_behavior = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer/LogLevel" unique_id=659727771]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+alignment = 2
+
+[node name="DebugCheckBox" type="CheckBox" parent="Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer" unique_id=1327993267]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Debug"
+
+[node name="InfoCheckBox" type="CheckBox" parent="Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer" unique_id=1307547580]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Info"
+
+[node name="WarnCheckBox" type="CheckBox" parent="Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer" unique_id=432740919]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Warn"
+
+[node name="ErrorCheckBox" type="CheckBox" parent="Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer" unique_id=1501342115]
+layout_mode = 2
+size_flags_horizontal = 3
+button_pressed = true
+text = "Error"
 
 [node name="SystemPromptLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer" unique_id=686488560]
 layout_mode = 2

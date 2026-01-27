@@ -14,8 +14,8 @@ const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
 
 ## 核心工具路径 (始终加载)
 const CORE_TOOLS_PATHS: Array[String] = [
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_skill_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_skill_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/api_documents_search_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
@@ -59,7 +59,7 @@ static var active_skills_list: Array[String] = []
 
 ## 初始化默认工具
 static func load_default_tools() -> void:
-	print("[ToolRegistry] Initializing... Scanning skills and loading Core.")
+	AIChatLogger.debug("[ToolRegistry] Initializing... Scanning skills and loading Core.")
 	_scan_skills()
 	# 初始化时，重置挂载列表
 	active_skills_list.clear()
@@ -75,12 +75,12 @@ static func mount_skill(p_skill_name: String) -> bool:
 		return false
 	
 	if p_skill_name in active_skills_list:
-		print("[ToolRegistry] Skill '%s' is already mounted." % p_skill_name)
+		AIChatLogger.debug("[ToolRegistry] Skill '%s' is already mounted." % p_skill_name)
 		return true
 	
 	# 添加到列表末尾 (优先级最高，覆盖前面的)
 	active_skills_list.append(p_skill_name)
-	print("[ToolRegistry] Mounting skill: %s" % p_skill_name)
+	AIChatLogger.debug("[ToolRegistry] Mounting skill: %s" % p_skill_name)
 	
 	rebuild_tool_set()
 	return true
@@ -93,7 +93,7 @@ static func unmount_skill(p_skill_name: String) -> void:
 		return
 	
 	active_skills_list.erase(p_skill_name)
-	print("[ToolRegistry] Unmounting skill: %s" % p_skill_name)
+	AIChatLogger.debug("[ToolRegistry] Unmounting skill: %s" % p_skill_name)
 	
 	rebuild_tool_set()
 
@@ -127,7 +127,7 @@ static func rebuild_tool_set() -> void:
 				if tool_path is String and not tool_path.is_empty():
 					_load_and_register_tool(tool_path)
 	
-	print("[ToolRegistry] Tool set rebuilt. Active Skills: %s. Total Tools: %d" % [str(active_skills_list), ai_tools.size()])
+	AIChatLogger.debug("[ToolRegistry] Tool set rebuilt. Active Skills: %s. Total Tools: %d" % [str(active_skills_list), ai_tools.size()])
 
 
 ## 获取组合后的 System Instructions
@@ -230,11 +230,11 @@ static func _load_skill_from_folder(p_folder_path: String) -> void:
 				if resource:
 					if "skill_name" in resource:
 						available_skills[resource.get("skill_name")] = resource
-						print("[ToolRegistry] -> SUCCESS: Loaded ", resource.get("skill_name"))
+						AIChatLogger.debug("[ToolRegistry] -> SUCCESS: Loaded ", resource.get("skill_name"))
 					else:
-						printerr("[ToolRegistry] -> ERROR: Resource has no 'skill_name'")
+						AIChatLogger.error("[ToolRegistry] -> ERROR: Resource has no 'skill_name'")
 				else:
-					printerr("[ToolRegistry] -> ERROR: load() returned null")
+					AIChatLogger.error("[ToolRegistry] -> ERROR: load() returned null")
 			
 			file_name = dir.get_next()
 		dir.list_dir_end()

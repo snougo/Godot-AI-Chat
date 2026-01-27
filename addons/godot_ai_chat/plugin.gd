@@ -57,7 +57,7 @@ func _exit_tree() -> void:
 	# 注意：ToolRegistry 是静态的，不需要显式清理，
 	# 重新启用插件时会覆盖注册，这是安全的。
 	
-	print("[Godot AI Chat] Plugin disabled.")
+	AIChatLogger.debug("[Godot AI Chat] Plugin disabled.")
 
 
 # --- 内部辅助函数 ---
@@ -76,12 +76,12 @@ func _initialize_plugin_file_environment() -> void:
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
 	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
 	if not FileAccess.file_exists(PLUGIN_SETTINGS_PATH):
-		print("[Godot AI Chat] Settings file not found, creating default...")
+		AIChatLogger.debug("[Godot AI Chat] Settings file not found, creating default...")
 		ToolBox.get_plugin_settings() # 这会创建默认文件
 		need_scan = true
 	
 	# 如果创建了任何新目录或文件，执行一次完整的扫描
 	# 这是唯一一次允许调用 scan() 的地方，因为它在插件加载初期运行
 	if need_scan:
-		print("[Godot AI Chat] Initializing plugin file environment (First Run Scan)...")
+		AIChatLogger.debug("[Godot AI Chat] Initializing plugin file environment (First Run Scan)...")
 		editor_file_system.scan()
