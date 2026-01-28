@@ -54,6 +54,29 @@ func set_owner_recursive(p_node: Node, p_owner: Node) -> void:
 		set_owner_recursive(child, p_owner)
 
 
+## 获取场景树结构的字符串表示
+## [param p_root]: 根节点
+## [return]: 场景树字符串
+func get_scene_tree_string(p_root: Node) -> String:
+	var lines: PackedStringArray = []
+	_traverse_node(p_root, p_root, 0, lines)
+	return "\n".join(lines)
+
+
+## 检查属性在节点上是否有效
+func is_prop_valid(node: Node, prop: String) -> bool:
+	var base = prop.split(":")[0]
+	return (base in node) or has_editor_prop(node, base)
+
+
+## 检查是否包含编辑器属性
+func has_editor_prop(node: Node, prop: String) -> bool:
+	for p in node.get_property_list():
+		if p.name == prop:
+			return true
+	return false
+
+
 ## 检查类型是否兼容
 ## [param p_target_type]: 目标类型
 ## [param p_value_type]: 值类型
@@ -182,6 +205,15 @@ func get_type_name(p_type_int: int) -> String:
 		_: return "Variant"
 
 # --- Private Functions ---
+
+func _traverse_node(node: Node, root: Node, depth: int, lines: PackedStringArray):
+	if node != root and node.owner != root:
+		return
+	var indent = "  ".repeat(depth)
+	lines.append("%s- %s (%s)" % [indent, node.name, node.get_class()])
+	for c in node.get_children():
+		_traverse_node(c, root, depth + 1, lines)
+
 
 ## 转换为 Vector2
 ## [param p_value]: 原始值

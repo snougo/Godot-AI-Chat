@@ -318,9 +318,15 @@ func suspend_content() -> void:
 	if _is_suspended or _typing_active:
 		return
 	
+	# 如果是折叠状态，绝不挂起。
+	# 并且，强制清除任何可能的最小高度锁定，确保它能塌缩到最小（标题栏高度）。
+	if is_folded():
+		if custom_minimum_size.y != 0:
+			custom_minimum_size.y = 0
+		return
+	
 	# 1. 锁定高度：将当前实际高度设为最小高度，防止布局塌陷
 	custom_minimum_size.y = size.y
-	
 	# 2. 隐藏内容：隐藏内部高消耗节点
 	_main_margin_container.visible = false
 	_is_suspended = true
@@ -353,23 +359,23 @@ func _set_title(p_role: String, p_model_name: String) -> void:
 	match p_role:
 		ChatMessage.ROLE_USER: 
 			title = "🧑‍💻 You"
-			if is_folded(): expand() 
+			if is_folded():
+				expand() 
 		
 		ChatMessage.ROLE_ASSISTANT: 
 			title = "🤖 Assistant" + ("/" + p_model_name if not p_model_name.is_empty() else "")
-			if is_folded(): expand()
+			if is_folded():
+				expand()
 		
 		ChatMessage.ROLE_TOOL: 
 			title = "⚙️ Tool Output"
-			if not is_folded(): fold()
-		
-		ChatMessage.ROLE_SYSTEM: 
-			title = "🔧 System"
-			if not is_folded(): fold()
+			if not is_folded():
+				fold()
 		
 		_: 
 			title = p_role.capitalize()
-			if is_folded(): expand()
+			if is_folded():
+				expand()
 
 
 ## 更新流式工具调用参数 UI
@@ -585,14 +591,16 @@ func _create_code_block(p_lang: String) -> void:
 	code_edit.draw_tabs = true
 	code_edit.gutters_draw_line_numbers = true
 	code_edit.minimap_draw = false
-	code_edit.wrap_mode = TextEdit.LINE_WRAPPING_NONE
-	code_edit.mouse_filter = Control.MOUSE_FILTER_PASS
+	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_NONE
+	code_edit.mouse_filter = CodeEdit.MOUSE_FILTER_PASS
 	
 	_content_container.add_child(code_edit)
 	_last_ui_node = code_edit
 	
 	var header: HBoxContainer = HBoxContainer.new()
 	var lang_label: Label = Label.new()
+	lang_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lang_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_CHAR
 	lang_label.text = p_lang if not p_lang.is_empty() else "Code"
 	lang_label.modulate = Color(0.7, 0.7, 0.7)
 	
@@ -642,8 +650,6 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		_finish_typing()
 		_last_ui_node = _create_text_block("", p_instant)
 	
-	#var safe_text: String = p_text.replace("[", "[lb]")
-	
 	if p_instant:
 		_last_ui_node.text += p_text
 	else:
@@ -658,13 +664,12 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 ## 创建文本块 UI
 func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabel:
 	var rtl: RichTextLabel = RichTextLabel.new()
-	rtl.bbcode_enabled = true
-	rtl.text = p_initial_text
+	rtl.bbcode_enabled = false
 	rtl.fit_content = true
 	rtl.selection_enabled = true
 	rtl.focus_mode = Control.FOCUS_CLICK
-	# [Fix] 显式设置自动换行模式，确保在任何加载时序下都能正确换行
 	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rtl.text = p_initial_text
 	
 	if not p_instant:
 		rtl.visible_characters = 0

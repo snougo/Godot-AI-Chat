@@ -13,12 +13,16 @@ extends Control
 @onready var _chat_backend: ChatBackend = $ChatBackend
 @onready var _current_chat_window: CurrentChatWindow = $CurrentChatWindow
 
+# --- Public Vars ---
+
+# 检查是否是首次初始化
+var is_plugin_init: bool = false
+
 # --- Private Vars ---
 
-## 会话管理器实例
+# 会话管理器实例
 var _session_manager: SessionManager
-
-## 状态锁，防止新建按钮连击导致逻辑错乱
+# 状态锁，防止新建按钮连击导致逻辑错乱
 var _is_creating_new_chat: bool = false
 
 
@@ -98,7 +102,7 @@ func _ready() -> void:
 	_current_chat_window.token_usage_updated.connect(_chat_ui.update_token_cost_display)
 	
 	# --- 初始化 ---
-	_network_manager.get_model_list()
+	#_network_manager.get_model_list()
 
 
 # --- Public Functions ---
@@ -121,28 +125,69 @@ func _update_turn_info() -> void:
 		_chat_ui.update_turn_display(0, settings.max_chat_turns)
 
 
+## 导出 Markdown
+func _export_markdown(p_path: String) -> void:
+	var success: bool = ChatArchive.save_to_markdown(_current_chat_window.chat_history.messages, p_path)
+	if success:
+		_chat_ui.show_confirmation("Exported to %s" % p_path)
+
+
+func _connect_history_ui_signals() -> void:
+	var history: ChatMessageHistory = _current_chat_window.chat_history
+	if history:
+		# 确保不重复连接
+		if not history.changed.is_connected(_update_turn_info):
+			history.changed.connect(_update_turn_info)
+		
+		# 立即执行一次刷新
+		_update_turn_info()
+
+
 # --- Signal Callbacks ---
 
 ## 当鼠标进入ChatUI时触发
 func _on_chat_ui_mouse_entered() -> void:
-	# 自动加载最近的对话存档
-	# 防御性检查：确保没有活动会话时才自动加载
-	if not _session_manager.has_active_session():
-		var archive_list := ChatArchive.get_archive_list()
-		if not archive_list.is_empty():
-			# 加载最新的存档（get_archive_list() 已按时间倒序排列）
-			var latest_archive = archive_list[0]
-			AIChatLogger.debug("[Godot AI Chat] Auto-loading latest chat archive: " + latest_archive)
-			
-			var is_success: bool = _session_manager.load_session(latest_archive)
-			if is_success:
-				_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % latest_archive)
-				_connect_history_ui_signals()
+	# 将插件启用时自动加载会话存档的逻辑移入
+	# 减轻插件启用时的加载顿感
+	
+	if is_plugin_init:
+		if _chat_ui.mouse_entered.is_connected(_on_chat_ui_mouse_entered):
+			_chat_ui.mouse_entered.disconnect(_on_chat_ui_mouse_entered)
+			AIChatLogger.debug("[ChatHub] Disconnect ChatUI signal mouse_entered to _on_chat_ui_mouse_entered")
+	else:
+		# 优先进行赋值
+		# 防止重复触发下面的执行逻辑
+		is_plugin_init = true
+		
+		# 自动加载最近的对话存档
+		# 防御性检查：确保没有活动会话时才自动加载
+		if not _session_manager.has_active_session():
+			var archive_list := ChatArchive.get_archive_list()
+			if not archive_list.is_empty():
+				# 加载最新的存档（get_archive_list() 已按时间倒序排列）
+				var latest_archive = archive_list[0]
+				AIChatLogger.debug("[Godot AI Chat] Auto-loading latest chat archive: " + latest_archive)
+				
+				var is_success: bool = _session_manager.load_session(latest_archive)
+				if is_success:
+					_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: %s" % latest_archive)
+					_connect_history_ui_signals()
+				else:
+					_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Failed to load latest archive")
 			else:
-				_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Failed to load latest archive")
-		else:
-			# 如果没有存档，保持原有行为
-			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "No Chat Active: Please 'New' or 'Load' a chat")
+				# 如果没有存档，自动创建新对话
+				AIChatLogger.debug("[Godot AI Chat] No archives found, creating new session automatically")
+				var new_filename: String = _session_manager.create_new_session()
+				if not new_filename.is_empty():
+					_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created: " + new_filename)
+					_connect_history_ui_signals()
+				else:
+					_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Failed to create new session")
+		
+		await get_tree().create_timer(0.5).timeout
+		
+		# 初始化
+		_network_manager.get_model_list()
 
 
 ## 新建会话
@@ -296,21 +341,3 @@ func _on_assistant_reply_completed(_p_final_msg: ChatMessage, p_additional_histo
 		_current_chat_window.chat_history.emit_changed()
 	
 	_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
-
-
-## 导出 Markdown
-func _export_markdown(p_path: String) -> void:
-	var success: bool = ChatArchive.save_to_markdown(_current_chat_window.chat_history.messages, p_path)
-	if success:
-		_chat_ui.show_confirmation("Exported to %s" % p_path)
-
-
-func _connect_history_ui_signals() -> void:
-	var history: ChatMessageHistory = _current_chat_window.chat_history
-	if history:
-		# 确保不重复连接
-		if not history.changed.is_connected(_update_turn_info):
-			history.changed.connect(_update_turn_info)
-		
-		# 立即执行一次刷新
-		_update_turn_info()

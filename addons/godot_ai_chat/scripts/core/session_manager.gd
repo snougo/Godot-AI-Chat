@@ -22,12 +22,14 @@ var current_history_path: String = ""
 var _chat_ui: ChatUI
 var _current_chat_window: CurrentChatWindow
 
+
 # --- Built-in Functions ---
 
 func _init(p_chat_ui: ChatUI, p_current_chat_window: CurrentChatWindow) -> void:
 	_chat_ui = p_chat_ui
 	_current_chat_window = p_current_chat_window
 	_ensure_archive_dir()
+
 
 # --- Public Functions ---
 

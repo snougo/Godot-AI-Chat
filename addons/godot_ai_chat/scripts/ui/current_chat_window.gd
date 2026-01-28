@@ -13,7 +13,7 @@ extends Node
 signal token_usage_updated(usage: Dictionary)
 
 # --- Constants ---
-const CULLING_INTERVAL: float = 0.15 # 每秒检测约 6-7 次，足够平滑且低耗
+const CULLING_INTERVAL: float = 0.5 # 每秒检测2次，足够平滑且低耗
 ## 消息块场景
 const chat_message_block_scene: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
 
@@ -27,6 +27,7 @@ var chat_scroll_container: ScrollContainer
 var chat_history: ChatMessageHistory
 ## 当前使用的模型名称
 var current_model_name: String = ""
+var is_plugin_init: bool = false
 
 # --- Private Vars ---
 
@@ -250,7 +251,7 @@ func _update_visibility_culling() -> void:
 	# --- 打印 Debug 信息 ---
 	# 只有当数据发生变化或者每隔一定时间打印一次，避免刷屏
 	# 这里为了演示简单，我们只在总数大于 0 时打印
-	if visible_count > 8:
+	if visible_count > 12:
 		AIChatLogger.debug("Debug: Total: %d | Visible: %d | Suspended: %d" % [total_count, visible_count, suspended_count])
 
 

@@ -12,7 +12,7 @@ signal get_model_list_request_started
 signal get_model_list_request_succeeded(model_list: Array[String])
 signal get_model_list_request_failed(error: String)
 
-## 流式相关信号
+# 流式相关信号
 signal new_chat_request_sending
 signal new_stream_chunk_received(chunk: Dictionary)
 signal chat_stream_request_completed
@@ -37,10 +37,12 @@ var api_base_url: String = ""
 var temperature: float = 0.7
 var current_model_name: String = ""
 
+
 # --- Built-in Functions ---
 
 func _ready() -> void:
 	_http_request_node.timeout = 10.0
+
 
 # --- Public Functions ---
 

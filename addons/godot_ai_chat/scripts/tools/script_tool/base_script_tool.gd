@@ -32,6 +32,25 @@ func validate_file_extension(p_path: String, p_allowed_extensions: Array = []) -
 	return ""
 
 
+## 获取带有行号的代码内容
+## [param p_editor]: 编辑器控件
+## [return]: 格式化后的代码字符串
+func get_numbered_code(p_editor: Control) -> String:
+	var total_lines: int = p_editor.get_line_count()
+	var result: String = ""
+	
+	# 计算最大行号的位数，用于对齐
+	var padding: int = str(total_lines).length()
+	
+	for i in range(total_lines):
+		var line_content: String = p_editor.get_line(i)
+		# 格式: 行号 | 内容
+		# %*d 表示动态宽度的整数，这里用 padding
+		result += "%*d | %s\n" % [padding, i + 1, line_content]
+		
+	return result
+
+
 ## 将脚本代码解析为逻辑切片
 ## [param p_code]: 脚本代码字符串
 ## [return]: 切片数组，每个切片包含 start_line 和 end_line
@@ -177,6 +196,54 @@ func apply_indentation(p_code: String, p_indent: String) -> String:
 		indented_code += p_indent + line + "\n"
 	
 	return indented_code
+
+
+# --- Helpers (Protected) ---
+
+func _open_script_deferred(path: String) -> void:
+	if FileAccess.file_exists(path):
+		var res = load(path)
+		if res and (res is Script):
+			EditorInterface.edit_script(res)
+
+
+## 获取 CodeEdit 实例。如果 path 不为空且不是当前脚本，会尝试打开它。
+## [param p_path]: 目标脚本路径。如果为空，尝试获取当前活跃的脚本编辑器。
+## [return]: CodeEdit 控件或 null
+func _get_code_edit(p_path: String) -> CodeEdit:
+	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
+	
+	# 1. 检查当前打开的脚本是否匹配
+	var current_script: Script = script_editor.get_current_script()
+	if current_script and not p_path.is_empty() and current_script.resource_path == p_path:
+		return _get_active_code_edit()
+	
+	# 2. 如果不匹配，或者路径不为空，尝试加载并打开
+	if not p_path.is_empty():
+		if not FileAccess.file_exists(p_path):
+			return null
+		var res = load(p_path)
+		if not res or not (res is Script):
+			return null
+		EditorInterface.edit_script(res)
+		# 此时编辑器应该已经切换，获取当前的 code edit
+		return _get_active_code_edit()
+	
+	# 3. 路径为空，直接返回当前活跃的
+	return _get_active_code_edit()
+
+
+## 内部：获取当前 Tab 的 CodeEdit
+func _get_active_code_edit() -> CodeEdit:
+	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
+	var current_editor_base: ScriptEditorBase = script_editor.get_current_editor()
+	if not current_editor_base:
+		return null
+	
+	var base_control: Control = current_editor_base.get_base_editor()
+	if base_control is CodeEdit:
+		return base_control
+	return null
 
 
 # --- Private Functions ---

@@ -21,24 +21,17 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/web_search_tool.gd",
 	
-	#"res://addons/godot_ai_chat/scripts/tools/other_tool/create_folder_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/other_tool/create_folder_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/other_tool/move_file_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/other_tool/manage_markdown_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/other_tool/move_file_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/other_tool/view_image_tool.gd",
 	
-	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/add_new_node_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/create_new_scene_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/get_current_active_scene_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/get_node_property_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/open_scene_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/set_node_property_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_inspector_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_manager_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_node_manipulation_tool.gd",
 	
-	#"res://addons/godot_ai_chat/scripts/tools/script_tool/create_new_script_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/script_tool/fill_empty_script_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/script_tool/get_current_active_script_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/script_tool/insert_script_code_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/script_tool/open_script_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/script_tool/replace_script_code_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/script_tool/code_editor_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/script_tool/script_manager_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/todo_list_tool.gd"
@@ -54,6 +47,7 @@ static var available_skills: Dictionary = {}
 
 ## 当前已挂载的技能列表 (有序数组，后加载的覆盖先加载的)
 static var active_skills_list: Array[String] = []
+
 
 # --- Public Functions ---
 
@@ -198,6 +192,7 @@ static func convert_schema_to_gemini(p_schema: Dictionary) -> Dictionary:
 		for key in new_schema["properties"]:
 			new_schema["properties"][key] = convert_schema_to_gemini(new_schema["properties"][key])
 	return new_schema
+
 
 # --- Private Functions ---
 
