@@ -251,7 +251,7 @@ func _update_visibility_culling() -> void:
 	# --- 打印 Debug 信息 ---
 	# 只有当数据发生变化或者每隔一定时间打印一次，避免刷屏
 	# 这里为了演示简单，我们只在总数大于 0 时打印
-	if visible_count > 12:
+	if visible_count > 18:
 		AIChatLogger.debug("Debug: Total: %d | Visible: %d | Suspended: %d" % [total_count, visible_count, suspended_count])
 
 

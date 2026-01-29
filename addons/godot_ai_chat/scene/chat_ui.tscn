@@ -122,7 +122,6 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
-disabled = true
 text_overrun_behavior = 1
 fit_to_longest_item = false
 
@@ -158,7 +157,6 @@ custom_minimum_size = Vector2(0, 35)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
-disabled = true
 text_overrun_behavior = 1
 fit_to_longest_item = false
 
@@ -182,7 +180,7 @@ expand_icon = true
 [node name="UserInput" type="TextEdit" parent="TabContainer/Chat/VBoxContainer" unique_id=100000477]
 layout_mode = 2
 size_flags_vertical = 3
-size_flags_stretch_ratio = 0.4
+size_flags_stretch_ratio = 0.6
 theme_override_styles/focus = SubResource("StyleBoxFlat_6j1bt")
 placeholder_text = "Input Here"
 wrap_mode = 1

@@ -14,24 +14,24 @@ const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
 
 ## 核心工具路径 (始终加载)
 const CORE_TOOLS_PATHS: Array[String] = [
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_skill_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_skill_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/api_documents_search_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/web_search_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/other_tool/create_folder_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/other_tool/move_file_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/other_tool/create_folder_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/other_tool/move_file_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/other_tool/manage_markdown_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/other_tool/view_image_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_inspector_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_manager_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_node_manipulation_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_inspector_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_manager_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/scene_tool/scene_node_manager_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/script_tool/code_editor_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/script_tool/script_manager_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/script_tool/code_editor_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/script_tool/script_manager_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/todo_list_tool.gd"

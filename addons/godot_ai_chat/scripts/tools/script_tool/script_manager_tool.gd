@@ -10,7 +10,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "script_manager"
-	tool_description = "Manage script files: Create, Open, or Switch scripts. Returns full code with line numbers."
+	tool_description = "Manage script files: Create, Open, or Switch scripts. Returns structured code sliced by logic blocks."
 
 
 # --- Public Functions ---
@@ -59,11 +59,11 @@ func execute(p_args: Dictionary) -> Dictionary:
 		if FileAccess.file_exists(path):
 			return {"success": false, "data": "File already exists: %s" % path}
 		
-		var base_dir = path.get_base_dir()
+		var base_dir: String = path.get_base_dir()
 		if not DirAccess.dir_exists_absolute(base_dir):
 			return {"success": false, "data": "Directory does not exist: %s" % base_dir}
-			
-		var file = FileAccess.open(path, FileAccess.WRITE)
+		
+		var file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 		if not file:
 			return {"success": false, "data": "Failed to create file: %s" % path}
 		
@@ -72,13 +72,15 @@ func execute(p_args: Dictionary) -> Dictionary:
 		file.store_string(content)
 		file.close()
 		
-		EditorInterface.get_resource_filesystem().scan()
+		ToolBox.update_editor_filesystem(path)
 		
 		# Open it immediately to get the content
-		var code_edit = _get_code_edit(path)
+		var code_edit: CodeEdit = _get_code_edit(path)
 		if code_edit:
-			var numbered_code = get_numbered_code(code_edit)
-			return {"success": true, "data": "Created and opened %s:\n\n%s" % [path, numbered_code]}
+			_focus_script_editor()
+			# Use base class method
+			var sliced_view: String = get_sliced_code_view(code_edit)
+			return {"success": true, "data": "Created and opened %s. Structure:\n\n%s" % [path, sliced_view]}
 		else:
 			return {"success": true, "data": "Script created at: %s (Failed to open automatically)" % path}
 	
@@ -87,10 +89,12 @@ func execute(p_args: Dictionary) -> Dictionary:
 		if not FileAccess.file_exists(path):
 			return {"success": false, "data": "File not found: %s" % path}
 		
-		var code_edit = _get_code_edit(path)
+		var code_edit: CodeEdit = _get_code_edit(path)
 		if code_edit:
-			var numbered_code = get_numbered_code(code_edit)
-			return {"success": true, "data": "Opened %s:\n\n%s" % [path, numbered_code]}
+			_focus_script_editor()
+			# Use base class method
+			var sliced_view: String = get_sliced_code_view(code_edit)
+			return {"success": true, "data": "Opened %s. Structure:\n\n%s" % [path, sliced_view]}
 		else:
 			return {"success": false, "data": "Failed to open script editor for: %s" % path}
 

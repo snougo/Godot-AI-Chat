@@ -3,7 +3,7 @@ class_name BaseSceneTool
 extends AiTool
 
 ## 场景工具的基类。
-## 提供节点属性应用、类型转换和场景树遍历的通用功能。
+## 提供节点属性应用、类型转换、场景树遍历和常用获取逻辑的通用功能。
 
 # --- Enums / Constants ---
 
@@ -12,6 +12,24 @@ const PROPERTY_BLACKLIST: Array[String] = ["scale"]
 
 
 # --- Public Functions ---
+
+## 获取当前活跃的编辑场景根节点
+## [return]: 根节点，如果失败返回 null
+func get_active_scene_root() -> Node:
+	if not Engine.is_editor_hint():
+		return null
+	return EditorInterface.get_edited_scene_root()
+
+
+## 根据路径从根节点获取目标节点
+## [param p_root]: 场景根节点
+## [param p_path]: 节点路径（"." 表示根节点）
+## [return]: 目标节点，如果未找到返回 null
+func get_node_from_root(p_root: Node, p_path: String) -> Node:
+	if p_path == "." or p_path.is_empty():
+		return p_root
+	return p_root.get_node_or_null(p_path)
+
 
 ## 将属性字典应用到节点
 ## [param p_node]: 目标节点
@@ -61,6 +79,20 @@ func get_scene_tree_string(p_root: Node) -> String:
 	var lines: PackedStringArray = []
 	_traverse_node(p_root, p_root, 0, lines)
 	return "\n".join(lines)
+
+
+## 根据类型字符串实例化节点
+## [param p_type_str]: 类名 (如 "Node3D") 或 资源路径 (如 "res://player.tscn")
+## [return]: 实例化后的节点，失败返回 null
+func instantiate_node_from_type(p_type_str: String) -> Node:
+	if p_type_str.begins_with("res://"):
+		if ResourceLoader.exists(p_type_str):
+			var res = load(p_type_str)
+			if res is PackedScene:
+				return res.instantiate()
+	elif ClassDB.class_exists(p_type_str):
+		return ClassDB.instantiate(p_type_str)
+	return null
 
 
 ## 检查属性在节点上是否有效
@@ -185,8 +217,6 @@ func try_infer_type_from_string(p_val_str: Variant) -> Variant:
 
 
 ## 获取类型名称
-## [param p_type_int]: 类型整数
-## [return]: 类型名称字符串
 func get_type_name(p_type_int: int) -> String:
 	match p_type_int:
 		TYPE_BOOL: return "bool"
@@ -210,14 +240,20 @@ func _traverse_node(node: Node, root: Node, depth: int, lines: PackedStringArray
 	if node != root and node.owner != root:
 		return
 	var indent = "  ".repeat(depth)
-	lines.append("%s- %s (%s)" % [indent, node.name, node.get_class()])
+	var extra_info: String = ""
+	
+	# Add script info if present
+	var script = node.get_script()
+	if script:
+		var script_path: String = script.resource_path.get_file()
+		extra_info += " 📜" + script_path
+		
+	lines.append("%s- %s (%s)%s" % [indent, node.name, node.get_class(), extra_info])
 	for c in node.get_children():
 		_traverse_node(c, root, depth + 1, lines)
 
 
 ## 转换为 Vector2
-## [param p_value]: 原始值
-## [return]: Vector2 值
 func _convert_to_vector2(p_value: Variant) -> Variant:
 	if p_value is Array and p_value.size() >= 2:
 		return Vector2(p_value[0], p_value[1])
@@ -230,8 +266,6 @@ func _convert_to_vector2(p_value: Variant) -> Variant:
 
 
 ## 转换为 Vector3
-## [param p_value]: 原始值
-## [return]: Vector3 值
 func _convert_to_vector3(p_value: Variant) -> Variant:
 	if p_value is Array and p_value.size() >= 3:
 		return Vector3(p_value[0], p_value[1], p_value[2])
@@ -244,8 +278,6 @@ func _convert_to_vector3(p_value: Variant) -> Variant:
 
 
 ## 转换为 Color
-## [param p_value]: 原始值
-## [return]: Color 值
 func _convert_to_color(p_value: Variant) -> Variant:
 	if p_value is Array and p_value.size() >= 3:
 		if p_value.size() == 4:
@@ -266,9 +298,7 @@ func _convert_to_color(p_value: Variant) -> Variant:
 	return p_value
 
 
-## 转换为 Object
-## [param p_value]: 原始值
-## [return]: Object 值
+## 转换为 Object (支持 res:// 和 new:ClassName)
 func _convert_to_object(p_value: Variant) -> Variant:
 	if p_value is String:
 		if p_value.begins_with("res://"):

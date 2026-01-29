@@ -24,11 +24,10 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	var skill_instructions: String = ToolRegistry.get_combined_system_instructions()
 	
 	if not skill_instructions.is_empty():
-		final_system_prompt += "\n\n=== MOUNTED SKILL INSTRUCTIONS ===\n"
-		final_system_prompt += "The following specialized skills have been mounted to your capability set. Use them when appropriate.\n"
+		final_system_prompt += "\n\n===== SKILL INSTRUCTIONS =====\n"
+		final_system_prompt += "\n"
 		final_system_prompt += skill_instructions
 		final_system_prompt += "\n==================================\n"
-		final_system_prompt += "IMPERATIVE: You must strictly follow the guidelines above in your response."
 	
 	# 3. 截断历史记录并组合
 	# ChatMessageHistory.get_truncated_messages 已经包含了把 System Prompt 放在第一位的逻辑

@@ -14,7 +14,7 @@ func get_parameters_schema() -> Dictionary:
 			"action": {
 				"type": "string",
 				"enum": ["open", "create", "switch"],
-				"description": "The action to perform. 'switch' is synonymous with 'open' for already open scenes."
+				"description": "The action to perform."
 			},
 			"scene_path": {
 				"type": "string",
@@ -37,10 +37,22 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var action: String = p_args.get("action", "")
 	var scene_path: String = p_args.get("scene_path", "")
 	
+	# Common Validation
+	if scene_path.is_empty():
+		return {"success": false, "data": "scene_path is required."}
+	
+	# 1. Security Check (Path Blacklist)
+	var safety_err: String = validate_path_safety(scene_path)
+	if not safety_err.is_empty():
+		return {"success": false, "data": safety_err}
+	
+	# 2. Extension Check
+	var ext: String = scene_path.get_extension().to_lower()
+	if ext != "tscn":
+		return {"success": false, "data": "Invalid file extension '%s'. Allowed extensions: .tscn, .scn" % ext}
+	
 	match action:
 		"open", "switch":
-			if scene_path.is_empty():
-				return {"success": false, "data": "scene_path is required for '%s'." % action}
 			if not FileAccess.file_exists(scene_path):
 				return {"success": false, "data": "File not found: %s" % scene_path}
 			
@@ -49,45 +61,40 @@ func execute(p_args: Dictionary) -> Dictionary:
 			return {"success": true, "data": "Opened/Switched to scene: %s" % scene_path}
 		
 		"create":
-			return _execute_create(p_args)
+			return _execute_create(p_args, scene_path)
 	
 	return {"success": false, "data": "Unknown action: %s" % action}
 
 
-func _execute_create(p_args: Dictionary) -> Dictionary:
-	var path: String = p_args.get("scene_path", "")
-	if path.is_empty():
-		return {"success": false, "data": "scene_path required for create."}
-	if FileAccess.file_exists(path):
-		return {"success": false, "data": "File already exists: %s" % path}
+func _execute_create(p_args: Dictionary, p_path: String) -> Dictionary:
+	if FileAccess.file_exists(p_path):
+		return {"success": false, "data": "File already exists: %s" % p_path}
 	
 	var type: String = p_args.get("root_node_type", "Node")
 	var name: String = p_args.get("root_node_name", "")
 	if name.is_empty():
-		name = path.get_file().get_basename()
+		name = p_path.get_file().get_basename()
 	
-	var root: Node = _instantiate_node(type)
+	var root: Node = instantiate_node_from_type(type)
 	if not root:
 		return {"success": false, "data": "Invalid root class/type: %s" % type}
 	
 	root.name = name
-	var packed = PackedScene.new()
-	packed.pack(root)
-	var err = ResourceSaver.save(packed, path)
-	root.free()
+	var packed: PackedScene = PackedScene.new()
+	var pack_result := packed.pack(root)
+	
+	if pack_result != OK:
+		root.free()
+		return {"success": false, "data": "Failed to pack scene: %d" % pack_result}
+		
+	var err: Error = ResourceSaver.save(packed, p_path)
+	
+	if is_instance_valid(root):
+		root.free()
 	
 	if err == OK:
-		EditorInterface.open_scene_from_path(path)
-		return {"success": true, "data": "Created and opened scene: %s" % path}
+		# Force filesystem scan to ensure the new file is recognized by the editor
+		ToolBox.update_editor_filesystem(p_path)
+		return {"success": true, "data": "Scene Created: %s, Using `open` to open scene" % p_path}
+		
 	return {"success": false, "data": "Failed to save scene: %d" % err}
-
-
-func _instantiate_node(type_str: String) -> Node:
-	if type_str.begins_with("res://"):
-		if ResourceLoader.exists(type_str):
-			var res = load(type_str)
-			if res is PackedScene:
-				return res.instantiate()
-	elif ClassDB.class_exists(type_str):
-		return ClassDB.instantiate(type_str)
-	return null
