@@ -15,6 +15,9 @@
 	- 严格按照 [Skill.md 模版] 编写文档，确保“指令”部分具有高度可操作性（每一步骤建议以动词开头，逻辑清晰无歧义）。
 5. **预览与建议**：在回复中展示 `Skill.md` 文档预览，并向用户推荐该技能配套工具。
 
+### 拓展引用
+如需深入了解自定义技能 Skill，请查阅 `res://addons/godot_ai_chat/skills/skill_generator/reference/` 文件夹中的引用文件。
+
 ### 示列
 
 `Skill.md` 模版格式：
@@ -34,6 +37,9 @@
 2. xxxx
 .......
 x. xxxx
+
+### 拓展引用
+用于给LLM模型按需读取的拓展引用文件，默认书写格式为：如需深入了解xxxxx，请查阅 `res://addons/godot_ai_chat/skills/xxx/reference/` 文件夹中的引用文件。创建时默认可以不写，保持空白。
 
 ### 示列
 （该技能的使用场景或示列）

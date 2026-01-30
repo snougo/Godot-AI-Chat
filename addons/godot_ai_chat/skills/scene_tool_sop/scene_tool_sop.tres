@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://dgw0d2fkpoa7u"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_iif1a"]
+
+[resource]
+script = ExtResource("1_iif1a")
+skill_name = "Scene Tool SOP"
+description = "本技能旨在规范 Godot 场景与节点操作工具的使用流程。由于场景数据的复杂性和状态依赖性，必须严格遵循“观察-决策-行动”的单步循环模式，严禁盲目操作或批量执行。"
+instruction_file = "res://addons/godot_ai_chat/skills/scene_tool_sop/Skill.md"
+tools = Array[String](["uid://csv6lhjsforff", "uid://wp7xufdhqmke", "uid://dvd1lvlsn7tje", "uid://c6vuy1bx213ea", "uid://c4oiyceux12sy"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

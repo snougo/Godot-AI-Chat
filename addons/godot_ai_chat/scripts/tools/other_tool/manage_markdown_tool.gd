@@ -14,7 +14,7 @@ const ALLOWED_EXTENSIONS: Array[String] = ["md"]
 
 func _init() -> void:
 	tool_name = "manage_markdown"
-	tool_description = "Manage GENERIC Markdown files. Do NOT use this for 'TODO.md'; use 'todo_list' tool instead."
+	tool_description = "Manage GENERIC Markdown files. Do NOT use this for 'TODO.md'; use 'todo_list' instead."
 
 
 # --- Public Functions ---
