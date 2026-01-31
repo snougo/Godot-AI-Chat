@@ -301,7 +301,7 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 		var rect: TextureRect = TextureRect.new()
 		rect.texture = tex
 		rect.size = Vector2(400, 400)
-		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rect.expand_mode = TextureRect.EXPAND_FIT_HEIGHT_PROPORTIONAL
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		rect.custom_minimum_size = Vector2(0, 250) 
 		

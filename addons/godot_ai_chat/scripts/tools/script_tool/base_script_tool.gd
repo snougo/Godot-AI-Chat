@@ -2,7 +2,7 @@
 class_name BaseScriptTool
 extends AiTool
 
-## 脚本工具的基类
+## 脚本工具的基类 (v3: Top-level Gaps Only)
 
 # --- Enums / Constants ---
 
@@ -34,97 +34,128 @@ func get_sliced_code_view(p_editor: CodeEdit) -> String:
 	
 	for i in range(slices.size()):
 		var slice: Dictionary = slices[i]
-		var content: String = _get_code_range_formatted(p_editor, slice.start_line, slice.end_line)
-		result += "**[Slice %d] [%s] (Lines %d-%d)**\n" % [i + 1, slice.type, slice.start_line + 1, slice.end_line + 1]
-		result += "```gdscript\n%s```\n\n" % content
+		var start_l = slice.start_line + 1
+		var end_l = slice.end_line + 1
+		
+		if slice.type == "GAP":
+			# GAP 类型简化显示，作为插入锚点
+			result += "**[Slice %d] [GAP] (Lines %d-%d)**\n" % [i + 1, start_l, end_l]
+			result += "< EMPTY LINES >\n\n"
+		else:
+			# 逻辑切片显示完整内容
+			var content: String = _get_code_range_formatted(p_editor, slice.start_line, slice.end_line)
+			result += "**[Slice %d] [%s] (Lines %d-%d)**\n" % [i + 1, slice.type, start_l, end_l]
+			result += "```gdscript\n%s```\n\n" % content
 	return result
 
 
-## 核心解析逻辑：将代码解析为细粒度切片
+## 核心解析逻辑：将代码解析为细粒度切片 (v3: Scope-Aware Gaps)
 func parse_script_to_slices(p_code: String) -> Array:
 	var lines: PackedStringArray = p_code.split("\n")
 	var slices := []
 	var count := lines.size()
-	if count == 0: return []
-	
-	var current_start := 0
 	var i := 0
 	
 	while i < count:
-		# 1. 吞噬前置的注释和空行 (Context)
-		# 这些行属于下一个即将开始的切片
-		var context_start := i
-		while i < count:
-			var line_stripped := lines[i].strip_edges()
-			if line_stripped.is_empty() or line_stripped.begins_with("#"):
+		var line := lines[i]
+		var stripped := line.strip_edges()
+		
+		# 1. 识别并处理 GAP (仅顶层空行)
+		if stripped.is_empty():
+			var start := i
+			# 贪婪吞噬后续空行
+			while i < count and lines[i].strip_edges().is_empty():
 				i += 1
-			else:
+			
+			slices.append({
+				"start_line": start,
+				"end_line": i - 1,
+				"type": "GAP",
+				"signature": "<EMPTY LINES>"
+			})
+			continue
+			
+		# 2. 识别逻辑切片 (代码或独立注释)
+		var slice_start := i
+		var body_start := -1 # 实际代码定义的起始行 (跳过前置注释)
+		var type := ""
+		
+		# 2.1 扫描前置注释 (Context)
+		while i < count:
+			var l_scan := lines[i]
+			var s_scan := l_scan.strip_edges()
+			
+			if s_scan.is_empty():
+				# 注释后遇到了空行 -> 说明之前的注释是独立的
+				type = "COMMENT"
+				body_start = slice_start # 签名取第一行注释
+				break 
+			elif not s_scan.begins_with("#"):
+				# 遇到了非空且非注释行 -> 代码开始
+				body_start = i
+				type = _identify_line_type(l_scan)
 				break
+			else:
+				# 继续吞噬注释
+				i += 1
 		
-		if i >= count:
-			# 文件末尾的注释/空行归为最后一个切片，或者单独成片
-			if slices.size() > 0:
-				slices[-1]["end_line"] = count - 1
-			break
+		# 2.2 边界处理
+		if body_start == -1:
+			if type == "": type = "COMMENT"
+			if body_start == -1: body_start = slice_start
+			
+			# 如果是因为空行 break 的，i 现在指向那个空行
+			# 结算当前切片
+			slices.append({
+				"start_line": slice_start,
+				"end_line": i - 1,
+				"type": type,
+				"signature": lines[slice_start].strip_edges()
+			})
+			continue
+
+		# 2.3 扫描代码体 (Scope)
+		# i 现在指向 body_start (代码定义行)
+		i += 1 # 进下一行
 		
-		# 2. 识别切片类型和主体
-		var slice_start := context_start
-		var current_line := lines[i]
-		var type := _identify_line_type(current_line)
-		
-		# 3. 确定切片结束位置
-		# 如果是 Scope 类型 (func, class)，需要寻找缩进闭合
-		# 如果是 Single 类型 (var, signal)，通常是一行，但可能有折行
-		var body_start := i
-		i += 1 # 移动到下一行准备检查
-		
-		if type in ["FUNC", "CLASS"]:
+		if type in ["FUNC", "CLASS", "TEST_FUNC"]: # 将来可能支持的类型
+			# Scope 模式：吞噬所有内容，直到遇到顶格非注释代码
 			while i < count:
-				var line := lines[i]
-				if line.strip_edges().is_empty():
+				var l_body := lines[i]
+				var s_body := l_body.strip_edges()
+				
+				if s_body.is_empty():
+					# 空行：在 Scope 内部，空行被视为函数体的一部分，继续吞噬
 					i += 1
 					continue
 				
-				# 如果遇到缩进为0且不是注释的行，说明当前 Scope 结束
-				if not line.begins_with(" ") and not line.begins_with("\t") and not line.strip_edges().begins_with("#"):
+				if l_body.begins_with(" ") or l_body.begins_with("\t") or s_body.begins_with("#"):
+					# 缩进内容或注释：继续吞噬
+					i += 1
+				else:
+					# 遇到顶格代码：Scope 结束
 					break
-				i += 1
 		else:
-			# 对于非 Scope 类型，检查是否有多行定义 (例如 var x = [\n ... ])
-			# 简单策略：只要下一行有缩进，就视为延续
+			# Non-Scope 模式 (VAR, SIGNAL 等)
+			# 遇到空行或顶格代码都切断
 			while i < count:
-				var line := lines[i]
-				if line.strip_edges().is_empty():
-					# 空行可能意味着单行声明结束，也可能是多行声明的内部空行
-					# 预读下一行非空行
-					var next_code_idx := _find_next_non_empty_line(lines, i + 1)
-					if next_code_idx == -1:
-						i = count # 后面全是空行，结束
-						break
-					var next_line := lines[next_code_idx]
-					if next_line.begins_with(" ") or next_line.begins_with("\t"):
-						i = next_code_idx + 1 # 继续包含
-					else:
-						# 下一行顶格，说明当前块结束。
-						# 注意：中间的空行应该归属给谁？通常归属给上一个块。
-						i = next_code_idx 
-						break
-				elif line.begins_with(" ") or line.begins_with("\t"):
+				var l_body := lines[i]
+				if l_body.strip_edges().is_empty():
+					break
+				
+				# 允许缩进延续 (如多行数组定义)
+				if l_body.begins_with(" ") or l_body.begins_with("\t"):
 					i += 1
 				else:
 					break
 		
-		# 4. 记录切片
-		# i 现在指向下一个切片的开始（或者 Context 的开始）
-		# 当前切片范围是 [slice_start, i - 1]
+		# 2.4 结算逻辑切片
 		slices.append({
 			"start_line": slice_start,
 			"end_line": i - 1,
 			"type": type,
 			"signature": lines[body_start].strip_edges()
 		})
-		
-		# 下一次循环从 i 开始
 	
 	return slices
 
@@ -134,18 +165,21 @@ func find_best_match_slice(p_editor: CodeEdit, p_signature: String) -> Dictionar
 	var slices: Array = parse_script_to_slices(p_editor.text)
 	var target := p_signature.strip_edges()
 	
-	# 1. 尝试完全匹配 Signature
-	for slice in slices:
+	# 忽略 GAP 类型的切片进行匹配
+	var valid_slices = slices.filter(func(s): return s.type != "GAP")
+	
+	# 1. 完全匹配
+	for slice in valid_slices:
 		if slice.signature == target:
 			return {"found": true, "slice": slice}
 	
-	# 2. 尝试前缀匹配 (例如用户只给了 "func _ready")
-	for slice in slices:
+	# 2. 前缀匹配
+	for slice in valid_slices:
 		if slice.signature.begins_with(target):
 			return {"found": true, "slice": slice}
 			
-	# 3. 尝试包含匹配 (作为最后手段)
-	for slice in slices:
+	# 3. 包含匹配
+	for slice in valid_slices:
 		if target in slice.signature:
 			return {"found": true, "slice": slice}
 			
@@ -168,13 +202,6 @@ func _identify_line_type(p_line: String) -> String:
 	return "OTHER"
 
 
-func _find_next_non_empty_line(p_lines: PackedStringArray, p_from: int) -> int:
-	for k in range(p_from, p_lines.size()):
-		if not p_lines[k].strip_edges().is_empty():
-			return k
-	return -1
-
-
 func _get_code_range_formatted(p_editor: CodeEdit, p_start: int, p_end: int) -> String:
 	var result := ""
 	var line_count_width := str(p_editor.get_line_count()).length()
@@ -185,7 +212,6 @@ func _get_code_range_formatted(p_editor: CodeEdit, p_start: int, p_end: int) -> 
 
 
 func _get_code_edit(p_path: String) -> CodeEdit:
-	# (保持原有逻辑: 查找或打开编辑器，并聚焦)
 	var script_editor := EditorInterface.get_script_editor()
 	if not p_path.is_empty() and FileAccess.file_exists(p_path):
 		var res = load(p_path)

@@ -16,13 +16,9 @@ const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_skill_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/markdown_manager_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/api_documents_search_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/search_tool/web_search_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/other_tool/manage_markdown_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/other_tool/view_image_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/todo_list_tool.gd"

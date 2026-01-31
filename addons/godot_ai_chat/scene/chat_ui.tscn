@@ -122,7 +122,6 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
-disabled = true
 text_overrun_behavior = 1
 fit_to_longest_item = false
 
