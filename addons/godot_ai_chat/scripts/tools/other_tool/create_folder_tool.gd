@@ -9,7 +9,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "create_folder"
-	tool_description = "Create a new folder (directory) at the specified path. Support creating nested directories (e.g., res://a/b/c)."
+	tool_description = "Creates a new folder (directory) at the specified path. Support creating nested directories (e.g., res://a/b/c)."
 
 
 # --- Public Functions ---

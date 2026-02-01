@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://bhpwwwc3vpxr6"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_t5bru"]
+
+[resource]
+script = ExtResource("1_t5bru")
+skill_name = "Input Mapping Wizard"
+description = "本技能旨在通过自然语言交互快速配置 Godot 项目的 InputMap（按键映射）。支持添加动作、绑定物理按键/鼠标按钮/手柄摇杆，并能自动处理常见的游戏控制模式。"
+instruction_file = "res://addons/godot_ai_chat/skills/input_mapping_wizard/Skill.md"
+tools = Array[String](["uid://dlr4a68e7tifd"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

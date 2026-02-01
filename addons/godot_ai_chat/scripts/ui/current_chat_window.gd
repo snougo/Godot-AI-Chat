@@ -13,9 +13,9 @@ extends Node
 signal token_usage_updated(usage: Dictionary)
 
 # --- Constants ---
-const CULLING_INTERVAL: float = 0.5 # 每秒检测2次，足够平滑且低耗
+const CULLING_INTERVAL: float = 0.2 # 每秒检测5次，足够平滑且低耗
 ## 消息块场景
-const chat_message_block_scene: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
+const CHAT_MESSAGE_BLOCK_SCENE: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
 
 # --- Public Vars ---
 
@@ -40,15 +40,15 @@ func _process(delta: float) -> void:
 	_culling_timer += delta
 	if _culling_timer >= CULLING_INTERVAL:
 		_culling_timer = 0.0
-		_update_visibility_culling()
+		await _update_visibility_culling()
 
 
 # --- Public Functions ---
 
 ## 加载聊天历史资源并刷新显示
-## [param p_history]: 聊天历史资源对象
-func load_history_resource(p_history: ChatMessageHistory) -> void:
-	chat_history = p_history
+## [param p_session_history]: 聊天历史资源对象
+func load_session_history_resource(p_session_history: ChatMessageHistory) -> void:
+	chat_history = p_session_history
 	_refresh_display()
 
 
@@ -179,13 +179,12 @@ func rollback_incomplete_message() -> void:
 			should_pop = true
 			should_continue_rollback = false
 		
-		# 情况 D: User 或 System -> 停止
 		else:
+			# 情况 D: User 或 System -> 停止
 			break
 		
 		if should_pop:
 			chat_history.messages.pop_back()
-		
 		if not should_continue_rollback:
 			break
 		
@@ -212,6 +211,11 @@ func update_token_usage(p_usage: Dictionary) -> void:
 ## 执行可视性剔除逻辑
 func _update_visibility_culling() -> void:
 	if not is_instance_valid(chat_scroll_container) or not is_instance_valid(chat_list_container):
+		return
+	
+	# [安全检查] 如果容器高度为 0，说明布局还没准备好，跳过本次计算
+	# 否则所有节点的 position 都是 0，会导致全部 resume
+	if chat_list_container.size.y <= 1.0:
 		return
 	
 	# 1. 获取视口范围
@@ -251,20 +255,40 @@ func _update_visibility_culling() -> void:
 	# --- 打印 Debug 信息 ---
 	# 只有当数据发生变化或者每隔一定时间打印一次，避免刷屏
 	# 这里为了演示简单，我们只在总数大于 0 时打印
-	if visible_count > 18:
+	if visible_count > 10:
 		AIChatLogger.debug("Debug: Total: %d | Visible: %d | Suspended: %d" % [total_count, visible_count, suspended_count])
+	
+	# [调试] 如果卡死依然发生，请观察控制台输出
+	# 正常情况下，151个消息块，suspended_count 应该在 140 以上
+	#print("Culling: Suspended %d / %d" % [suspended_count, chat_list_container.get_child_count()])
 
 
 ## 刷新整个消息列表显示
 func _refresh_display() -> void:
+	# 1. 先清空现有内容
 	for c in chat_list_container.get_children():
 		c.queue_free()
+	
+	# 2. 分帧加载（关键优化）
+	# 每帧处理1个消息块，避免冻结
+	var batch_size: int = 1
+	var count: int = 0
 	
 	for msg in chat_history.messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM: 
 			continue
+		
 		_add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime, msg.reasoning_content)
+		count += 1
+		
+		# 每加载 batch_size 个，就暂停一帧，把控制权交还给主线程
+		# 这样 _process 中的剔除逻辑就有机会运行，把刚生成的块挂起
+		if count % batch_size == 0:
+			await get_tree().process_frame
 	
+	# 3. 加载完毕后，强制执行一次剔除并滚到底部
+	await get_tree().process_frame
+	_update_visibility_culling()
 	_scroll_to_bottom()
 
 
@@ -281,7 +305,7 @@ func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls
 
 ## 实例化一个新的消息块
 func _create_block() -> ChatMessageBlock:
-	var block: ChatMessageBlock = chat_message_block_scene.instantiate()
+	var block: ChatMessageBlock = CHAT_MESSAGE_BLOCK_SCENE.instantiate()
 	chat_list_container.add_child(block)
 	return block
 

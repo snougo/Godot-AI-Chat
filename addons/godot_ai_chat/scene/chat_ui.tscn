@@ -86,7 +86,7 @@ label_settings = SubResource("LabelSettings_qjs14")
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="CurrentTokenCost" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
+[node name="CurrentTokenUsage" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_cf2p2")
 text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
@@ -118,7 +118,7 @@ theme_override_constants/separation = 10
 [node name="ChatArchiveContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=733507829]
 layout_mode = 2
 
-[node name="ChatArchiveSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=186243956]
+[node name="SessionSelector" type="OptionButton" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=186243956]
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)

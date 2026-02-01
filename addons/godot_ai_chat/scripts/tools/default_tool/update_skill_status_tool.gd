@@ -8,7 +8,7 @@ extends AiTool
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "manage_skill"
+	tool_name = "update_skill_status"
 	tool_description = "Mounts or Unmounts a skill. Mounting a skill gives you access to new tools and instructions."
 
 

@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_7pdkc")
 skill_name = "Material Generator"
-description = "根据用户指定的文件夹，识别其中的纹理贴图，并自动配置并保存对应的 `StandardMaterial3D` 或 `ShaderMaterial` 资源。"
+description = "本技能旨在自动执行基于PBR贴图工作流的材质生成，帮助开发者减轻手动工作量。"
 instruction_file = "res://addons/godot_ai_chat/skills/material_generator/Skill.md"
 tools = Array[String](["uid://cowwxsqfjoudu"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

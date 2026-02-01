@@ -327,8 +327,13 @@ func suspend_content() -> void:
 	
 	# 1. 锁定高度：将当前实际高度设为最小高度，防止布局塌陷
 	custom_minimum_size.y = size.y
+	
 	# 2. 隐藏内容：隐藏内部高消耗节点
-	_main_margin_container.visible = false
+	#_main_margin_container.visible = false
+	
+	# 2. 移出节点：彻底移除子节点，阻断 THEME_CHANGED 和 DRAW 调用
+	remove_child(_main_margin_container) 
+	
 	_is_suspended = true
 
 
@@ -338,10 +343,13 @@ func resume_content() -> void:
 		return
 	
 	# 1. 恢复显示
-	_main_margin_container.visible = true
+	#_main_margin_container.visible = true
+	
+	# 1. 恢复节点
+	add_child(_main_margin_container)
 	
 	# 2. 解除高度锁定（设为0允许自适应，或者保持原状）
-	# 通常设为 0 是安全的，因为内容撑开的高度应该是一样的
+	# 通常设为0是安全的，因为内容撑开的高度应该是一样的
 	custom_minimum_size.y = 0
 	_is_suspended = false
 

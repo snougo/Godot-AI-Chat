@@ -186,7 +186,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1.0
 step = 0.09999999999126884
-value = 0.999999999912688
+value = 0.999999999650544
 
 [node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/Temperature/HBoxContainer" unique_id=570670142]
 custom_minimum_size = Vector2(50, 0)

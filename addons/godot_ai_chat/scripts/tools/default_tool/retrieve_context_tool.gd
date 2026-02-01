@@ -19,7 +19,7 @@ const EXTENSION_MAP: Dictionary = {
 
 func _init() -> void:
 	tool_name = "retrieve_context"
-	tool_description = "Retrieve context information in current workspace."
+	tool_description = "Retrieves context information in current WorkSpace."
 
 # --- Public Functions ---
 

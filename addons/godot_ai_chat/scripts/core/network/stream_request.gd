@@ -9,7 +9,7 @@ extends RefCounted
 # --- Signals ---
 
 ## 当接收到一个完整的 JSON 数据块时触发
-signal chunk_received(raw_json: Dictionary)
+signal chunk_received(chunk_data: Dictionary)
 ## 当接收到 Usage 数据时触发
 signal usage_received(usage: Dictionary)
 ## 请求正常结束时触发
@@ -180,13 +180,13 @@ func _process_sse_buffer() -> void:
 				var result: Dictionary = _try_parse_one_json(json_raw)
 				if result.success:
 					if result.data is Dictionary:
-						_emit_raw_json(result.data)
+						_emit_chunk_data(result.data)
 				else:
 					var json_obj: JSON = JSON.new()
 					var err: Error = json_obj.parse(json_raw)
 					if err == OK:
 						if json_obj.data is Dictionary:
-							_emit_raw_json(json_obj.data)
+							_emit_chunk_data(json_obj.data)
 					else:
 						push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
 
@@ -235,7 +235,7 @@ func _process_json_list_buffer() -> void:
 			var json_str: String = _incoming_text_buffer.substr(open_brace, close_brace - open_brace + 1)
 			var json_val: Variant = JSON.parse_string(json_str)
 			if json_val is Dictionary:
-				_emit_raw_json(json_val)
+				_emit_chunk_data(json_val)
 			
 			search_offset = close_brace + 1
 			_incoming_text_buffer = _incoming_text_buffer.substr(search_offset)
@@ -245,7 +245,7 @@ func _process_json_list_buffer() -> void:
 
 
 ## 延迟发射 JSON 数据信号
-func _emit_raw_json(p_json: Dictionary) -> void:
+func _emit_chunk_data(p_json: Dictionary) -> void:
 	chunk_received.emit.call_deferred(p_json)
 
 
@@ -295,22 +295,32 @@ func _try_parse_one_json(p_s: String) -> Dictionary:
 
 ## 检查缓冲区是否可以安全地转换为 UTF-8 字符串
 func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
-	if p_buffer.is_empty(): return true
+	if p_buffer.is_empty():
+		return true
 	var len_val: int = p_buffer.size()
 	var last_byte: int = p_buffer[len_val - 1]
-	if (last_byte & 0x80) == 0: return true
+	
+	if (last_byte & 0x80) == 0:
+		return true
 	if (last_byte & 0xC0) == 0x80:
 		var i: int = 1
 		while i < 4 and (len_val - 1 - i) >= 0:
 			var b: int = p_buffer[len_val - 1 - i]
 			if (b & 0xC0) == 0xC0:
 				var expected_len: int = 0
-				if (b & 0xE0) == 0xC0: expected_len = 2
-				elif (b & 0xF0) == 0xE0: expected_len = 3
-				elif (b & 0xF8) == 0xF0: expected_len = 4
-				if (i + 1) < expected_len: return false
-				else: return true
+				if (b & 0xE0) == 0xC0:
+					expected_len = 2
+				elif (b & 0xF0) == 0xE0:
+					expected_len = 3
+				elif (b & 0xF8) == 0xF0:
+					expected_len = 4
+				
+				if (i + 1) < expected_len:
+					return false
+				else:
+					return true
 			i += 1
 		return true
-	if (last_byte & 0xC0) == 0xC0: return false
+	if (last_byte & 0xC0) == 0xC0:
+		return false
 	return true

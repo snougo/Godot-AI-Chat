@@ -1,5 +1,5 @@
 @tool
-class_name ChatArchive
+class_name SessionStorage
 extends RefCounted
 
 ## 聊天存档助手
@@ -9,15 +9,15 @@ extends RefCounted
 # --- Constants ---
 
 ## 存档目录路径
-const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
+const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
 
 # --- Public Functions ---
 
 ## 获取存档目录中所有聊天存档（.tres 文件）的文件名列表
 ## [return]: 按时间倒序排列的文件名数组
-static func get_archive_list() -> Array[String]:
+static func get_session_list() -> Array[String]:
 	var archives: Array[String] = []
-	var dir: DirAccess = DirAccess.open(ARCHIVE_DIR)
+	var dir: DirAccess = DirAccess.open(SESSION_DIR)
 	
 	if dir:
 		dir.list_dir_begin()

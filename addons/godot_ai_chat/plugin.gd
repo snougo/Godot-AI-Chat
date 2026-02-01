@@ -3,9 +3,9 @@ extends EditorPlugin
 
 # 主场景路径
 const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
-# 对话历史存档文件夹
-const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
-
+# 对话存档文件夹
+const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
+# 插件配置文件
 const PLUGIN_SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 # 插件主实例
@@ -67,9 +67,9 @@ func _initialize_plugin_file_environment() -> void:
 	var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
 	var need_scan: bool = false
 	
-	# 确保对话历史存档目录存在
-	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
-		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
+	# 确保对话存档目录存在
+	if not DirAccess.dir_exists_absolute(SESSION_DIR):
+		DirAccess.make_dir_recursive_absolute(SESSION_DIR)
 		need_scan = true
 	
 	# 确保插件配置文件存在

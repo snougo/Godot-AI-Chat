@@ -9,8 +9,9 @@ extends AiTool
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "web_search"
+	tool_name = "search_web"
 	tool_description = "Performs an online search. Use ONLY when information is NOT available in local files or API docs."
+
 
 # --- Public Functions ---
 

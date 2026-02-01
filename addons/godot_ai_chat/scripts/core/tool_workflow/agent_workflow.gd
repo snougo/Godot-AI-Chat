@@ -1,5 +1,5 @@
 @tool
-class_name ChatBackend
+class_name AgentWorkflow
 extends Node
 
 ## 聊天后端逻辑处理类
@@ -79,7 +79,7 @@ func process_response(p_msg: ChatMessage) -> void:
 						# 也可以保留原样让后续流程报错，这里选择安全回退
 						tool_call_function["arguments"] = "{}" 
 	
-	# [修复] 确保消息被添加到历史记录
+	# 确保消息被添加到历史记录
 	var history = current_chat_window.chat_history
 	if history.messages.is_empty() or history.messages.back() != p_msg:
 		history.add_message(p_msg)
@@ -88,7 +88,6 @@ func process_response(p_msg: ChatMessage) -> void:
 	if not p_msg.tool_calls.is_empty():
 		_start_tool_workflow(p_msg)
 	else:
-		#var history: Array[ChatMessage] = [p_msg]
 		var workflow_history: Array[ChatMessage] = [p_msg]
 		assistant_message_ready.emit(p_msg, workflow_history)
 

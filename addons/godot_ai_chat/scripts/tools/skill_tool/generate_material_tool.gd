@@ -26,8 +26,8 @@ const RESOLUTION_SUFFIXES: Array[String] = ["_1k", "_2k", "_4k", "_8k", "_512", 
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "generate_materials"
-	tool_description = "Automatically scans a folder for textures and generates StandardMaterial3D resources."
+	tool_name = "generate_material"
+	tool_description = "Automatically scans a folder for textures and generates StandardMaterial3D resource."
 
 # --- Public Functions ---
 

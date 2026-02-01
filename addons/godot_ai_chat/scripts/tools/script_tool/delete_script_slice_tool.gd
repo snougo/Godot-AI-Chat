@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "delete_script_slice"
-	tool_description = "Delete a specific logic slice (function, variable, etc.) from the active script, leaving an empty line."
+	tool_description = "Deletes a specific logic slice (function, variable, etc.) from the active Script Editor."
 
 
 func get_parameters_schema() -> Dictionary:

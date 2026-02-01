@@ -13,22 +13,22 @@
 
 2. **标准工作流**
    - **阶段一：场景接入 (Access)**
-	 - **动作**：调用 `scene_manager` (action="open" 或 "create")。
+	 - **动作**：调用 `manage_scene_file` (action="open" 或 "create")。
 	 - **目的**：确保编辑器当前激活的是目标场景。
 	 - **注意**：如果是 create，需要提供 `root_node_type`。
 
    - **阶段二：结构分析 (Analyze)**
-	 - **动作**：调用 `scene_node_manager` (action="get_scene_tree")。
+	 - **动作**：调用 `manage_scene_structure` (action="get_scene_tree")。
 	 - **目的**：获取当前场景的完整节点树结构，确认父节点路径和节点名称。
 	 - **禁止**：在未获取树结构的情况下盲猜节点路径。
 
    - **阶段三：执行修改 (Modify)**
 	 - **结构修改**：
-	   - 调用 `scene_node_manager` (action="add_node" / "delete_node" / "move_node")。
+	   - 调用 `manage_scene_structure` (action="add_node" / "delete_node" / "move_node")。
 	   - **参数**：`node_path` 和 `parent_path` 必须是基于根节点的相对路径（如 "Player/Sprite"），不要包含 "/root/"。
 	 - **属性修改**：
-	   - **前置**：先调用 `scene_inspector` (action="check_node_property") 确认属性名和类型。
-	   - **执行**：调用 `scene_inspector` (action="set_node_property")。
+	   - **前置**：先调用 `access_node_properties` (action="check_node_property") 确认属性名和类型。
+	   - **执行**：调用 `saccess_node_properties` (action="set_node_property")。
 	   - **格式**：Vector/Color 使用数组格式字符串（如 "[1, 0, 0]"），资源使用 "res://" 路径。
 
 3. **路径与参数规范**

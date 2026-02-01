@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "create_script"
-	tool_description = "Create a new .gd or .gdshader script file."
+	tool_description = "Creates a new `.gd` or `.gdshader` file."
 
 
 func get_parameters_schema() -> Dictionary:

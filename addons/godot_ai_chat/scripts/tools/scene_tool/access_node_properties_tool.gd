@@ -3,8 +3,8 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "scene_inspector"
-	tool_description = "Inspect and modify node properties in the current active scene."
+	tool_name = "access_node_properties"
+	tool_description = "Checks or Sets node properties within the active Godot scene."
 
 
 func get_parameters_schema() -> Dictionary:

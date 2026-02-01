@@ -24,9 +24,9 @@ signal model_selection_changed(model_name: String)
 ## 当用户选择文件路径以保存为 .md 格式后发出
 signal save_as_markdown_button_pressed(file_path: String)
 ## 当用户选择一个聊天存档并点击加载按钮时发出
-signal load_chat_button_pressed(archive_name: String)
+signal load_chat_button_pressed(session_name: String)
 ## 当用户点击删除按钮时发出
-signal delete_chat_button_pressed(archive_name: String)
+signal delete_chat_button_pressed(session_name: String)
 
 # --- Enums / Constants ---
 
@@ -40,13 +40,15 @@ enum UIState {
 	ERROR                ## 发生错误
 }
 
+const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
+
 # --- @onready Vars ---
 
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
 @onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTrunDisplay
-@onready var _current_token_cost: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenCost
+@onready var _current_token_usage: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenUsage
 
-@onready var _chat_archive_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/ChatArchiveSelector
+@onready var _session_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/SessionSelector
 @onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/DeleteButton
 @onready var _load_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/LoadChatButton
 @onready var _new_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/NewChatButton
@@ -64,7 +66,7 @@ enum UIState {
 @onready var _file_dialog: FileDialog = $FileDialog
 @onready var _tab_container: TabContainer = $TabContainer 
 
-# [Refactor] 新增：暴露给 Controller 使用的内部节点引用
+# 暴露给 Controller 使用的内部节点引用
 @onready var _chat_list_container: VBoxContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer/ChatListContainer
 @onready var _chat_scroll_container: ScrollContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer
 @onready var _settings_panel_node: SettingsPanel = $TabContainer/Settings/SettingsPanel
@@ -81,7 +83,7 @@ var is_first_init: bool = false
 # --- Private Vars ---
 
 ## 标记当前是否在等待删除确认
-var _pending_delete_archive_name: String = ""
+var _pending_delete_session_name: String = ""
 
 
 # --- Built-in Functions ---
@@ -101,8 +103,8 @@ func _ready() -> void:
 	_save_as_markdown_button.pressed.connect(_on_save_as_markdown_button_pressed)
 	_send_button.pressed.connect(_on_send_button_pressed)
 	
-	_update_chat_archive_selector()
-	reset_token_cost_display()
+	_update_session_selector()
+	reset_token_usage_display()
 	update_ui_state(UIState.IDLE)
 
 
@@ -231,19 +233,26 @@ func get_model_list_request_failed(p_error_message: String) -> void:
 	if is_first_init:
 		update_ui_state(UIState.ERROR, p_error_message)
 	else:
+		# 修复点：显式切换回 ERROR 状态以解锁按钮
+		# 传入空字符串作为 payload 以避免弹出错误对话框（静默失败，仅显示红字）
+		update_ui_state(UIState.ERROR, "")
+		
+		# 手动更新状态栏显示具体错误
 		_status_label.text = p_error_message
 		_status_label.modulate = Color.RED
+		
+		# 标记为已完成过初始化逻辑
 		is_first_init = true
 
 
 ## 根据文件名同步下拉选择框
-## [param p_archive_name]: 存档名称
-func select_archive_by_name(p_archive_name: String) -> void:
-	_update_chat_archive_selector()
+## [param p_session_name]: 存档名称
+func select_session_by_name(p_session_name: String) -> void:
+	_update_session_selector()
 	
-	for i in range(_chat_archive_selector.get_item_count()):
-		if _chat_archive_selector.get_item_text(i) == p_archive_name:
-			_chat_archive_selector.select(i)
+	for i in range(_session_selector.get_item_count()):
+		if _session_selector.get_item_text(i) == p_session_name:
+			_session_selector.select(i)
 			return
 
 
@@ -266,16 +275,16 @@ func update_turn_display(p_current_turns: int, p_max_turns: int) -> void:
 
 ## 更新 UI 界面的 Token 数据
 ## [param p_usage]: Token 使用量字典
-func update_token_cost_display(p_usage: Dictionary) -> void:
+func update_token_usage_display(p_usage: Dictionary) -> void:
 	var p: int = p_usage.get("prompt_tokens", 0)
 	var c: int = p_usage.get("completion_tokens", 0)
 	var t: int = p_usage.get("total_tokens", p + c)
-	_current_token_cost.text = "Token Cost: Total: %d (Prompt: %d, Completion: %d)" % [t, p, c]
+	_current_token_usage.text = "Token Cost: Total: %d (Prompt: %d, Completion: %d)" % [t, p, c]
 
 
 ## 重置 Token 显示
-func reset_token_cost_display() -> void:
-	_current_token_cost.text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
+func reset_token_usage_display() -> void:
+	_current_token_usage.text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
 
 
 ## 显示一个确认/成功对话框
@@ -286,7 +295,7 @@ func show_confirmation(p_message: String) -> void:
 	# 断开删除确认连接，避免干扰普通通知
 	if _error_dialog.confirmed.is_connected(_on_delete_confirmed):
 		_error_dialog.confirmed.disconnect(_on_delete_confirmed)
-		_pending_delete_archive_name = ""
+		_pending_delete_session_name = ""
 	
 	_error_dialog.popup_centered()
 
@@ -341,29 +350,29 @@ func _apply_model_filter() -> void:
 			_on_model_selected(0)
 
 
-func _update_chat_archive_selector() -> void:
-	var archives: Array[String] = ChatArchive.get_archive_list()
+func _update_session_selector() -> void:
+	var archives: Array[String] = SessionStorage.get_session_list()
 	var previously_selected: String = ""
 	
-	if _chat_archive_selector.selected != -1:
-		previously_selected = _chat_archive_selector.get_item_text(_chat_archive_selector.selected)
+	if _session_selector.selected != -1:
+		previously_selected = _session_selector.get_item_text(_session_selector.selected)
 	
-	_chat_archive_selector.clear()
+	_session_selector.clear()
 	
 	if archives.is_empty():
-		_chat_archive_selector.disabled = true
+		_session_selector.disabled = true
 	else:
-		_chat_archive_selector.disabled = false
+		_session_selector.disabled = false
 		var new_selection_index: int = -1
 		for i in range(archives.size()):
 			var archive_name: String = archives[i]
-			_chat_archive_selector.add_item(archive_name)
+			_session_selector.add_item(archive_name)
 			
 			if archive_name == previously_selected:
 				new_selection_index = i
 		
 		if new_selection_index != -1:
-			_chat_archive_selector.select(new_selection_index)
+			_session_selector.select(new_selection_index)
 
 
 func _generate_default_filename(p_extension: String) -> String:
@@ -375,19 +384,19 @@ func _generate_default_filename(p_extension: String) -> String:
 # --- Signal Callbacks ---
 
 func _on_delete_chat_button_pressed() -> void:
-	var selected_index: int = _chat_archive_selector.selected
+	var selected_index: int = _session_selector.selected
 	if selected_index == -1:
 		show_confirmation("Please select a chat archive to delete.")
 		return
 	
-	var archive_name: String = _chat_archive_selector.get_item_text(selected_index)
+	var archive_name: String = _session_selector.get_item_text(selected_index)
 	
 	# 设置确认对话框
 	_error_dialog.title = "Confirm Delete"
 	_error_dialog.dialog_text = "Are you sure you want to delete '%s'?\n\nThis action cannot be undone." % archive_name
 	
 	# 保存待删除的存档名
-	_pending_delete_archive_name = archive_name
+	_pending_delete_session_name = archive_name
 	
 	# 连接确认信号（确保只连接一次）
 	if not _error_dialog.confirmed.is_connected(_on_delete_confirmed):
@@ -397,22 +406,22 @@ func _on_delete_chat_button_pressed() -> void:
 
 
 func _on_delete_confirmed() -> void:
-	if _pending_delete_archive_name.is_empty():
+	if _pending_delete_session_name.is_empty():
 		return
 	
 	# 发出删除信号
-	delete_chat_button_pressed.emit(_pending_delete_archive_name)
+	delete_chat_button_pressed.emit(_pending_delete_session_name)
 	
 	# 清空待删除状态
-	_pending_delete_archive_name = ""
+	_pending_delete_session_name = ""
 
 
 func _on_load_chat_button_pressed() -> void:
-	var selected_index: int = _chat_archive_selector.selected
+	var selected_index: int = _session_selector.selected
 	if selected_index == -1:
 		show_confirmation("Please select a chat archive to load.")
 		return
-	var archive_name: String = _chat_archive_selector.get_item_text(selected_index)
+	var archive_name: String = _session_selector.get_item_text(selected_index)
 	load_chat_button_pressed.emit(archive_name)
 
 
@@ -438,7 +447,7 @@ func _on_save_as_markdown_button_pressed() -> void:
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	_file_dialog.clear_filters()
 	_file_dialog.add_filter("*.md", "Markdown File")
-	_file_dialog.current_dir = "res://addons/godot_ai_chat/chat_archives/"
+	_file_dialog.current_dir = SESSION_DIR
 	_file_dialog.current_file = _generate_default_filename(".md")
 	_file_dialog.popup_centered()
 
@@ -463,4 +472,4 @@ func _on_settings_save_button_pressed() -> void:
 
 
 func _on_filesystem_changed() -> void:
-	_update_chat_archive_selector()
+	_update_session_selector()

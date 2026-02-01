@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_f5e45")
 skill_name = "Script Tool SOP"
-description = "本技能旨在指导如何正确、高效地使用基于切片（Slice-based）的脚本修改工具链。"
+description = "本技能旨在规范LLM模型在处执行脚本创建、修改时的工具调用流程。"
 instruction_file = "res://addons/godot_ai_chat/skills/script_tool_sop/Skill.md"
-tools = Array[String](["uid://bo3ypafdx1idt", "uid://6b135025xm7j", "uid://d1svxbjuoea3g", "uid://cucpsja3qnma7", "uid://c4oiyceux12sy"])
+tools = Array[String](["uid://bo3ypafdx1idt", "uid://6b135025xm7j", "uid://d1svxbjuoea3g", "uid://cucpsja3qnma7"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "get_script_slices"
-	tool_description = "Open a script in the editor and return its content sliced by logic blocks."
+	tool_description = "Opens a script in the editor and returns its content sliced by logic blocks."
 
 
 func get_parameters_schema() -> Dictionary:

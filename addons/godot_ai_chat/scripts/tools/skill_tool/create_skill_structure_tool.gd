@@ -13,7 +13,7 @@ const SKILLS_BASE_PATH: String = "res://addons/godot_ai_chat/skills/"
 
 func _init() -> void:
 	tool_name = "create_skill_structure"
-	tool_description = "Creates a new skill folder structure and generates the SKILL.md file."
+	tool_description = "Creates a new skill folder structure and generates the `SKILL.md` file."
 
 
 # --- Public Functions ---

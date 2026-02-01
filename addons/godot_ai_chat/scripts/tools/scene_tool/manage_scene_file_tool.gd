@@ -3,8 +3,8 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "scene_manager"
-	tool_description = "Manage scene files: create new scenes, open existing ones, switch between open scenes, and save the current scene."
+	tool_name = "manage_scene_file"
+	tool_description = "Creates new scene file, opens existing one, or switches between currently open scenes in the editor."
 
 
 func get_parameters_schema() -> Dictionary:

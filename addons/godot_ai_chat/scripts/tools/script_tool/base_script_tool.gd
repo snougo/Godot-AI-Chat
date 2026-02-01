@@ -212,17 +212,40 @@ func _get_code_range_formatted(p_editor: CodeEdit, p_start: int, p_end: int) -> 
 
 
 func _get_code_edit(p_path: String) -> CodeEdit:
+	# [修复点 1]：防止主动打开受限路径 (针对 get_script_slices 等)
+	if not p_path.is_empty():
+		var safety_err := validate_path_safety(p_path)
+		if not safety_err.is_empty():
+			printerr("[BaseScriptTool] Security Error: " + safety_err)
+			return null
+	
 	var script_editor := EditorInterface.get_script_editor()
+	
+	# 尝试加载并切换到指定脚本
 	if not p_path.is_empty() and FileAccess.file_exists(p_path):
 		var res = load(p_path)
-		if res is Script: EditorInterface.edit_script(res)
+		if res is Script: 
+			EditorInterface.edit_script(res)
 	
 	EditorInterface.set_main_screen_editor("Script")
+	
+	# [修复点 2]：防止操作当前已打开的受限文件 (针对 insert_new_slice 等)
+	# 即使脚本已经手动被用户打开，AI 工具也应该拒绝修改它
+	var current_script := script_editor.get_current_script()
+	if current_script:
+		var current_path := current_script.resource_path
+		var safety_err := validate_path_safety(current_path)
+		if not safety_err.is_empty():
+			printerr("[BaseScriptTool] Security Block: Cannot edit file in restricted path: " + current_path)
+			return null
+	
+	# 获取 CodeEdit 实例
 	var editor_base = script_editor.get_current_editor()
 	if editor_base:
 		return editor_base.get_base_editor() as CodeEdit
 	
 	return null
+
 
 
 func _focus_script_editor() -> void:

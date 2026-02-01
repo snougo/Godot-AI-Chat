@@ -5,8 +5,7 @@
 [resource]
 script = ExtResource("1_w2n1e")
 skill_name = "Skill Generator"
-description = "根据用户需求创建自定义Skill。
-"
+description = "本技能旨在帮助开发者将工作流自动化需求转化为标准SOP，并据此构建自定义技能。"
 instruction_file = "res://addons/godot_ai_chat/skills/skill_creator/Skill.md"
 tools = Array[String](["uid://dfviwipf4ajsp"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

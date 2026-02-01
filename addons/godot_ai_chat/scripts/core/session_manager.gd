@@ -9,12 +9,13 @@ extends RefCounted
 # --- Constants ---
 
 ## 存档目录
-const ARCHIVE_DIR: String = "res://addons/godot_ai_chat/chat_archives/"
+const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
 
 # --- Public Vars ---
 
 ## 当前活动的会话路径
-var current_history_path: String = ""
+#var current_history_path: String = ""
+var current_session_path: String = ""
 
 # --- Private Vars ---
 
@@ -42,12 +43,12 @@ func create_new_session() -> String:
 	var now_time: Dictionary = Time.get_datetime_dict_from_system(false)
 	var base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [now_time.year, now_time.month, now_time.day, now_time.hour, now_time.minute, now_time.second]
 	var extension: String = ".tres"
-	var final_path: String = ARCHIVE_DIR.path_join(base_filename + extension)
+	var final_path: String = SESSION_DIR.path_join(base_filename + extension)
 	
 	# 避免重名
 	var counter: int = 1
 	while FileAccess.file_exists(final_path):
-		final_path = ARCHIVE_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
+		final_path = SESSION_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
 		counter += 1
 	
 	# 创建资源
@@ -58,10 +59,10 @@ func create_new_session() -> String:
 		push_error("[SessionManager] Failed to create chat file: %s" % error_string(err))
 		return ""
 	
-	current_history_path = final_path
+	current_session_path = final_path
 	
 	# 刷新编辑器文件系统
-	ToolBox.update_editor_filesystem(current_history_path)
+	ToolBox.update_editor_filesystem(current_session_path)
 	
 	# 加载到 UI 并绑定
 	_load_resource_to_ui(new_history, final_path.get_file())
@@ -70,28 +71,28 @@ func create_new_session() -> String:
 
 
 ## 加载会话
-func load_session(p_filename: String) -> bool:
-	var path: String = ARCHIVE_DIR.path_join(p_filename)
+func load_session(p_session_name: String) -> bool:
+	var path: String = SESSION_DIR.path_join(p_session_name)
 	
 	if not FileAccess.file_exists(path):
 		return false
 	
 	var resource = ResourceLoader.load(path)
 	if resource is ChatMessageHistory:
-		current_history_path = path
-		_load_resource_to_ui(resource, p_filename)
+		current_session_path = path
+		_load_resource_to_ui(resource, p_session_name)
 		return true
 	
 	return false
 
 
 ## 删除指定会话并返回是否成功
-func delete_session(p_filename: String) -> bool:
-	var archive_path: String = ARCHIVE_DIR.path_join(p_filename)
+func delete_session(p_session_name: String) -> bool:
+	var archive_path: String = SESSION_DIR.path_join(p_session_name)
 	
 	# 检查文件是否存在
 	if not FileAccess.file_exists(archive_path):
-		push_error("[SessionManager] Archive file not found: %s" % p_filename)
+		push_error("[SessionManager] Archive file not found: %s" % p_session_name)
 		return false
 	
 	# 删除文件
@@ -101,8 +102,8 @@ func delete_session(p_filename: String) -> bool:
 		return false
 	
 	# 如果删除的是当前会话，清除当前会话状态
-	if current_history_path == archive_path:
-		current_history_path = ""
+	if current_session_path == archive_path:
+		current_session_path = ""
 		_current_chat_window.chat_history = null
 		# 清空聊天显示
 		for child in _current_chat_window.chat_list_container.get_children():
@@ -116,7 +117,7 @@ func delete_session(p_filename: String) -> bool:
 ## 加载最新可用的会话
 ## 返回：加载的会话文件名，如果没有可用会话返回空字符串
 func load_latest_session() -> String:
-	var archive_list := ChatArchive.get_archive_list()
+	var archive_list := SessionStorage.get_session_list()
 	
 	if archive_list.is_empty():
 		return ""
@@ -133,42 +134,42 @@ func load_latest_session() -> String:
 
 ## 检查当前是否有活跃会话
 func has_active_session() -> bool:
-	return not current_history_path.is_empty()
+	return not current_session_path.is_empty()
 
 
 # --- Private Functions ---
 
 ## 确保目录存在
 func _ensure_archive_dir() -> void:
-	if not DirAccess.dir_exists_absolute(ARCHIVE_DIR):
-		DirAccess.make_dir_recursive_absolute(ARCHIVE_DIR)
+	if not DirAccess.dir_exists_absolute(SESSION_DIR):
+		DirAccess.make_dir_recursive_absolute(SESSION_DIR)
 
 
 ## [内部] 将资源应用到 UI 并建立自动保存连接
-func _load_resource_to_ui(p_history: ChatMessageHistory, p_filename: String) -> void:
-	_chat_ui.select_archive_by_name(p_filename)
-	_chat_ui.reset_token_cost_display()
-	_current_chat_window.load_history_resource(p_history)
+func _load_resource_to_ui(p_session_history: ChatMessageHistory, p_session_name: String) -> void:
+	_chat_ui.select_session_by_name(p_session_name)
+	_chat_ui.reset_token_usage_display()
+	_current_chat_window.load_session_history_resource(p_session_history)
 	
 	# 绑定自动保存（如果还没绑定）
 	# 注意：我们要先断开可能存在的旧连接，防止重复绑定或跨会话污染
-	if p_history.changed.is_connected(_auto_save):
-		p_history.changed.disconnect(_auto_save)
+	if p_session_history.changed.is_connected(_auto_save):
+		p_session_history.changed.disconnect(_auto_save)
 	
-	p_history.changed.connect(_auto_save)
+	p_session_history.changed.connect(_auto_save)
 
 
 ## 自动保存回调
 func _auto_save() -> void:
-	if current_history_path.is_empty():
+	if current_session_path.is_empty():
 		return
 	
 	# 直接从 Window 获取当前正在使用的资源，确保数据一致性
 	var history: ChatMessageHistory = _current_chat_window.chat_history
 	if history:
-		# [修复] 验证所有消息的完整性
+		# 验证所有消息的完整性
 		_validate_message_integrity(history)
-		ResourceSaver.save(history, current_history_path)
+		ResourceSaver.save(history, current_session_path)
 
 
 ## 验证并修复消息完整性

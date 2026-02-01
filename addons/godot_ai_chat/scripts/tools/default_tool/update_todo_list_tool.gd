@@ -8,8 +8,8 @@ extends AiTool
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "todo_list"
-	tool_description = "Manage task lists in current workspace 'TODO.md'."
+	tool_name = "update_todo_list"
+	tool_description = "Updates the 'TODO.md' file by adding new tasks or marking existing ones as complete."
 
 
 # --- Public Functions ---
