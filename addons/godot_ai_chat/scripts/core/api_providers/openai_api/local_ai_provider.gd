@@ -1,6 +1,6 @@
 @tool
 class_name LocalAIProvider
-extends BaseOpenAIProvider
+extends OpenAICompatibleProvider
 
 ## 针对本地服务（LM Studio/Ollama）的提供商实现
 

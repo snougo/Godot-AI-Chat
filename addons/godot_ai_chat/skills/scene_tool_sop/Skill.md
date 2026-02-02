@@ -18,7 +18,7 @@
 	 - **注意**：如果是 create，需要提供 `root_node_type`。
 
    - **阶段二：结构分析 (Analyze)**
-	 - **动作**：调用 `manage_scene_structure` (action="get_scene_tree")。
+	 - **动作**：调用 `get_edited_scene_tree` 。
 	 - **目的**：获取当前场景的完整节点树结构，确认父节点路径和节点名称。
 	 - **禁止**：在未获取树结构的情况下盲猜节点路径。
 
@@ -44,7 +44,7 @@
 1. 用户："给 Player 场景加一个 Sprite"
 2. AI 调用 `scene_manager(action="open", scene_path="res://player.tscn")`
 3. (等待工具返回) -> 工具返回场景已打开
-4. AI 调用 `scene_node_manager(action="get_scene_tree")`
+4. AI 调用 `get_edited_scene_tree`
 5. (等待工具返回) -> 工具返回树结构，确认根节点为 `Player`
 6. AI 调用 `scene_node_manager(action="add_node", parent_path=".", node_class="Sprite2D", node_name="Sprite")`
 

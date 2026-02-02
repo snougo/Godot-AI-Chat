@@ -216,7 +216,7 @@ func _get_code_edit(p_path: String) -> CodeEdit:
 	if not p_path.is_empty():
 		var safety_err := validate_path_safety(p_path)
 		if not safety_err.is_empty():
-			printerr("[BaseScriptTool] Security Error: " + safety_err)
+			AIChatLogger.error("[BaseScriptTool] Security Error: " + safety_err)
 			return null
 	
 	var script_editor := EditorInterface.get_script_editor()
@@ -236,7 +236,7 @@ func _get_code_edit(p_path: String) -> CodeEdit:
 		var current_path := current_script.resource_path
 		var safety_err := validate_path_safety(current_path)
 		if not safety_err.is_empty():
-			printerr("[BaseScriptTool] Security Block: Cannot edit file in restricted path: " + current_path)
+			AIChatLogger.error("[BaseScriptTool] Security Block: Cannot edit file in restricted path: " + current_path)
 			return null
 	
 	# 获取 CodeEdit 实例

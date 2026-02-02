@@ -24,7 +24,12 @@ func _init(p_ui: ChatUI, p_net: NetworkManager, p_workflow:AgentWorkflow, p_wind
 
 func _connect_signals() -> void:
 	# 网络事件 -> UI 反馈
-	_network_manager.new_chat_request_sending.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.WAITING_RESPONSE))
+	#_network_manager.new_chat_request_sending.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.WAITING_RESPONSE))
+	_network_manager.new_chat_request_sending.connect(func():
+		# [修复] 强制结算上一轮并重置当前计数，确保 UI 单调递增逻辑在新一轮生效
+		_chat_ui.prepare_for_new_request()
+		_chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE)
+	)
 	
 	# 流式响应处理
 	_network_manager.new_stream_chunk_received.connect(func(chunk: Dictionary):

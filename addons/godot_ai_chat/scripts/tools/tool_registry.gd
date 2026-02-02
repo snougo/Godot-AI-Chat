@@ -14,26 +14,25 @@ const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
 
 ## 核心工具路径 (始终加载)
 const CORE_TOOLS_PATHS: Array[String] = [
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/access_project_memory_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/search_api_documents_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/access_memory_tool.gd",
 	
 	#"res://addons/godot_ai_chat/scripts/tools/default_tool/create_markdown_tool.gd",
-	
 	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/update_todo_list_tool.gd"
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_api_documents_tool.gd"
 ]
 
 # --- Public Vars ---
 
 ## 存储当前激活的工具实例 { "tool_name": tool_instance }
 static var ai_tools: Dictionary = {}
-
 ## 缓存可用技能资源 { "skill_name": skill_resource }
 static var available_skills: Dictionary = {}
-
 ## 当前已挂载的技能列表 (有序数组，后加载的覆盖先加载的)
 static var active_skills_list: Array[String] = []
 
@@ -155,13 +154,27 @@ static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictio
 	var definitions: Array[Dictionary] = []
 	for tool_instance in ai_tools.values():
 		var schema: Dictionary = tool_instance.get_parameters_schema()
+		
+		# Gemini 格式特殊处理
 		if p_for_gemini:
 			schema = convert_schema_to_gemini(schema)
-		definitions.append({
-			"name": tool_instance.tool_name, 
-			"description": tool_instance.tool_description, 
-			"parameters": schema
-		})
+			definitions.append({
+				"name": tool_instance.tool_name, 
+				"description": tool_instance.tool_description, 
+				"parameters": schema
+			})
+		else:
+			# 统一输出为标准的 OpenAI Function Calling 格式
+			# 这样 BaseOpenAIProvider 和 BaseAnthropicProvider 都能正确识别
+			definitions.append({
+				"type": "function",
+				"function": {
+					"name": tool_instance.tool_name,
+					"description": tool_instance.tool_description,
+					"parameters": schema
+				}
+			})
+			
 	return definitions
 
 

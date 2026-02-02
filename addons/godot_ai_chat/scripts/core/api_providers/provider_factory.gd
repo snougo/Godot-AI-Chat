@@ -11,14 +11,18 @@ extends RefCounted
 ## [param p_provider_type]: Provider 类型名称
 static func create_provider(p_provider_type: String) -> BaseLLMProvider:
 	match p_provider_type:
+		"LM Studio Stateful":
+			return LMStudioStatefulProvider.new()
 		"OpenAI-Compatible":
-			return BaseOpenAIProvider.new()
-		"Local-AI-Service":
-			return LocalAIProvider.new()
+			return OpenAICompatibleProvider.new()
 		"ZhipuAI":
 			return ZhipuAIProvider.new()
 		"Google Gemini":
 			return GeminiProvider.new()
+		"Anthropic":
+			return AnthropicProvider.new()
+		"Anthropic-Compatible":
+			return AnthropicCompatibleProvider.new()
 		_:
 			push_error("[ProviderFactory] Unknown provider type: %s" % p_provider_type)
 			return null

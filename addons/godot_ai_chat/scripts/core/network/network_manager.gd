@@ -65,12 +65,9 @@ func get_model_list() -> void:
 		get_model_list_request_succeeded.emit(model_list)
 		return
 	
-	# 其他提供商的正常处理逻辑
+	# 我们约定：当 model_name 传空字符串时，get_request_url 应该返回获取模型列表的 URL
+	# 或者我们引入一个新的虚函数 get_model_list_url()，但复用 get_request_url 比较省事
 	var url: String = current_provider.get_request_url(api_base_url, "", api_key, false)
-	
-	# OpenAI 兼容接口特例修正 - 获取模型列表需要特殊URL
-	if current_provider is BaseOpenAIProvider:
-		url = api_base_url.path_join("v1/models")
 	
 	var headers: PackedStringArray = current_provider.get_request_headers(api_key, false)
 	

@@ -23,6 +23,9 @@ var _provider: BaseLLMProvider
 var _url: String
 var _headers: PackedStringArray
 var _body_json: String
+# [Optimization] Store raw dict to stringify in thread
+var _body_dict: Dictionary 
+
 var _stop_flag: bool = false
 var _task_id: int = -1
 
@@ -30,6 +33,9 @@ var _task_id: int = -1
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
 ## 双层缓冲机制：文本缓冲
 var _incoming_text_buffer: String = ""
+## [新增] SSE 状态跟踪：当前正在处理的事件类型
+var _current_sse_event: String = ""
+
 
 # --- Built-in Functions ---
 
@@ -37,7 +43,10 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 	_provider = p_provider
 	_url = p_url
 	_headers = p_headers
-	_body_json = JSON.stringify(p_body_dict)
+	# [Optimization] Do NOT stringify here (Main Thread), just store the reference.
+	# _body_json = JSON.stringify(p_body_dict) 
+	_body_dict = p_body_dict
+
 
 # --- Public Functions ---
 
@@ -56,6 +65,9 @@ func cancel() -> void:
 
 ## 线程任务主循环
 func _thread_task() -> void:
+	# [Optimization] Perform CPU-intensive JSON serialization in the worker thread
+	_body_json = JSON.stringify(_body_dict)
+	
 	var client: HTTPClient = HTTPClient.new()
 	var err: Error = OK
 	
@@ -170,7 +182,19 @@ func _process_sse_buffer() -> void:
 		var line: String = _incoming_text_buffer.substr(0, newline_pos).strip_edges()
 		_incoming_text_buffer = _incoming_text_buffer.substr(newline_pos + 1)
 		
-		if line.begins_with("data:"):
+		if line.is_empty():
+			# 空行通常意味着一个 Event 块的结束，重置 event 状态
+			# 但有些实现可能不发空行，直接发下一个 event，所以这里只做清理
+			# _current_sse_event = "" 
+			# 注意：Anthropic 的 event 和 data 是紧挨着的，不一定有空行分隔
+			continue
+		
+		# 1. 捕获 Event 类型
+		if line.begins_with("event:"):
+			_current_sse_event = line.substr(6).strip_edges()
+		
+		# 2. 处理 Data 内容
+		elif line.begins_with("data:"):
 			var json_raw: String = line.substr(5).strip_edges()
 			
 			if json_raw == "[DONE]":
@@ -180,15 +204,29 @@ func _process_sse_buffer() -> void:
 				var result: Dictionary = _try_parse_one_json(json_raw)
 				if result.success:
 					if result.data is Dictionary:
+						#_emit_chunk_data(result.data)
+						# [注入] 将 Event 类型注入到数据中，供上层 Provider 使用
+						if not _current_sse_event.is_empty():
+							result.data["_event_type"] = _current_sse_event
 						_emit_chunk_data(result.data)
 				else:
 					var json_obj: JSON = JSON.new()
 					var err: Error = json_obj.parse(json_raw)
 					if err == OK:
 						if json_obj.data is Dictionary:
+							#_emit_chunk_data(json_obj.data)
+							if not _current_sse_event.is_empty():
+								json_obj.data["_event_type"] = _current_sse_event
 							_emit_chunk_data(json_obj.data)
 					else:
-						push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
+						#push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
+						# 只有当确实解析失败时才警告，忽略空的心跳包
+						if json_raw != "[DONE]":
+							push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
+	
+	# 处理完 data 后，通常意味着这个 event/data 对结束了
+	# 但为了安全起见，我们不立即清空 event，防止有多行 data 的情况（虽然我们不支持合并）
+	# 在遇到下一个 event: 时会自动覆盖
 
 
 ## 处理 JSON List 协议缓冲区 (Gemini)

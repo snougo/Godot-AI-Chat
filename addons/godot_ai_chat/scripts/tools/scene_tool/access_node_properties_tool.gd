@@ -129,16 +129,28 @@ func _execute_set_node_property(p_args: Dictionary) -> Dictionary:
 	# 校验嵌套属性的基础对象
 	if ":" in prop:
 		var base_prop: String = prop.split(":")[0]
+		var sub_prop: String = prop.split(":")[1]
 		var base_obj: Variant = node.get(base_prop)
 		if base_obj == null:
 			return {"success": false, "data": "Cannot set property '%s': Base object '%s' is null." % [prop, base_prop]}
+		
+		# 额外验证：检查子属性是否存在
+		if base_obj is Object and not base_obj.has(sub_prop):
+			return {"success": false, "data": "Property '%s' not found on %s." % [sub_prop, base_prop]}
 	
-	# 执行设置
+	# 关键修复：使用延迟执行避免与检查器刷新冲突
 	var ur: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
 	ur.create_action("AI Set Property %s" % prop)
+	
+	# 执行设置
+	#var ur: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
+	ur.create_action("AI Set Property %s" % prop)
 	if ":" in prop:
-		ur.add_do_method(node, "set_indexed", prop, final_val)
-		ur.add_undo_method(node, "set_indexed", prop, current)
+		#ur.add_do_method(node, "set_indexed", prop, final_val)
+		#ur.add_undo_method(node, "set_indexed", prop, current)
+		# 对于嵌套属性，使用延迟调用避免竞态条件
+		ur.add_do_method(node, "call_deferred", "set_indexed", prop, final_val)
+		ur.add_undo_method(node, "call_deferred", "set_indexed", prop, current)
 	else:
 		ur.add_do_property(node, prop, final_val)
 		ur.add_undo_property(node, prop, current)

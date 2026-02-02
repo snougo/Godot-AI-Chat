@@ -9,7 +9,7 @@ extends AiTool
 ## 上下文类型与允许的扩展名映射
 const EXTENSION_MAP: Dictionary = {
 	"scene_tree": ["tscn"],
-	"script_file": ["gd", "gdshader"],
+	"script": ["gd", "gdshader"],
 	"text-based_file": ["txt", "md", "json", "cfg", "tres"],
 	"image-meta": ["png", "jpg", "jpeg", "bmp", "tga", "exr"]
 }
@@ -30,7 +30,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"context_type": {
 				"type": "string",
-				"enum": ["folder_structure", "scene_tree", "script_file", "text-based_file", "image-meta"],
+				"enum": ["folder_structure", "scene_tree", "script", "text-based_file", "image-meta"],
 				"description": "The type of context to retrieve."
 			},
 			"path": {
@@ -121,7 +121,7 @@ func _execute_context_retrieval(p_context_type: String, p_path: String, p_provid
 	match p_context_type:
 		"scene_tree":
 			return p_provider.get_scene_tree_as_markdown(p_path)
-		"script_file":
+		"script":
 			return p_provider.get_script_content_as_markdown(p_path)
 		"text-based_file":
 			return p_provider.get_text_content_as_markdown(p_path)

@@ -16,8 +16,8 @@ const CATEGORY_MAP = {
 }
 
 func _init() -> void:
-	tool_name = "access_project_memory"
-	tool_description = "Accesses the project's long-term memory."
+	tool_name = "access_memory"
+	tool_description = "Accesses long-term memory."
 
 
 func get_parameters_schema() -> Dictionary:

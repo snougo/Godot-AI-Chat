@@ -80,10 +80,12 @@ func _ready() -> void:
 	_save_button.pressed.connect(_on_save_button_pressed)
 	
 	_api_provider_options.clear()
+	_api_provider_options.add_item("LM Studio Stateful")
 	_api_provider_options.add_item("OpenAI-Compatible")
-	_api_provider_options.add_item("Local-AI-Service")
 	_api_provider_options.add_item("ZhipuAI")
 	_api_provider_options.add_item("Google Gemini")
+	_api_provider_options.add_item("Anthropic")
+	_api_provider_options.add_item("Anthropic-Compatible")
 
 	_load_and_display_settings()
 	_update_ui(SaveButtonState.IDLE)

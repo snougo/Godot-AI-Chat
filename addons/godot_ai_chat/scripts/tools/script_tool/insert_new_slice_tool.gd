@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "insert_new_slice"
-	tool_description = "Inserts a new code slice (function, var, etc.) at a specific line."
+	tool_description = "Inserts a new slice at a specific line. Using `delete_script_slice` to delete old slice before inserting new one."
 
 
 func get_parameters_schema() -> Dictionary:

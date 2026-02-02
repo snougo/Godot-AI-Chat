@@ -1,5 +1,5 @@
 @tool
-class_name BaseOpenAIProvider
+class_name OpenAICompatibleProvider
 extends BaseLLMProvider
 
 ## OpenAI 兼容接口的基类实现
@@ -28,8 +28,31 @@ func get_request_headers(p_api_key: String, p_stream: bool) -> PackedStringArray
 
 
 ## 获取请求的 URL
-func get_request_url(p_base_url: String, _p_model_name: String, _p_api_key: String, _p_stream: bool) -> String:
-	return p_base_url.path_join("v1/chat/completions")
+func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: String, _p_stream: bool) -> String:
+	var url: String = p_base_url.strip_edges()
+	
+	# 移除末尾斜杠
+	if url.ends_with("/"):
+		url = url.substr(0, url.length() - 1)
+	
+	# 如果模型名为空，说明是获取模型列表请求
+	if p_model_name.is_empty():
+		# 如果用户填的是 /v1/chat/completions，回退到 /v1/models
+		if url.ends_with("/chat/completions"):
+			return url.replace("/chat/completions", "/models")
+		elif url.ends_with("/v1"):
+			return url + "/models"
+		else:
+			# 默认假设
+			return url + "/v1/models"
+	
+	# 正常的聊天请求
+	if url.ends_with("/chat/completions"):
+		return url
+	elif url.ends_with("/v1"):
+		return url + "/chat/completions"
+	else:
+		return url + "/v1/chat/completions"
 
 
 ## 构建请求体 (Body)
@@ -48,13 +71,9 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 	}
 	
 	if not p_tool_definitions.is_empty():
-		var tools_list: Array = []
-		for tool_def in p_tool_definitions:
-			tools_list.append({
-				"type": "function",
-				"function": tool_def
-			})
-		body["tools"] = tools_list
+		# 直接使用 ToolRegistry 传来的标准格式，不再二次包装
+		# ToolRegistry 现在返回的是 [{"type": "function", "function": ...}]
+		body["tools"] = p_tool_definitions
 		body["tool_choice"] = "auto"
 	
 	if p_stream:

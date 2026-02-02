@@ -89,7 +89,7 @@ text_overrun_behavior = 1
 [node name="CurrentTokenUsage" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_cf2p2")
-text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
+text = "Token Cost: 0"
 label_settings = SubResource("LabelSettings_yewlv")
 vertical_alignment = 1
 text_overrun_behavior = 1

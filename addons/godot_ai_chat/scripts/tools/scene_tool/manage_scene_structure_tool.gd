@@ -4,7 +4,7 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "manage_scene_structure"
-	tool_description = "Gets SceneTree structure or adds, deletes, moves node to modify the SceneTree hierarchy."
+	tool_description = "Adds, deletes, moves node to modify the SceneTree hierarchy."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -13,7 +13,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"action": {
 				"type": "string",
-				"enum": ["get_scene_tree", "add_node", "delete_node", "move_node"],
+				"enum": ["add_node", "delete_node", "move_node"],
 				"description": "The action to perform. Using `get_scene_tree` before add/delete/move node."
 			},
 			"node_path": {
@@ -49,8 +49,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
 	
 	match action:
-		"get_scene_tree":  # 新增分支
-			return _execute_get_scene_tree(root)
 		"add_node":
 			result = _execute_add_node(root, p_args)
 		"delete_node":
@@ -66,11 +64,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 		result["data"] = result["data"] + "\n\nUpdated Scene Tree:\n```\n" + tree_info + "\n```"
 	
 	return result
-
-
-func _execute_get_scene_tree(root: Node) -> Dictionary:
-	var tree_str: String = get_scene_tree_string(root)
-	return {"success": true, "data": "Current Scene: %s\n```\n%s\n```" % [root.name, tree_str]}
 
 
 func _execute_add_node(root: Node, p_args: Dictionary) -> Dictionary:
@@ -128,7 +121,7 @@ func _execute_move_node(root: Node, p_args: Dictionary) -> Dictionary:
 	
 	if node_path.is_empty() or target_parent_path.is_empty():
 		return {"success": false, "data": "Both node_path and parent_path are required for move_node."}
-		
+	
 	var node: Node = get_node_from_root(root, node_path)
 	if not node:
 		return {"success": false, "data": "Node not found: %s" % node_path}
@@ -149,7 +142,7 @@ func _execute_move_node(root: Node, p_args: Dictionary) -> Dictionary:
 		if temp == node:
 			return {"success": false, "data": "Cannot move node into its own child."}
 		temp = temp.get_parent()
-
+	
 	var old_parent: Node = node.get_parent()
 	
 	# Use standard reparent logic via UndoRedo

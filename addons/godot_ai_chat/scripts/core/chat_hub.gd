@@ -77,6 +77,8 @@ func _ready() -> void:
 	_network_manager.get_model_list_request_failed.connect(_chat_ui.get_model_list_request_failed)
 	
 	# 5. Token 统计信号
+	# [Feature] Connect new request signal to trigger token archiving
+	_network_manager.new_chat_request_sending.connect(_chat_ui.prepare_for_new_request)
 	_network_manager.chat_usage_data_received.connect(_chat_ui.update_token_usage_display)
 	_current_chat_window.token_usage_updated.connect(_chat_ui.update_token_usage_display)
 

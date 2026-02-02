@@ -84,6 +84,11 @@ var is_first_init: bool = false
 
 ## 标记当前是否在等待删除确认
 var _pending_delete_session_name: String = ""
+# [Feature] Token Usage Tracking
+# _archived_total_usage: Stores the sum of all *previous* finalized requests in this session.
+var _archived_total_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
+# _current_turn_usage: Stores the usage of the *active* request (will be overwritten by API updates).
+var _current_turn_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
 
 
 # --- Built-in Functions ---
@@ -273,18 +278,101 @@ func update_turn_display(p_current_turns: int, p_max_turns: int) -> void:
 			_chat_turn_display.modulate = Color.WHITE
 
 
+## [Feature] 准备开始新的请求：结算上一轮
+func prepare_for_new_request() -> void:
+	# Archive the previous turn's usage
+	_archived_total_usage.prompt += _current_turn_usage.prompt
+	_archived_total_usage.completion += _current_turn_usage.completion
+	_archived_total_usage.total += _current_turn_usage.total
+	
+	# Reset current turn
+	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
+
+
 ## 更新 UI 界面的 Token 数据
 ## [param p_usage]: Token 使用量字典
 func update_token_usage_display(p_usage: Dictionary) -> void:
 	var p: int = p_usage.get("prompt_tokens", 0)
 	var c: int = p_usage.get("completion_tokens", 0)
+	
+	# [修复] 单调递增检查，防止流式传输中数值闪烁
+	# 依赖 prepare_for_new_request() 在每轮开始前重置 _current_turn_usage
+	if p < _current_turn_usage.prompt:
+		p = _current_turn_usage.prompt
+	if c < _current_turn_usage.completion:
+		c = _current_turn_usage.completion
+	
 	var t: int = p_usage.get("total_tokens", p + c)
-	_current_token_usage.text = "Token Cost: Total: %d (Prompt: %d, Completion: %d)" % [t, p, c]
+	
+	# [Feature] Update Current Turn
+	_current_turn_usage = {
+		"prompt": p,
+		"completion": c,
+		"total": t
+	}
+	
+	# Calculate Display Totals
+	var display_total: int = _archived_total_usage.total + t
+	var display_prompt: int = _archived_total_usage.prompt + p
+	var display_completion: int = _archived_total_usage.completion + c
+	
+	# Update UI
+	_current_token_usage.text = "Cost: %d (Sum: %d) | Prompt: %d | Compl: %d" % [
+		t, 
+		display_total,
+		p,
+		c
+	]
+	
+	_current_token_usage.tooltip_text = (
+		"Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" +
+		"Session Total (Snowball):\n - Prompt: %d\n - Completion: %d\n - Total: %d"
+	) % [p, c, t, display_prompt, display_completion, display_total]
+
+#func update_token_usage_display(p_usage: Dictionary) -> void:
+	#var p: int = p_usage.get("prompt_tokens", 0)
+	#var c: int = p_usage.get("completion_tokens", 0)
+	#var t: int = p_usage.get("total_tokens", p + c)
+	#_current_token_usage.text = "Token Cost: Total: %d (Prompt: %d, Completion: %d)" % [t, p, c]
+	
+	# [Feature] Update Current Turn (Overwrite, NOT Accumulate)
+	# Because API streaming updates usually provide the "total usage so far for this request".
+	#_current_turn_usage = {
+		#"prompt": p,
+		#"completion": c,
+		#"total": t
+	#}
+	
+	# Calculate Display Totals
+	#var display_total: int = _archived_total_usage.total + t
+	#var display_prompt: int = _archived_total_usage.prompt + p
+	#var display_completion: int = _archived_total_usage.completion + c
+	
+	# Update UI
+	#_current_token_usage.text = "Cost: %d (Sum: %d) | Prompt: %d | Compl: %d" % [
+		#t, 
+		#display_total,
+		#p,
+		#c
+	#]
+	
+	# Tooltip 详细显示
+	#_current_token_usage.tooltip_text = (
+		#"Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" +
+		#"Session Total (Snowball):\n - Prompt: %d\n - Completion: %d\n - Total: %d"
+	#) % [p, c, t, display_prompt, display_completion, display_total]
 
 
 ## 重置 Token 显示
 func reset_token_usage_display() -> void:
-	_current_token_usage.text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
+	#_current_token_usage.text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
+	
+	# [Feature] 清零所有数据
+	_archived_total_usage = { "prompt": 0, "completion": 0, "total": 0 }
+	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
+	
+	_current_token_usage.text = "Token Cost: 0"
+	_current_token_usage.tooltip_text = ""
 
 
 ## 显示一个确认/成功对话框
@@ -306,8 +394,8 @@ func _get_default_status_text(p_state: UIState) -> String:
 	match p_state:
 		UIState.IDLE: return "Ready"
 		UIState.CONNECTING: return "Connecting..."
-		UIState.WAITING_RESPONSE: return "Waiting for LLM response"
-		UIState.RESPONSE_GENERATING: return "LLM is generating"
+		UIState.WAITING_RESPONSE: return "Waiting for LLM response..."
+		UIState.RESPONSE_GENERATING: return "LLM is generating..."
 		UIState.TOOLCALLING: return "Executing Tools..."
 		UIState.ERROR: return "Error"
 	return ""
@@ -411,7 +499,6 @@ func _on_delete_confirmed() -> void:
 	
 	# 发出删除信号
 	delete_chat_button_pressed.emit(_pending_delete_session_name)
-	
 	# 清空待删除状态
 	_pending_delete_session_name = ""
 

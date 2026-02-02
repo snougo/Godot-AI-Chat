@@ -1,6 +1,6 @@
 @tool
 class_name ZhipuAIProvider
-extends BaseOpenAIProvider
+extends OpenAICompatibleProvider
 
 ## 智谱 AI (ZhipuAI) 的服务提供商实现
 

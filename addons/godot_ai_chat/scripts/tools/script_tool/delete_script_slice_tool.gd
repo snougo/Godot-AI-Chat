@@ -13,7 +13,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"target_signature": { 
 				"type": "string", 
-				"description": "The signature line of the slice to delete (e.g. 'func _ready():' or 'var speed = 10')." 
+				"description": "The signature of the target slice (e.g. 'func target_signature():' or 'var/const/signal/@onready/@export target_signature')." 
 			}
 		},
 		"required": ["target_signature"]
