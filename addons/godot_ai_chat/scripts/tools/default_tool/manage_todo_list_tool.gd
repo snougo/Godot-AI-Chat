@@ -1,15 +1,21 @@
 @tool
 extends AiTool
 
-## 管理 'TODO.md' 中的任务列表。
-## 严格用于可执行项目和进度跟踪。
+## 管理项目中的待办事项（TODO List）。
+## 数据统一存储在插件目录下的 'todo_list.tres' 中，但支持按工作区上下文(context)进行筛选。
+
+
+# --- Constants ---
+
+## 全局唯一的存储路径
+const TODO_RESOURCE_PATH = "res://addons/godot_ai_chat/todo_list.tres"
 
 
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "manage_todo_list"
-	tool_description = "Listing tasks / Adding new tasks / Marking existing ones as complete."
+	tool_description = "Listing tasks / Adding new tasks / Marking existing ones as complete. Tasks are stored globally but filtered by workspace context."
 
 
 # --- Public Functions ---
@@ -26,11 +32,11 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"content": {
 				"type": "string",
-				"description": "The todo item or execution step. **Add each todo item or execution step separately**."
+				"description": "The todo item content. Required for 'add' and 'complete'."
 			},
 			"path": {
 				"type": "string",
-				"description": "Required. The full path to the current workspace `TODO.md` file."
+				"description": "Required. The current workspace path."
 			}
 		},
 		"required": ["action", "path"]
@@ -38,156 +44,115 @@ func get_parameters_schema() -> Dictionary:
 
 
 ## 执行 TODO 列表管理操作
-## [param p_args]: 包含 action、content 和 path 的参数字典
-## [return]: 包含成功状态和操作结果的字典
 func execute(p_args: Dictionary) -> Dictionary:
 	var action: String = p_args.get("action", "")
 	var content: String = p_args.get("content", "")
-	var target_path: String = p_args.get("path", "")
+	var workspace_path: String = p_args.get("path", "")
 	
-	if target_path.is_empty():
-		return {"success": false, "data": "Error: 'path' parameter is required."}
+	# 1. 参数校验
+	if workspace_path.is_empty():
+		return {"success": false, "data": "Error: 'path' parameter is required (e.g. current folder path)."}
 	
-	var validation_result: String = _validate_path(target_path)
-	if not validation_result.is_empty():
-		return {"success": false, "data": validation_result}
+	# 统一格式，确保标签一致性
+	if not workspace_path.ends_with("/"):
+		workspace_path += "/"
 	
-	var file_exists: bool = FileAccess.file_exists(target_path)
+	# 2. 资源加载 (始终加载全局唯一的那个文件)
+	var todo_list: TodoList
 	
-	if not file_exists:
-		var create_result: Dictionary = _handle_file_creation(target_path, action)
-		if not create_result.is_empty():
-			return create_result
+	# 优先尝试获取缓存实例 (实现实时刷新)
+	if ResourceLoader.has_cached(TODO_RESOURCE_PATH):
+		todo_list = ResourceLoader.load(TODO_RESOURCE_PATH, "Resource", ResourceLoader.CACHE_MODE_REUSE)
+	elif FileAccess.file_exists(TODO_RESOURCE_PATH):
+		todo_list = ResourceLoader.load(TODO_RESOURCE_PATH, "Resource")
 	
+	# 如果资源不存在，或加载失败，则新建
+	if not todo_list:
+		if action == "add" or action == "list":
+			todo_list = TodoList.new()
+			# 新建后立即保存一次，确保持久化
+			var save_err = _save_resource(todo_list)
+			if not save_err.is_empty():
+				return {"success": false, "data": "Error initializing TodoList: " + save_err}
+		else:
+			return {"success": false, "data": "Error: Global TodoList not found. Add a task first."}
+	
+	# 3. 执行分发
 	match action:
-		"add":
-			return _add_todo_item(target_path, content)
-		"complete":
-			return _complete_todo_item(target_path, content)
 		"list":
-			return _list_todo_items(target_path)
+			return _list_tasks(todo_list, workspace_path)
+		"add":
+			return _add_task(todo_list, content, workspace_path)
+		"complete":
+			return _complete_task(todo_list, content) 
 		_:
 			return {"success": false, "data": "Unknown action: " + action}
 
 
 # --- Private Functions ---
 
-## 验证路径安全性和有效性
-## [param p_path]: 要验证的路径
-## [return]: 空字符串表示有效，否则返回错误信息
-func _validate_path(p_path: String) -> String:
-	if not p_path.begins_with("res://"):
-		return "Error: Path must start with 'res://'."
-	if ".." in p_path:
-		return "Error: Path traversal ('..') is not allowed."
-	if p_path.get_extension().to_lower() != "md":
-		return "Error: Only .md files are supported for TODO lists."
-	return ""
+func _list_tasks(p_todo_list: TodoList, p_workspace_path: String) -> Dictionary:
+	# 使用 workspace_path 进行过滤
+	var items: Array[TodoItem] = p_todo_list.get_items(p_workspace_path)
+	var md_lines: PackedStringArray = []
+	md_lines.append("# TODO List (Context: %s)" % p_workspace_path)
+	
+	var active_tasks_count: int = 0
+	
+	for item in items:
+		if not item.is_completed:
+			md_lines.append("- [ ] %s" % item.content)
+			active_tasks_count += 1
+	
+	if active_tasks_count == 0:
+		if items.is_empty():
+			md_lines.append("- (No tasks active in this context)")
+		else:
+			md_lines.append("- (All tasks in this context are completed)")
+	
+	return {"success": true, "data": "\n".join(md_lines)}
 
 
-## 处理文件不存在时的创建逻辑
-## [param p_path]: 目标文件路径
-## [param p_action]: 当前操作类型
-## [return]: 如果需要返回错误则返回字典，否则返回空字典
-func _handle_file_creation(p_path: String, p_action: String) -> Dictionary:
-	if p_action != "add" and p_action != "list":
-		return {"success": false, "data": "File not found: " + p_path}
+func _add_task(p_todo_list: TodoList, p_content: String, p_workspace_path: String) -> Dictionary:
+	if p_content.strip_edges().is_empty():
+		return {"success": false, "data": "Error: Content cannot be empty."}
 	
-	var base_dir: String = p_path.get_base_dir()
-	if not DirAccess.dir_exists_absolute(base_dir):
-		return {"success": false, "data": "Error: Directory does not exist: " + base_dir}
+	# 添加时带上 workspace_path
+	p_todo_list.add_item(p_content, p_workspace_path)
 	
-	var file: FileAccess = FileAccess.open(p_path, FileAccess.WRITE)
-	if not file:
-		return {"success": false, "data": "Failed to create file at: " + p_path}
+	p_todo_list.emit_changed()
+	var save_result: String = _save_resource(p_todo_list)
 	
-	file.store_string("# Project TODOs\n")
-	file.close()
-	# ToolBox为全局静态工具类
-	ToolBox.refresh_editor_filesystem()
+	if not save_result.is_empty():
+		return {"success": false, "data": "Error saving resource: " + save_result}
 	
-	if p_action == "list":
-		return {"success": true, "data": "Created new TODO list at %s. It is currently empty." % p_path}
-	
-	return {}
+	return {"success": true, "data": "Added task to context '%s'" % p_workspace_path}
 
 
-## 添加 TODO 项目
-## [param p_path]: 目标文件路径
-## [param p_content]: 要添加的内容
-## [return]: 操作结果字典
-func _add_todo_item(p_path: String, p_content: String) -> Dictionary:
-	if p_content.is_empty():
-		return {"success": false, "data": "Content is required for 'add' action."}
-	
-	var file: FileAccess = FileAccess.open(p_path, FileAccess.READ_WRITE)
-	if not file:
-		return {"success": false, "data": "Failed to open file for writing: " + p_path}
-	
-	file.seek_end()
-	var line: String = "- [ ] %s\n" % p_content
-	
-	if file.get_length() > 0:
-		file.seek(file.get_length() - 1)
-		if file.get_8() != 10: # \n
-			file.store_string("\n")
-	
-	file.store_string(line)
-	file.close()
-	# ToolBox为全局静态工具
-	ToolBox.update_editor_filesystem(p_path)
-	
-	return {"success": true, "data": "Added to %s: %s" % [p_path, p_content]}
-
-
-## 完成 TODO 项目
-## [param p_path]: 目标文件路径
-## [param p_content]: 要标记为完成的内容
-## [return]: 操作结果字典
-func _complete_todo_item(p_path: String, p_content: String) -> Dictionary:
-	if p_content.is_empty():
-		return {"success": false, "data": "Content is required for 'complete' action."}
-	
-	var file_read: FileAccess = FileAccess.open(p_path, FileAccess.READ)
-	if not file_read:
-		return {"success": false, "data": "Failed to read file: " + p_path}
-	
-	var original_text: String = file_read.get_as_text()
-	var lines: PackedStringArray = original_text.split("\n")
-	var new_lines: PackedStringArray = []
-	var updated_count: int = 0
-	
-	for line in lines:
-		if p_content in line and "[ ]" in line:
-			line = line.replace("[ ]", "[x]")
-			updated_count += 1
-		new_lines.append(line)
-	
-	file_read.close()
-	
-	if updated_count > 0:
-		var file_write: FileAccess = FileAccess.open(p_path, FileAccess.WRITE)
-		file_write.store_string("\n".join(new_lines))
-		file_write.close()
-		# ToolBox为全局静态工具
-		ToolBox.update_editor_filesystem(p_path)
-		return {"success": true, "data": "Marked %d task(s) as completed in %s." % [updated_count, p_path]}
+func _complete_task(p_todo_list: TodoList, p_content_match: String) -> Dictionary:
+	if p_content_match.strip_edges().is_empty():
+		return {"success": false, "data": "Error: Content match string cannot be empty."}
+		
+	var found: bool = p_todo_list.mark_as_completed(p_content_match)
+	if found:
+		p_todo_list.emit_changed()
+		var save_result: String = _save_resource(p_todo_list)
+		if not save_result.is_empty():
+			return {"success": false, "data": "Error saving resource: " + save_result}
+		return {"success": true, "data": "Marked task as completed."}
 	else:
-		return {"success": false, "data": "No open task found containing '%s' in %s." % [p_content, p_path]}
+		return {"success": false, "data": "Error: Task containing '%s' not found." % p_content_match}
 
 
-## 列出所有 TODO 项目
-## [param p_path]: 目标文件路径
-## [return]: 操作结果字典
-func _list_todo_items(p_path: String) -> Dictionary:
-	var file: FileAccess = FileAccess.open(p_path, FileAccess.READ)
-	if not file:
-		return {"success": false, "data": "Failed to read file: " + p_path}
+func _save_resource(p_res: Resource) -> String:
+	# 确保目录存在
+	var dir = TODO_RESOURCE_PATH.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir):
+		DirAccess.make_dir_recursive_absolute(dir)
+		
+	var error: int = ResourceSaver.save(p_res, TODO_RESOURCE_PATH)
+	if error != OK:
+		return "ResourceSaver failed with error code: %d" % error
 	
-	var text: String = file.get_as_text()
-	file.close()
-	
-	if text.is_empty():
-		return {"success": true, "data": "TODO list (%s) is empty." % p_path}
-	
-	return {"success": true, "data": "Content of %s:\n\n%s" % [p_path, text]}
+	ToolBox.update_editor_filesystem(TODO_RESOURCE_PATH)
+	return ""

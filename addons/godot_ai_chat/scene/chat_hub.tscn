@@ -15,7 +15,6 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_ue3k2")
-metadata/_edit_use_anchors_ = true
 
 [node name="ChatUI" parent="." unique_id=295176123 instance=ExtResource("1_hc0y8")]
 layout_mode = 1

@@ -64,9 +64,17 @@ func _mount_skill(p_skill_name: String) -> Dictionary:
 	if ToolRegistry.is_skill_active(p_skill_name):
 		return {"success": true, "data": "Skill '%s' is already mounted." % p_skill_name}
 	
+	# 检查是否已有其他技能挂载 (单例限制)
+	if not ToolRegistry.active_skills_list.is_empty():
+		var current_skill: String = ToolRegistry.active_skills_list[0]
+		return {
+			"success": false, 
+			"data": "Operation Denied: Skill '%s' is currently mounted. Only one skill can be active at a time. You must unmount '%s' first." % [current_skill, current_skill]
+		}
+	
 	var result: bool = ToolRegistry.mount_skill(p_skill_name)
 	if result:
-		var new_tools: Array= _get_skill_tools(p_skill_name)
+		var new_tools: Array = _get_skill_tools(p_skill_name)
 		var tool_msg := ""
 		
 		if not new_tools.is_empty():

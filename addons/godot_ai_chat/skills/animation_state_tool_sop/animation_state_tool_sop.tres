@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://bbi7pjbyhfwhd"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_0ewjl"]
+
+[resource]
+script = ExtResource("1_0ewjl")
+skill_name = "Animation State Tool SOP"
+description = "本技能旨在标准化操作 `AnimationNodeStateMachine` 的完整流程，确保AI助手在操作动画状态机搭建时遵循统一规范。"
+instruction_file = "res://addons/godot_ai_chat/skills/animation_state_tool_sop/Skill.md"
+tools = Array[String](["uid://ghf2rg3qhxyf", "uid://ccshsn2denqc0", "uid://bio7uwc2hfdqt", "uid://bwfywkbjj0x6l"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

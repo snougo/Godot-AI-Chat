@@ -16,14 +16,12 @@ const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/access_memory_tool.gd",
 	
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/create_markdown_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_api_documents_tool.gd"
 ]
 
@@ -53,12 +51,17 @@ static func load_default_tools() -> void:
 ## [return]: 是否成功 (如果不存在则失败)
 static func mount_skill(p_skill_name: String) -> bool:
 	if not available_skills.has(p_skill_name):
-		push_error("[ToolRegistry] Cannot mount unknown skill: %s" % p_skill_name)
+		AIChatLogger.warn("[ToolRegistry] Cannot mount unknown skill: %s" % p_skill_name)
 		return false
 	
 	if p_skill_name in active_skills_list:
 		AIChatLogger.debug("[ToolRegistry] Skill '%s' is already mounted." % p_skill_name)
 		return true
+	
+	# 底层防护：拒绝多重挂载
+	if not active_skills_list.is_empty():
+		AIChatLogger.warn("[ToolRegistry] Rejected mounting '%s'. Another skill ('%s') is already active." % [p_skill_name, active_skills_list[0]])
+		return false
 	
 	# 添加到列表末尾 (优先级最高，覆盖前面的)
 	active_skills_list.append(p_skill_name)
@@ -99,7 +102,7 @@ static func rebuild_tool_set() -> void:
 	for skill_name in active_skills_list:
 		# 增加健壮性检查: 防止 skill 文件丢失导致 Crash
 		if not available_skills.has(skill_name):
-			push_warning("[ToolRegistry] Warning: Skill '%s' is in active list but not found in available skills. Skipping." % skill_name)
+			AIChatLogger.warn("[ToolRegistry] Warning: Skill '%s' is in active list but not found in available skills. Skipping." % skill_name)
 			continue
 		
 		var skill: Resource = available_skills[skill_name]
@@ -174,7 +177,7 @@ static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictio
 					"parameters": schema
 				}
 			})
-			
+	
 	return definitions
 
 
