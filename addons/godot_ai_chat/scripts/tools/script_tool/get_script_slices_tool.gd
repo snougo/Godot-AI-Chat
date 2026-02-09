@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "get_script_slices"
-	tool_description = "Opens a script in the editor and returns its content sliced by logic blocks."
+	tool_description = "Opens a script in the Script Editor and returns its content sliced by logic blocks."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -19,6 +19,11 @@ func get_parameters_schema() -> Dictionary:
 
 func execute(p_args: Dictionary) -> Dictionary:
 	var path: String = p_args.get("file_path", "")
+	
+	# [Security Check] Validate path against blacklist (inherited from AiTool)
+	var safety_err: String = validate_path_safety(path)
+	if not safety_err.is_empty():
+		return {"success": false, "data": safety_err}
 	
 	if not FileAccess.file_exists(path):
 		return {"success": false, "data": "File not found: %s" % path}
