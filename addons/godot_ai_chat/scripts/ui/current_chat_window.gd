@@ -81,8 +81,16 @@ func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call
 	msg.image_mime = p_image_mime
 	chat_history.add_message(msg)
 	
-	_add_block(ChatMessage.ROLE_TOOL, p_result_text, true, [], p_image_data, p_image_mime)
-	_scroll_to_bottom()
+	# [修复] 构造符合 _add_block 预期的图片数组结构
+	var display_images: Array = []
+	if not p_image_data.is_empty():
+		display_images.append({"data": p_image_data, "mime": p_image_mime})
+	
+	# [修复] 修正参数传递顺序：
+	# 原错误调用: _add_block(..., [], p_image_data, p_image_mime) 
+	# 导致 p_image_mime 被当成了 p_reasoning 显示
+	# 正确调用: _add_block(role, content, instant, tool_calls, images, reasoning)
+	_add_block(ChatMessage.ROLE_TOOL, p_result_text, true, [], display_images, "")
 
 
 ## 处理流式数据块
@@ -296,7 +304,6 @@ func _refresh_display() -> void:
 	# 3. 加载完毕后，强制执行一次剔除并滚到底部
 	await get_tree().process_frame
 	_update_visibility_culling()
-	_scroll_to_bottom()
 
 
 ## 添加一个消息块到 UI

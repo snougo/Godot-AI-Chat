@@ -215,11 +215,12 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 	var err: Error = OK
 	
 	match p_mime:
-		"image/png": err = img.load_png_from_buffer(p_data)
-		"image/jpeg", "image/jpg": err = img.load_jpg_from_buffer(p_data)
-		"image/webp": err = img.load_webp_from_buffer(p_data)
-		"image/svg+xml": err = img.load_svg_from_buffer(p_data)
-		_: err = img.load_png_from_buffer(p_data)
+		"image/png":
+			err = img.load_png_from_buffer(p_data)
+		"image/jpeg", "image/jpg":
+			err = img.load_jpg_from_buffer(p_data)
+		_:
+			err = img.load_png_from_buffer(p_data)
 	
 	if err == OK:
 		var tex: ImageTexture = ImageTexture.create_from_image(img)
