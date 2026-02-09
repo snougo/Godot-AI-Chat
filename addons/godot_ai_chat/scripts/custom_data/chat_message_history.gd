@@ -23,10 +23,14 @@ func add_message(p_msg: ChatMessage) -> void:
 ## [param p_content]: 消息内容
 ## [param p_image_data]: 可选的图片数据
 ## [param p_image_mime]: 可选的图片类型
-func add_user_message(p_content: String, p_image_data: PackedByteArray = PackedByteArray(), p_image_mime: String = "") -> void:
+func add_user_message(p_content: String, p_images: Array = []) -> void:
 	var msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, p_content)
-	msg.image_data = p_image_data
-	msg.image_mime = p_image_mime
+	
+	# 处理多图
+	for img in p_images:
+		if img is Dictionary and img.has("data"):
+			msg.add_image(img.data, img.get("mime", "image/png"))
+	
 	add_message(msg)
 
 

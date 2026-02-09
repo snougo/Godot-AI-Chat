@@ -9,14 +9,11 @@ extends RefCounted
 # --- Public Functions ---
 
 ## 处理输入文本，提取附件
-## [param p_raw_text]: 用户原始输入文本
-## [return]: 包含 final_text, image_data, image_mime, images 的字典
+## [return]: 包含 final_text, images(Array[Dictionary]) 的字典
 static func process_input(p_raw_text: String) -> Dictionary:
 	var result: Dictionary = {
 		"final_text": p_raw_text,
-		"image_data": PackedByteArray(), # 兼容旧接口：首图数据
-		"image_mime": "",               # 兼容旧接口：首图类型
-		"images": []                    # [新增] 多图列表 [{"data":..., "mime":...}]
+		"images": [] # [{"data": ..., "mime": ...}]
 	}
 	
 	var lines: PackedStringArray = p_raw_text.split("\n")
@@ -32,8 +29,7 @@ static func process_input(p_raw_text: String) -> Dictionary:
 				var img_info: Dictionary = _load_image(trimmed)
 				if not img_info.is_empty():
 					result.images.append(img_info)
-					# 图片路径行不保留在文本中，因为已经提取为数据
-					continue
+					continue # 路径已提取，不保留在文本
 			
 			# 2. 处理场景文件
 			elif ext == "tscn":
@@ -44,66 +40,25 @@ static func process_input(p_raw_text: String) -> Dictionary:
 		processed_lines.append(line)
 	
 	result.final_text = "\n".join(processed_lines)
-	
-	# [兼容性填充] 如果找到了图片，把第一张填充到旧字段
-	if not result.images.is_empty():
-		result.image_data = result.images[0].data
-		result.image_mime = result.images[0].mime
-	
 	return result
-
-# 处理输入文本，提取附件
-# [param p_raw_text]: 用户原始输入文本
-# [return]: 包含 final_text, image_data, image_mime 的字典
-#static func process_input(p_raw_text: String) -> Dictionary:
-	#var result: Dictionary = {
-		#"final_text": p_raw_text,
-		#"image_data": PackedByteArray(),
-		#"image_mime": ""
-	#}
-	#
-	#var lines: PackedStringArray = p_raw_text.split("\n")
-	#var processed_lines: Array[String] = []
-	#var image_found: bool = false
-	#
-	#for line in lines:
-		#var trimmed: String = line.strip_edges()
-		#if trimmed.begins_with("res://"):
-			#var ext: String = trimmed.get_extension().to_lower()
-			#
-			# 1. 处理图片 (仅处理找到的第一张图片)
-			#if not image_found and ext in ["png", "jpg", "jpeg", "webp"]:
-				#var img_info: Dictionary = _load_image(trimmed)
-				#if not img_info.is_empty():
-					#result.image_data = img_info.data
-					#result.image_mime = img_info.mime
-					#image_found = true
-					# 图片路径行不保留在文本中，因为已经进了 image_data 字段
-					#continue
-			#
-			# 2. 处理场景文件
-			#elif ext == "tscn":
-				#var scene_md: String = _parse_scene_to_markdown(trimmed)
-				#processed_lines.append(scene_md)
-				#continue
-		#
-		#processed_lines.append(line)
-	#
-	#result.final_text = "\n".join(processed_lines)
-	#return result
 
 
 # --- Private Functions ---
 
 static func _load_image(p_path: String) -> Dictionary:
-	if not FileAccess.file_exists(p_path): return {}
+	if not FileAccess.file_exists(p_path):
+		return {}
+	
 	var file: FileAccess = FileAccess.open(p_path, FileAccess.READ)
-	if not file: return {}
+	if not file:
+		return {}
 	
 	var buffer: PackedByteArray = file.get_buffer(file.get_length())
 	var mime: String = "image/png"
-	if p_path.ends_with(".jpg") or p_path.ends_with(".jpeg"): mime = "image/jpeg"
-	elif p_path.ends_with(".webp"): mime = "image/webp"
+	if p_path.ends_with(".jpg") or p_path.ends_with(".jpeg"):
+		mime = "image/jpeg"
+	elif p_path.ends_with(".webp"):
+		mime = "image/webp"
 	
 	return {"data": buffer, "mime": mime}
 

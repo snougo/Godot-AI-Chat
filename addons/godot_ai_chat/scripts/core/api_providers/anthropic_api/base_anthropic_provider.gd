@@ -166,10 +166,6 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 		
 		"message_delta":
 			if p_chunk_data.has("usage"):
-				#if ui_update.has("usage"):
-					#ui_update["usage"].merge(p_chunk_data.usage, true)
-				#else:
-					#ui_update["usage"] = p_chunk_data.usage
 				# 累积并标准化 (Output Tokens 通常在这里)
 				_merge_and_normalize_usage(p_chunk_data.usage)
 				ui_update["usage"] = _current_stream_usage.duplicate()
@@ -220,21 +216,36 @@ func _convert_message_to_anthropic(p_msg: ChatMessage) -> Dictionary:
 			"content": p_msg.content
 		}]
 	
-	elif role == "user" and not p_msg.image_data.is_empty():
+	# [修复] 多图支持
+	elif role == "user" and (not p_msg.images.is_empty() or not p_msg.image_data.is_empty()):
 		var content_array: Array = []
-		var base64_str: String = Marshalls.raw_to_base64(p_msg.image_data)
-		var media_type: String = p_msg.image_mime
 		
-		if media_type.is_empty():
-			media_type = "image/jpeg"
+		# 1. 处理新版多图
+		for img in p_msg.images:
+			var base64_str: String = Marshalls.raw_to_base64(img.data)
+			var media_type: String = img.mime
+			if media_type.is_empty(): media_type = "image/jpeg"
+			
+			content_array.append({
+				"type": "image",
+				"source": {"type": "base64", "media_type": media_type, "data": base64_str}
+			})
 		
-		content_array.append({
-			"type": "image",
-			"source": {"type": "base64", "media_type": media_type, "data": base64_str}
-		})
+		# 2. 兼容旧版单图 (仅当 images 为空时)
+		if p_msg.images.is_empty() and not p_msg.image_data.is_empty():
+			var base64_str: String = Marshalls.raw_to_base64(p_msg.image_data)
+			var media_type: String = p_msg.image_mime
+			if media_type.is_empty(): media_type = "image/jpeg"
+			
+			content_array.append({
+				"type": "image",
+				"source": {"type": "base64", "media_type": media_type, "data": base64_str}
+			})
 		
+		# 3. 追加文本
 		if not p_msg.content.is_empty():
 			content_array.append({ "type": "text", "text": p_msg.content })
+		
 		content = content_array
 	
 	elif role == "assistant" and not p_msg.tool_calls.is_empty():

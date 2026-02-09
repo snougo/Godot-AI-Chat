@@ -170,16 +170,33 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	var dict: Dictionary = { "role": p_msg.role }
 	
 	# 1. 优先处理多模态 (仅 User 且有图)
-	if p_msg.role == "user" and not p_msg.image_data.is_empty():
+	var has_images: bool = not p_msg.images.is_empty()
+	var has_legacy_image: bool = not p_msg.image_data.is_empty() # 兼容旧数据
+	
+	if p_msg.role == "user" and (has_images or has_legacy_image):
 		var content_array: Array = []
+		
+		# 1.1 文本部分
 		if not p_msg.content.is_empty():
 			content_array.append({ "type": "text", "text": p_msg.content })
 		
-		var base64_str: String = Marshalls.raw_to_base64(p_msg.image_data)
-		content_array.append({
-			"type": "image_url",
-			"image_url": { "url": "data:%s;base64,%s" % [p_msg.image_mime, base64_str] }
-		})
+		# 1.2 新版多图数组处理
+		for img in p_msg.images:
+			var base64_str: String = Marshalls.raw_to_base64(img.data)
+			var mime: String = img.get("mime", "image/png")
+			content_array.append({
+				"type": "image_url",
+				"image_url": { "url": "data:%s;base64,%s" % [mime, base64_str] }
+			})
+		
+		# 1.3 旧版单图兼容 (仅当 images 为空时才处理，避免重复)
+		if has_legacy_image and not has_images:
+			var base64_str: String = Marshalls.raw_to_base64(p_msg.image_data)
+			content_array.append({
+				"type": "image_url",
+				"image_url": { "url": "data:%s;base64,%s" % [p_msg.image_mime, base64_str] }
+			})
+			
 		dict["content"] = content_array
 	
 	# 2. 普通文本处理

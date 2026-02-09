@@ -54,11 +54,10 @@ func load_session_history_resource(p_session_history: ChatMessageHistory) -> voi
 
 ## 追加用户消息到历史和 UI
 ## [param p_text]: 文本内容
-## [param p_image_data]: 图片数据 (可选)
-## [param p_image_mime]: 图片 MIME 类型 (可选)
-func append_user_message(p_text: String, p_image_data: PackedByteArray = PackedByteArray(), p_image_mime: String = "") -> void:
-	chat_history.add_user_message(p_text, p_image_data, p_image_mime)
-	_add_block(ChatMessage.ROLE_USER, p_text, true, [], p_image_data, p_image_mime)
+## [param p_images]: 图片数组 [{"data":..., "mime":...}]
+func append_user_message(p_text: String, p_images: Array = []) -> void:
+	chat_history.add_user_message(p_text, p_images)
+	_add_block(ChatMessage.ROLE_USER, p_text, true, [], p_images)
 
 
 ## 追加错误消息到 UI
@@ -278,11 +277,19 @@ func _refresh_display() -> void:
 		if msg.role == ChatMessage.ROLE_SYSTEM: 
 			continue
 		
-		_add_block(msg.role, msg.content, true, msg.tool_calls, msg.image_data, msg.image_mime, msg.reasoning_content)
+		# [修复] 适配多图结构，同时兼容旧数据
+		# 如果是旧存档（images为空但image_data有值），则临时构造兼容数组
+		var display_images: Array = msg.images
+		if display_images.is_empty() and not msg.image_data.is_empty():
+			display_images = [{"data": msg.image_data, "mime": msg.image_mime}]
+		
+		# 调用更新后的 _add_block (注意参数顺序需与修改后的定义一致)
+		# _add_block(p_role, p_content, p_instant, p_tool_calls, p_images, p_reasoning)
+		_add_block(msg.role, msg.content, true, msg.tool_calls, display_images, msg.reasoning_content)
+		
 		count += 1
 		
-		# 每加载 batch_size 个，就暂停一帧，把控制权交还给主线程
-		# 这样 _process 中的剔除逻辑就有机会运行，把刚生成的块挂起
+		# 每加载 batch_size 个，就暂停一帧
 		if count % batch_size == 0:
 			await get_tree().process_frame
 	
@@ -293,12 +300,14 @@ func _refresh_display() -> void:
 
 
 ## 添加一个消息块到 UI
-func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls: Array = [], p_image_data: PackedByteArray = PackedByteArray(), p_image_mime: String = "", p_reasoning: String = "") -> void:
+func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls: Array = [], p_images: Array = [], p_reasoning: String = "") -> void:
 	var block: ChatMessageBlock = _create_block()
 	block.set_content(p_role, p_content, current_model_name if p_role == ChatMessage.ROLE_ASSISTANT else "", p_tool_calls, p_reasoning)
 	
-	if not p_image_data.is_empty():
-		block.display_image(p_image_data, p_image_mime)
+	# [修复] 支持多图循环渲染
+	for img in p_images:
+		if img is Dictionary and img.has("data"):
+			block.display_image(img.data, img.get("mime", "image/png"))
 	
 	_scroll_to_bottom()
 

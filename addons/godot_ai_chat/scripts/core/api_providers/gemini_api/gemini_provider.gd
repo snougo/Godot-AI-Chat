@@ -82,8 +82,19 @@ func build_request_body(_p_model_name: String, p_messages: Array[ChatMessage], p
 			# User 消息
 			parts.append({"text": msg.content})
 		
-		# --- 多模态图片支持 ---
-		if not msg.image_data.is_empty():
+		# --- 多模态多图支持 ---
+		# 1. 新版多图数组
+		if not msg.images.is_empty():
+			for img in msg.images:
+				parts.append({
+					"inline_data": {
+						"mime_type": img.mime,
+						"data": Marshalls.raw_to_base64(img.data)
+					}
+				})
+		
+		# 2. 旧版单图兼容 (仅当新版为空时)
+		elif not msg.image_data.is_empty():
 			parts.append({
 				"inline_data": {
 					"mime_type": msg.image_mime,
