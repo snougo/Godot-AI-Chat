@@ -59,12 +59,33 @@ func handle_user_message(p_text: String) -> void:
 	# 处理附件
 	var processed: Dictionary = AttachmentProcessor.process_input(p_text)
 	
-	# 追加到窗口
-	_current_chat_window.append_user_message(
-		processed.final_text, 
-		processed.image_data, 
-		processed.image_mime
-	)
+	# [修复] 处理多张图片
+	# 逻辑：第一张图跟随文本显示，后续图片作为单独的空文本 User 消息追加
+	# 这样在历史记录中会形成连续的 User 消息，大多数 LLM (OpenAI/Anthropic) 都能正确识别为连续输入
+	var images: Array = processed.get("images", [])
+	
+	if images.is_empty():
+		# 无图情况
+		_current_chat_window.append_user_message(processed.final_text)
+	
+	else:
+		# 第一条消息：文本 + 第一张图
+		var first_img: Dictionary = images[0]
+		_current_chat_window.append_user_message(
+			processed.final_text, 
+			first_img.data, 
+			first_img.mime
+		)
+		
+		# 后续消息：仅图片
+		# 从索引 1 开始遍历
+		for i in range(1, images.size()):
+			var next_img: Dictionary = images[i]
+			_current_chat_window.append_user_message(
+				"", # 文本留空
+				next_img.data, 
+				next_img.mime
+			)
 	
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	var history: ChatMessageHistory = _current_chat_window.chat_history
@@ -74,6 +95,33 @@ func handle_user_message(p_text: String) -> void:
 	
 	# 发起请求
 	_network_manager.start_chat_stream(context_history)
+
+# 处理用户发送消息
+#func handle_user_message(p_text: String) -> void:
+	#if not _session_manager.has_active_session() or _current_chat_window.chat_history == null:
+		#_chat_ui.show_confirmation("No chat active.\nPlease click 'New Button' or 'Load Button' to start.")
+		#return
+	#
+	#_chat_ui.clear_user_input()
+	#
+	# 处理附件
+	#var processed: Dictionary = AttachmentProcessor.process_input(p_text)
+	#
+	# 追加到窗口
+	#_current_chat_window.append_user_message(
+		#processed.final_text, 
+		#processed.image_data, 
+		#processed.image_mime
+	#)
+	#
+	#var settings: PluginSettings = ToolBox.get_plugin_settings()
+	#var history: ChatMessageHistory = _current_chat_window.chat_history
+	#
+	# 构建上下文
+	#var context_history: Array[ChatMessage] = ContextBuilder.build_context(history, settings)
+	#
+	# 发起请求
+	#_network_manager.start_chat_stream(context_history)
 
 
 ## 请求停止生成

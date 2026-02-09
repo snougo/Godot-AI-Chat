@@ -17,8 +17,8 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
 	
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",

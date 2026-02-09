@@ -29,7 +29,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var full_path := folder + name
 	
 	# 安全与校验
-	var safety_err := validate_path_safety(full_path)
+	var safety_err: String = validate_path_safety(full_path)
 	if not safety_err.is_empty():
 		return {"success": false, "data": safety_err}
 	

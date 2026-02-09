@@ -301,14 +301,14 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 		var rect: TextureRect = TextureRect.new()
 		rect.texture = tex
 		rect.size = Vector2(400, 400)
-		rect.expand_mode = TextureRect.EXPAND_FIT_HEIGHT_PROPORTIONAL
+		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
-		rect.custom_minimum_size = Vector2(0, 250) 
+		rect.custom_minimum_size = Vector2(400, 400)
 		
 		_content_container.add_child(rect)
 		_last_ui_node = null
 	else:
-		push_error("Failed to load image buffer in ChatMessageBlock, error code: %d" % err)
+		AIChatLogger.error("Failed to load image buffer in ChatMessageBlock, error code: %d" % err)
 
 
 ## 挂起内容渲染（用于视口外优化）
@@ -588,6 +588,39 @@ func _create_reasoning_ui() -> void:
 	_last_ui_node = null
 
 
+## 创建文本块 UI
+func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabel:
+	var rtl: RichTextLabel = RichTextLabel.new()
+	rtl.bbcode_enabled = false
+	rtl.fit_content = true
+	rtl.selection_enabled = true
+	rtl.focus_mode = Control.FOCUS_CLICK
+	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rtl.text = p_initial_text
+	
+	if not p_instant:
+		rtl.visible_characters = 0
+	_content_container.add_child(rtl)
+	return rtl
+
+
+## 追加内容到文本块
+func _append_to_text(p_text: String, p_instant: bool) -> void:
+	if not _last_ui_node is RichTextLabel:
+		_finish_typing()
+		_last_ui_node = _create_text_block("", p_instant)
+	
+	if p_instant:
+		_last_ui_node.text += p_text
+	else:
+		var old_total: int = _last_ui_node.get_total_character_count()
+		if _last_ui_node.visible_characters == -1:
+			_last_ui_node.visible_characters = old_total
+		
+		_last_ui_node.text += p_text
+		_trigger_typewriter(_last_ui_node)
+
+
 ## 创建代码块 UI
 func _create_code_block(p_lang: String) -> void:
 	_finish_typing()
@@ -599,7 +632,8 @@ func _create_code_block(p_lang: String) -> void:
 	code_edit.draw_tabs = true
 	code_edit.gutters_draw_line_numbers = true
 	code_edit.minimap_draw = false
-	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_NONE
+	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_BOUNDARY
+	code_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	code_edit.mouse_filter = CodeEdit.MOUSE_FILTER_PASS
 	
 	_content_container.add_child(code_edit)
@@ -650,39 +684,6 @@ func _create_code_block(p_lang: String) -> void:
 func _append_to_code(p_text: String) -> void:
 	if _last_ui_node is CodeEdit:
 		_last_ui_node.insert_text_at_caret(p_text)
-
-
-## 追加内容到文本块
-func _append_to_text(p_text: String, p_instant: bool) -> void:
-	if not _last_ui_node is RichTextLabel:
-		_finish_typing()
-		_last_ui_node = _create_text_block("", p_instant)
-	
-	if p_instant:
-		_last_ui_node.text += p_text
-	else:
-		var old_total: int = _last_ui_node.get_total_character_count()
-		if _last_ui_node.visible_characters == -1:
-			_last_ui_node.visible_characters = old_total
-		
-		_last_ui_node.text += p_text
-		_trigger_typewriter(_last_ui_node)
-
-
-## 创建文本块 UI
-func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabel:
-	var rtl: RichTextLabel = RichTextLabel.new()
-	rtl.bbcode_enabled = false
-	rtl.fit_content = true
-	rtl.selection_enabled = true
-	rtl.focus_mode = Control.FOCUS_CLICK
-	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rtl.text = p_initial_text
-	
-	if not p_instant:
-		rtl.visible_characters = 0
-	_content_container.add_child(rtl)
-	return rtl
 
 
 ## 触发打字机效果
