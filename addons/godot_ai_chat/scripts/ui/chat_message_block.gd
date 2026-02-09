@@ -49,12 +49,6 @@ var _current_typing_node: RichTextLabel = null
 var _reasoning_container: FoldableContainer = null
 var _reasoning_label: RichTextLabel = null
 
-## 专门用于处理 <think> 标签的缓冲区
-var _think_parse_buffer: String = ""
-## 当前是否正在解析思考内容
-var _is_parsing_think: bool = false
-## 标记是否禁用思考标签解析
-var _disable_think_parsing: bool = false
 ## 消息块是否被挂起
 var _is_suspended: bool = false
 
@@ -96,10 +90,6 @@ func start_stream(p_role: String, p_model_name: String = "") -> void:
 	_set_title(p_role, p_model_name)
 	_clear_content()
 	visible = true
-	
-	# 检查当前 Provider，如果是 Gemini 则禁用思考解析
-	var settings: PluginSettings = ToolBox.get_plugin_settings()
-	_disable_think_parsing = (settings.api_provider == "Google Gemini")
 
 
 ## 追加流式文本块
@@ -108,66 +98,9 @@ func append_chunk(p_text: String) -> void:
 	if p_text.is_empty(): 
 		return
 	
-	# 如果禁用了思考解析（例如 Gemini），直接走普通文本处理逻辑
-	if _disable_think_parsing:
-		_process_smart_chunk(p_text, false)
-		return
-	
-	_think_parse_buffer += p_text
-	
-	while true:
-		if _is_parsing_think:
-			var end_idx: int = _think_parse_buffer.find("</think>")
-			if end_idx != -1:
-				# 思考结束
-				var think_content: String = _think_parse_buffer.substr(0, end_idx)
-				append_reasoning(think_content)
-				
-				_is_parsing_think = false
-				_think_parse_buffer = _think_parse_buffer.substr(end_idx + 8)
-				continue
-			else:
-				# 还没结束，尽量刷新缓冲区到思考UI，只留一点尾巴防止切断 </think>
-				var keep_len: int = 8 # </think> 长度
-				if _think_parse_buffer.length() > keep_len:
-					var flush_len: int = _think_parse_buffer.length() - keep_len
-					var content: String = _think_parse_buffer.left(flush_len)
-					append_reasoning(content)
-					_think_parse_buffer = _think_parse_buffer.right(-flush_len)
-				break
-		
-		else: # 正常文本模式
-			var start_idx: int = _think_parse_buffer.find("<think>")
-			if start_idx != -1:
-				# 发现思考开始
-				# 1. 先把 <think> 之前的内容当作普通文本处理
-				if start_idx > 0:
-					var normal_text: String = _think_parse_buffer.substr(0, start_idx)
-					_process_smart_chunk(normal_text, false) # 调用原有的处理逻辑
-				
-				# 2. 切换状态
-				_is_parsing_think = true
-				_think_parse_buffer = _think_parse_buffer.substr(start_idx + 7)
-				continue
-			else:
-				# 没发现 <think>，检查是否有潜在的半个 <think>
-				# 类似 <, <t, <th ...
-				var safe_idx: int = _think_parse_buffer.length()
-				# 简单粗暴点：如果不包含 <，则全部安全
-				# 如果包含 <，则保留 < 及其后面的内容到下次处理
-				var last_lt: int = _think_parse_buffer.rfind("<")
-				if last_lt != -1:
-					# 检查后面是否可能构成 <think>
-					var potential: String = _think_parse_buffer.substr(last_lt)
-					if "<think>".begins_with(potential):
-						safe_idx = last_lt
-				
-				if safe_idx > 0:
-					var safe_text: String = _think_parse_buffer.left(safe_idx)
-					_process_smart_chunk(safe_text, false) # 调用原有的处理逻辑
-					_think_parse_buffer = _think_parse_buffer.right(-safe_idx)
-				
-				break
+	# 直接走普通文本/代码块处理逻辑，不再解析 <think> 标签
+	# 混合在文本中的思考过程将直接作为普通文本显示
+	_process_smart_chunk(p_text, false)
 
 
 ## 追加流式思考内容
@@ -185,15 +118,7 @@ func append_reasoning(p_text: String) -> void:
 
 ## 结束流式接收，刷新缓冲区
 func finish_stream() -> void:
-	# 刷新剩余的缓冲区
-	if not _think_parse_buffer.is_empty():
-		if _is_parsing_think:
-			append_reasoning(_think_parse_buffer)
-		else:
-			_process_smart_chunk(_think_parse_buffer, false)
-	_think_parse_buffer = ""
-	_is_parsing_think = false
-	
+	# 刷新剩余的 Pending Buffer (用于处理未闭合的代码块标记等)
 	if not _pending_buffer.is_empty():
 		if _pending_buffer.begins_with("```"):
 			var line: String = _pending_buffer
@@ -328,9 +253,6 @@ func suspend_content() -> void:
 	# 1. 锁定高度：将当前实际高度设为最小高度，防止布局塌陷
 	custom_minimum_size.y = size.y
 	
-	# 2. 隐藏内容：隐藏内部高消耗节点
-	#_main_margin_container.visible = false
-	
 	# 2. 移出节点：彻底移除子节点，阻断 THEME_CHANGED 和 DRAW 调用
 	remove_child(_main_margin_container) 
 	
@@ -341,9 +263,6 @@ func suspend_content() -> void:
 func resume_content() -> void:
 	if not _is_suspended:
 		return
-	
-	# 1. 恢复显示
-	#_main_margin_container.visible = true
 	
 	# 1. 恢复节点
 	add_child(_main_margin_container)
