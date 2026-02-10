@@ -77,19 +77,20 @@ func append_error_message(p_text: String) -> void:
 func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call_id: String, p_image_data: PackedByteArray = PackedByteArray(), p_image_mime: String = "") -> void:
 	var msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, p_result_text, p_tool_name)
 	msg.tool_call_id = p_tool_call_id
-	msg.image_data = p_image_data
-	msg.image_mime = p_image_mime
+	
+	# 使用 add_image 方法
+	if not p_image_data.is_empty():
+		msg.add_image(p_image_data, p_image_mime)
+		
 	chat_history.add_message(msg)
 	
-	# [修复] 构造符合 _add_block 预期的图片数组结构
+	# 构造 UI 显示用的图片数组
 	var display_images: Array = []
 	if not p_image_data.is_empty():
 		display_images.append({"data": p_image_data, "mime": p_image_mime})
 	
 	# [修复] 修正参数传递顺序：
-	# 原错误调用: _add_block(..., [], p_image_data, p_image_mime) 
-	# 导致 p_image_mime 被当成了 p_reasoning 显示
-	# 正确调用: _add_block(role, content, instant, tool_calls, images, reasoning)
+	# _add_block(role, content, instant, tool_calls, images, reasoning)
 	_add_block(ChatMessage.ROLE_TOOL, p_result_text, true, [], display_images, "")
 
 
@@ -143,12 +144,12 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 	_scroll_to_bottom()
 	
 	# [辅助] 如果消息有实际内容，确保它被添加到历史记录
-	# 注意：这是辅助机制，主要修复在 ChatBackend 中
 	if not chat_history.messages.is_empty():
 		var last: ChatMessage = chat_history.messages.back()
 		if last.role != ChatMessage.ROLE_ASSISTANT:
-			# 如果最后一条不是 Assistant 消息，且当前消息有内容，则添加
-			if not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty():
+			# [Fix] 增加对 reasoning_content 的检查
+			# 只要消息包含思考内容、文本内容或工具调用中的任意一项，就必须保存
+			if not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty():
 				chat_history.add_message(target_msg)
 
 
@@ -285,11 +286,8 @@ func _refresh_display() -> void:
 		if msg.role == ChatMessage.ROLE_SYSTEM: 
 			continue
 		
-		# [修复] 适配多图结构，同时兼容旧数据
-		# 如果是旧存档（images为空但image_data有值），则临时构造兼容数组
+		# 直接使用 images 数组
 		var display_images: Array = msg.images
-		if display_images.is_empty() and not msg.image_data.is_empty():
-			display_images = [{"data": msg.image_data, "mime": msg.image_mime}]
 		
 		# 调用更新后的 _add_block (注意参数顺序需与修改后的定义一致)
 		# _add_block(p_role, p_content, p_instant, p_tool_calls, p_images, p_reasoning)

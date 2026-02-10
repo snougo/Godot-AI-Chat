@@ -17,7 +17,7 @@ func get_request_url(p_base_url: String, p_model_name: String, p_api_key: String
 	
 	if p_model_name.is_empty():
 		return base + "/v1/models"
-		
+	
 	return base + "/v1/responses"
 
 
@@ -26,7 +26,7 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 	var body: Dictionary = {
 		"model": p_model_name,
 		"stream": p_stream,
-		"temperature": p_temperature
+		"temperature": snappedf(p_temperature, 0.1)
 	}
 	
 	# [重要] 暂时禁用工具，因为 LM Studio Stateful API 目前不支持 'function' 类型

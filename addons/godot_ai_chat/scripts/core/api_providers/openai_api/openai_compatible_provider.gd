@@ -63,10 +63,13 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		var msg_dict: Dictionary = _convert_message_to_api_format(msg)
 		api_messages.append(msg_dict)
 	
+	# Kimi-K2.5必须温度值为1，否则会返回400错误代码
+	var final_temperature: float = 1.0 if p_model_name == "kimi-k2.5" else p_temperature
+	
 	var body: Dictionary = {
 		"model": p_model_name,
 		"messages": api_messages,
-		"temperature": p_temperature,
+		"temperature": snappedf(final_temperature, 0.1),
 		"stream": p_stream
 	}
 	
@@ -101,11 +104,17 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 	
 	if json is Dictionary and json.has("choices") and not json.choices.is_empty():
 		var msg: Dictionary = json.choices[0].get("message", {})
-		return {
+		var result: Dictionary = {
 			"content": msg.get("content", ""),
 			"tool_calls": msg.get("tool_calls", []),
 			"role": msg.get("role", "assistant")
 		}
+		
+		# [修复] 解析非流式响应中的思考内容，防止数据丢失
+		if msg.has("reasoning_content"):
+			result["reasoning_content"] = msg.reasoning_content
+			
+		return result
 	
 	return {"error": "Unknown response format"}
 
@@ -171,9 +180,8 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	
 	# 1. 优先处理多模态 (仅 User 且有图)
 	var has_images: bool = not p_msg.images.is_empty()
-	var has_legacy_image: bool = not p_msg.image_data.is_empty() # 兼容旧数据
 	
-	if p_msg.role == "user" and (has_images or has_legacy_image):
+	if p_msg.role == "user" and has_images:
 		var content_array: Array = []
 		
 		# 1.1 文本部分
@@ -189,14 +197,6 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 				"image_url": { "url": "data:%s;base64,%s" % [mime, base64_str] }
 			})
 		
-		# 1.3 旧版单图兼容 (仅当 images 为空时才处理，避免重复)
-		if has_legacy_image and not has_images:
-			var base64_str: String = Marshalls.raw_to_base64(p_msg.image_data)
-			content_array.append({
-				"type": "image_url",
-				"image_url": { "url": "data:%s;base64,%s" % [p_msg.image_mime, base64_str] }
-			})
-			
 		dict["content"] = content_array
 	
 	# 2. 普通文本处理
@@ -233,5 +233,10 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	# 5. Tool Call ID
 	if not p_msg.tool_call_id.is_empty():
 		dict["tool_call_id"] = p_msg.tool_call_id
+	
+	# [修复] 6. Reasoning Content (Kimi/DeepSeek)
+	# 如果 Assistant 消息包含思考过程，必须回传，否则 API 会报错
+	if p_msg.role == "assistant" and not p_msg.reasoning_content.is_empty():
+		dict["reasoning_content"] = p_msg.reasoning_content
 	
 	return dict

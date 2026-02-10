@@ -24,7 +24,6 @@ func _init(p_ui: ChatUI, p_net: NetworkManager, p_workflow:AgentWorkflow, p_wind
 
 func _connect_signals() -> void:
 	# 网络事件 -> UI 反馈
-	#_network_manager.new_chat_request_sending.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.WAITING_RESPONSE))
 	_network_manager.new_chat_request_sending.connect(func():
 		# [修复] 强制结算上一轮并重置当前计数，确保 UI 单调递增逻辑在新一轮生效
 		_chat_ui.prepare_for_new_request()
@@ -129,10 +128,20 @@ func _on_assistant_reply_completed(_p_final_msg: ChatMessage, p_additional_histo
 
 
 func _on_tool_message_generated(p_msg: ChatMessage) -> void:
+	var img_data: PackedByteArray = PackedByteArray()
+	var img_mime: String = ""
+	
+	# 从 images 数组提取图片数据
+	if not p_msg.images.is_empty():
+		var first_img: Dictionary = p_msg.images[0]
+		if first_img.has("data"):
+			img_data = first_img.data
+			img_mime = first_img.get("mime", "image/png")
+	
 	_current_chat_window.append_tool_message(
 		p_msg.name, 
 		p_msg.content, 
 		p_msg.tool_call_id, 
-		p_msg.image_data, 
-		p_msg.image_mime
+		img_data, 
+		img_mime
 	)

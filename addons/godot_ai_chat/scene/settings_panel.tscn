@@ -56,7 +56,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 text_overrun_behavior = 1
 selected = 1
-item_count = 6
+item_count = 5
 popup/item_0/text = "LM Studio Stateful"
 popup/item_0/id = 0
 popup/item_1/text = "OpenAI-Compatible"
@@ -65,10 +65,8 @@ popup/item_2/text = "ZhipuAI"
 popup/item_2/id = 2
 popup/item_3/text = "Google Gemini"
 popup/item_3/id = 3
-popup/item_4/text = "Anthropic"
+popup/item_4/text = "Anthropic-Compatible"
 popup/item_4/id = 4
-popup/item_5/text = "Anthropic-Compatible"
-popup/item_5/id = 5
 
 [node name="BaseUrl" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=242663543]
 layout_mode = 2

@@ -5,17 +5,13 @@ extends BaseLLMProvider
 ## Anthropic 协议基类
 ##
 ## 处理 Claude 系列模型的 Message API 格式构建和 SSE 流式响应解析。
-## 增强了对 SiliconFlow 等兼容性接口的鲁棒性（工具参数 Start/Delta 冲突解决）。
 
 # --- Private Vars ---
 
 # Key: content_block_index (int), Value: tool_calls array index (int)
 var _stream_tool_index_map: Dictionary = {}
 
-# 记录哪些 index 已经收到了 input_json_delta
-# Key: content_block_index (int), Value: true
-var _tool_delta_received_set: Dictionary = {}
-# [新增] 成员变量用于累积 Usage
+# 累积 Usage 数据 (Key: prompt_tokens/completion_tokens, Value: int)
 var _current_stream_usage: Dictionary = {}
 
 
@@ -27,14 +23,14 @@ func get_stream_parser_type() -> StreamParserType:
 
 func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	_stream_tool_index_map.clear()
-	_tool_delta_received_set.clear()
 	
 	var system_prompt: String = ""
 	var api_messages: Array[Dictionary] = []
 	
 	for msg in p_messages:
 		if msg.role == "system":
-			if not system_prompt.is_empty(): system_prompt += "\n"
+			if not system_prompt.is_empty():
+				system_prompt += "\n"
 			system_prompt += msg.content
 		else:
 			api_messages.append(_convert_message_to_anthropic(msg))
@@ -42,8 +38,7 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 	var body: Dictionary = {
 		"model": p_model_name,
 		"messages": api_messages,
-		"max_tokens": 4096,
-		"temperature": p_temperature,
+		"temperature": snappedf(p_temperature, 0.1),
 		"stream": p_stream
 	}
 	
@@ -60,9 +55,23 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 
 
 func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
-	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
+	var json_str: String = p_body_bytes.get_string_from_utf8()
+	var json: Variant = JSON.parse_string(json_str)
 	
-	if json is Dictionary and json.has("content"):
+	if json == null:
+		push_error("BaseAnthropicProvider: Failed to parse JSON response")
+		return {"error": "Invalid JSON response", "raw": json_str.substr(0, 500)}
+	
+	if not json is Dictionary:
+		push_error("BaseAnthropicProvider: Response is not a Dictionary")
+		return {"error": "Unexpected response format", "raw": str(json).substr(0, 500)}
+	
+	if json.has("error"):
+		var error_msg: String = json.error.get("message", str(json.error)) if json.error is Dictionary else str(json.error)
+		push_error("BaseAnthropicProvider: API Error: " + error_msg)
+		return {"error": error_msg, "raw": json}
+	
+	if json.has("content"):
 		var result: Dictionary = {
 			"role": json.get("role", "assistant"),
 			"content": "",
@@ -71,20 +80,35 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 		
 		if json.content is Array:
 			for block in json.content:
-				if block.type == "text":
-					result["content"] += block.text
-				elif block.type == "tool_use":
-					result["tool_calls"].append({
-						"id": block.id,
+				if not block is Dictionary:
+					continue
+					
+				if block.get("type", "") == "text":
+					result.content += block.get("text", "")
+				elif block.get("type", "") == "tool_use":
+					var input_data: Variant = block.get("input", {})
+					var input_str: String
+					if input_data is Dictionary or input_data is Array:
+						input_str = JSON.stringify(input_data)
+					else:
+						input_str = str(input_data)
+					
+					result.tool_calls.append({
+						"id": block.get("id", ""),
 						"type": "function",
 						"function": {
-							"name": block.name,
-							"arguments": JSON.stringify(block.input)
+							"name": block.get("name", ""),
+							"arguments": input_str
 						}
 					})
+		
+		# 处理 usage（如果存在）
+		if json.has("usage"):
+			result.usage = _normalize_usage(json.usage)
+		
 		return result
 	
-	return {"error": "Unknown response format or error: " + str(json)}
+	return {"error": "Unknown response format", "raw": json_str.substr(0, 500)}
 
 
 func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -> Dictionary:
@@ -95,33 +119,28 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 	match type:
 		"message_start":
 			_stream_tool_index_map.clear()
-			_tool_delta_received_set.clear()
-			_current_stream_usage.clear() # 重置
+			_current_stream_usage.clear()
 			
 			if p_chunk_data.has("message"):
 				var msg_info: Dictionary = p_chunk_data.message
 				if msg_info.has("usage"):
-					# 累积并标准化
 					_merge_and_normalize_usage(msg_info.usage)
-					ui_update["usage"] = msg_info.usage
+					ui_update.usage = _current_stream_usage.duplicate()
 		
 		"content_block_start":
 			var block: Dictionary = p_chunk_data.get("content_block", {})
-			if block.get("type") == "tool_use":
+			if block.get("type", "") == "tool_use":
 				var new_call: Dictionary = {
 					"id": block.get("id", ""),
 					"type": "function",
 					"function": {
 						"name": block.get("name", ""),
-						"arguments": "" 
+						"arguments": ""
 					}
 				}
 				
-				# [策略优化] 读取 start 中的 input，但作为备选方案
-				if block.has("input") and block.input is Dictionary:
-					var json_str = JSON.stringify(block.input)
-					if json_str != "{}":
-						new_call.function.arguments = json_str
+				# [策略变更] 忽略 start 中的 input，完全依赖后续的 input_json_delta
+				# 这避免了 SiliconFlow 等平台的 Start/Delta 冲突问题
 				
 				p_target_msg.tool_calls.append(new_call)
 				_stream_tool_index_map[index] = p_target_msg.tool_calls.size() - 1
@@ -133,7 +152,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 			if delta_type == "text_delta":
 				var text: String = delta.get("text", "")
 				p_target_msg.content += text
-				ui_update["content_delta"] = text
+				ui_update.content_delta = text
 			
 			elif delta_type == "input_json_delta":
 				var fragment: String = ""
@@ -149,41 +168,44 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 						var array_idx: int = _stream_tool_index_map[index]
 						if array_idx < p_target_msg.tool_calls.size():
 							var target_tool = p_target_msg.tool_calls[array_idx]
-							# [冲突解决] 如果这是第一次收到 delta，且 arguments 已经有内容（来自 start）
-							# 说明 start 和 delta 重复了，我们优先信任 delta（清空 start 内容）
-							if not _tool_delta_received_set.has(index):
-								if not target_tool.function.arguments.is_empty():
-									target_tool.function.arguments = "" # 清空旧数据
-								_tool_delta_received_set[index] = true # 标记已进入 delta 模式
-							
 							target_tool.function.arguments += fragment
 						else:
-							push_warning("[BaseAnthropic] Tool array index out of bounds!")
+							push_warning("[BaseAnthropic] Tool array index out of bounds: %d (size: %d)" % [array_idx, p_target_msg.tool_calls.size()])
 					else:
-						# Fallback
+						# Fallback: 如果未映射，尝试追加到最后一个工具
 						if not p_target_msg.tool_calls.is_empty():
 							p_target_msg.tool_calls.back().function.arguments += fragment
 		
 		"message_delta":
 			if p_chunk_data.has("usage"):
-				# 累积并标准化 (Output Tokens 通常在这里)
 				_merge_and_normalize_usage(p_chunk_data.usage)
-				ui_update["usage"] = _current_stream_usage.duplicate()
+				ui_update.usage = _current_stream_usage.duplicate()
+		
+		"message_stop":
+			# 流式结束，可在此触发最终回调或清理
+			ui_update.stream_finished = true
 	
 	return ui_update
 
 
-# ----- helper function -----
+# ----- Helper Functions -----
 
-# 合并并转换键名
+# 合并并转换键名 (Anthropic -> OpenAI 格式)
 func _merge_and_normalize_usage(p_new_usage: Dictionary) -> void:
-	# Anthropic Keys -> OpenAI Keys
 	if p_new_usage.has("input_tokens"):
-		_current_stream_usage["prompt_tokens"] = p_new_usage.input_tokens
+		_current_stream_usage.prompt_tokens = p_new_usage.input_tokens
 	if p_new_usage.has("output_tokens"):
-		_current_stream_usage["completion_tokens"] = p_new_usage.output_tokens
-	
-	# 如果以后支持 cache_creation_input_tokens 等其他字段，也可以在这里映射
+		_current_stream_usage.completion_tokens = p_new_usage.output_tokens
+
+
+# 单次转换 usage 格式（用于非流式响应）
+func _normalize_usage(p_usage: Dictionary) -> Dictionary:
+	var result: Dictionary = {}
+	if p_usage.has("input_tokens"):
+		result.prompt_tokens = p_usage.input_tokens
+	if p_usage.has("output_tokens"):
+		result.completion_tokens = p_usage.output_tokens
+	return result
 
 
 func _convert_tool_definition(p_openai_tool: Dictionary) -> Dictionary:
@@ -198,7 +220,7 @@ func _convert_tool_definition(p_openai_tool: Dictionary) -> Dictionary:
 		}
 		
 		if func_def.has("description"):
-			tool["description"] = func_def.description
+			tool.description = func_def.description
 		return tool
 	
 	return p_openai_tool
@@ -216,57 +238,85 @@ func _convert_message_to_anthropic(p_msg: ChatMessage) -> Dictionary:
 			"content": p_msg.content
 		}]
 	
-	# [修复] 多图支持
-	elif role == "user" and (not p_msg.images.is_empty() or not p_msg.image_data.is_empty()):
-		var content_array: Array = []
-		
-		# 1. 处理新版多图
-		for img in p_msg.images:
-			var base64_str: String = Marshalls.raw_to_base64(img.data)
-			var media_type: String = img.mime
-			if media_type.is_empty(): media_type = "image/jpeg"
-			
-			content_array.append({
-				"type": "image",
-				"source": {"type": "base64", "media_type": media_type, "data": base64_str}
-			})
-		
-		# 2. 兼容旧版单图 (仅当 images 为空时)
-		if p_msg.images.is_empty() and not p_msg.image_data.is_empty():
-			var base64_str: String = Marshalls.raw_to_base64(p_msg.image_data)
-			var media_type: String = p_msg.image_mime
-			if media_type.is_empty(): media_type = "image/jpeg"
-			
-			content_array.append({
-				"type": "image",
-				"source": {"type": "base64", "media_type": media_type, "data": base64_str}
-			})
-		
-		# 3. 追加文本
-		if not p_msg.content.is_empty():
-			content_array.append({ "type": "text", "text": p_msg.content })
-		
-		content = content_array
+	elif role == "user":
+		content = _build_user_content(p_msg)
 	
-	elif role == "assistant" and not p_msg.tool_calls.is_empty():
-		var content_array: Array = []
-		if not p_msg.content.is_empty():
-			content_array.append({ "type": "text", "text": p_msg.content })
-		
-		for tc in p_msg.tool_calls:
-			var args_obj: Variant = {}
-			if not tc.function.arguments.is_empty():
-				var parsed = JSON.parse_string(tc.function.arguments)
-				if parsed is Dictionary:
-					args_obj = parsed
-			
-			content_array.append({
-				"type": "tool_use",
-				"id": tc.id,
-				"name": tc.function.name,
-				"input": args_obj
-			})
-		
-		content = content_array
+	elif role == "assistant":
+		content = _build_assistant_content(p_msg)
 	
 	return { "role": role, "content": content }
+
+
+# 构建用户消息内容（支持文本和多图）
+func _build_user_content(p_msg: ChatMessage) -> Variant:
+	var has_images: bool = false
+	
+	# 检查是否有有效图片数据
+	if not p_msg.images.is_empty():
+		for img in p_msg.images:
+			if img.has("data") and img.data is PackedByteArray:
+				has_images = true
+				break
+	
+	if not has_images:
+		return p_msg.content  # 纯文本，直接返回字符串
+	
+	# 多模态内容（图文混合）
+	var content_array: Array = []
+	
+	# 1. 处理新版多图数组（img 是 Dictionary）
+	for img in p_msg.images:
+		if not img.has("data") or not img.data is PackedByteArray:
+			push_warning("BaseAnthropicProvider: Image item missing valid data field")
+			continue
+		
+		var base64_str: String = Marshalls.raw_to_base64(img.data)
+		# Dictionary.get() 支持默认值参数
+		var media_type: String = img.get("mime", "")
+		if media_type.is_empty(): 
+			media_type = "image/jpeg"
+		
+		content_array.append({
+			"type": "image",
+			"source": {
+				"type": "base64",
+				"media_type": media_type,
+				"data": base64_str
+			}
+		})
+	
+	# 2. 追加文本（如果有）
+	if not p_msg.content.is_empty():
+		content_array.append({ "type": "text", "text": p_msg.content })
+	
+	return content_array
+
+
+# 构建助手消息内容（支持文本和工具调用）
+func _build_assistant_content(p_msg: ChatMessage) -> Variant:
+	if p_msg.tool_calls.is_empty():
+		return p_msg.content
+	
+	var content_array: Array = []
+	if not p_msg.content.is_empty():
+		content_array.append({ "type": "text", "text": p_msg.content })
+	
+	for tc in p_msg.tool_calls:
+		var args_obj: Dictionary = {}
+		if tc.has("function") and tc.function.has("arguments"):
+			var args_str: String = tc.function.arguments
+			if not args_str.is_empty():
+				var parsed: Variant = JSON.parse_string(args_str)
+				if parsed != null and (parsed is Dictionary or parsed is Array):
+					args_obj = parsed
+				else:
+					push_warning("BaseAnthropicProvider: Invalid tool arguments JSON: " + args_str.substr(0, 200))
+		
+		content_array.append({
+			"type": "tool_use",
+			"id": tc.get("id", ""),
+			"name": tc.function.get("name", ""),
+			"input": args_obj
+		})
+	
+	return content_array

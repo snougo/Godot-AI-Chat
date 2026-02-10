@@ -38,12 +38,6 @@ const ROLE_TOOL: String = "tool"
 ## 存储格式: [{"data": PackedByteArray, "mime": String}]
 @export var images: Array[Dictionary] = []
 
-# [过时] 仅作兼容保留
-## 存储图片原始字节
-@export var image_data: PackedByteArray = PackedByteArray()
-## 图片 MIME 类型，默认为 image/png
-@export var image_mime: String = "image/png"
-
 # --- Tool Call Vars ---
 
 ## [Assistant 专用] 存储模型生成的工具调用请求
@@ -70,8 +64,3 @@ func _init(p_role: String = ROLE_USER, p_content: String = "", p_name: String = 
 func add_image(p_data: PackedByteArray, p_mime: String) -> void:
 	if not p_data.is_empty():
 		images.append({"data": p_data, "mime": p_mime})
-		
-		# [兼容旧逻辑] 如果是第一张图，同时也填充到旧字段
-		if images.size() == 1:
-			image_data = p_data
-			image_mime = p_mime

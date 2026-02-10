@@ -19,8 +19,6 @@ static func create_provider(p_provider_type: String) -> BaseLLMProvider:
 			return ZhipuAIProvider.new()
 		"Google Gemini":
 			return GeminiProvider.new()
-		"Anthropic":
-			return AnthropicProvider.new()
 		"Anthropic-Compatible":
 			return AnthropicCompatibleProvider.new()
 		_:

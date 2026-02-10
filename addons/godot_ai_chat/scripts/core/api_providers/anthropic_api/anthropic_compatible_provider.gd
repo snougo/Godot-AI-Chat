@@ -9,17 +9,23 @@ extends BaseAnthropicProvider
 ## 特性：
 ## 1. 使用 Bearer Token 鉴权 (而非官方的 x-api-key)。
 ## 2. 自动修正 Base URL 路径。
+## 警告：切勿在日志中打印 API Key
+
+# --- Constants ---
+
+#const ANTHROPIC_API_VERSION := "2023-06-01"
 
 
 # --- Public Functions ---
 
 ## 获取 HTTP 请求头
+## 警告：p_api_key 包含敏感信息，切勿记录到日志
 func get_request_headers(p_api_key: String, _p_stream: bool) -> PackedStringArray:
 	var headers: PackedStringArray = []
 	# 大多数兼容 API (如 OpenRouter, OneAPI) 使用标准 Bearer Token
 	headers.append("Authorization: Bearer " + p_api_key)
 	# 部分网关可能还需要 anthropic-version，加上比较保险
-	headers.append("anthropic-version: 2023-06-01") 
+	#headers.append("anthropic-version: " + ANTHROPIC_API_VERSION)
 	headers.append("Content-Type: application/json")
 	return headers
 
@@ -38,37 +44,46 @@ func get_request_url(p_base_url: String, p_model: String, _p_key: String, _p_str
 ## 解析模型列表响应
 ## 兼容网关通常返回 OpenAI 格式的 { data: [{id: ...}] }
 func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
-	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
+	var json_str: String = p_body_bytes.get_string_from_utf8()
+	var json: Variant = JSON.parse_string(json_str)
 	var list: Array[String] = []
 	
-	if json is Dictionary and json.has("data"):
+	if json == null:
+		AIChatLogger.error("[AnthropicAPI]: Failed to parse model list JSON")
+		return []
+	
+	if json is Dictionary and json.has("data") and json.data is Array:
 		for item in json.data:
-			if item.has("id"):
+			if item is Dictionary and item.has("id") and item.id is String:
 				list.append(item.id)
 	
-	# 如果解析失败或列表为空（比如官方API），返回默认推荐列表
+	# 如果解析失败或列表为空，返回空数组（而非包含空字符串的数组）
 	if list.is_empty():
-		return [
-			"deepseek-ai/DeepSeek-R1",
-			"deepseek-ai/DeepSeek-V3", 
-			"claude-3-5-sonnet-20240620",
-			"claude-3-opus-20240229"
-		]
+		push_warning("[AnthropicAI]: No models found in response or empty data")
+		return []
 	
 	return list
 
 
 func _build_url(p_base: String, p_endpoint: String) -> String:
-	var url = p_base.strip_edges()
-	if url.ends_with("/"): url = url.substr(0, url.length() - 1)
+	var url: String = p_base.strip_edges()
 	
-	# 如果用户已经填了完整路径，尝试智能剥离
-	if url.ends_with("/messages"):
-		url = url.replace("/messages", "")
-	elif url.ends_with("/chat/completions"):
-		url = url.replace("/chat/completions", "")
+	# 统一移除末尾斜杠
+	while url.ends_with("/"):
+		url = url.left(url.length() - 1)
 	
-	if not url.ends_with("/v1"):
-		url += "/v1"
+	# 检查是否已包含完整路径
+	var full_path := "/v1/" + p_endpoint
+	if url.ends_with(full_path):
+		return url  # 已经是完整路径，直接返回
 	
-	return url + "/" + p_endpoint
+	# 如果以 /v1 结尾，直接追加端点
+	if url.ends_with("/v1"):
+		return url + "/" + p_endpoint
+	
+	# 如果包含其他版本路径（如 /v2），警告但尊重用户输入
+	if url.contains("/v"):
+		push_warning("AnthropicCompatibleProvider: URL contains non-standard version path: " + url)
+	
+	# 标准拼接：添加 /v1/endpoint
+	return url + "/v1/" + p_endpoint

@@ -130,8 +130,7 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 				
 				if is_gemini:
 					# Gemini 模式：直接嵌入 Tool 消息
-					tool_msg.image_data = att.get("image_data", PackedByteArray())
-					tool_msg.image_mime = att.get("mime", "image/png")
+					tool_msg.add_image(att.get("image_data", PackedByteArray()), att.get("mime", "image/png"))
 				else:
 					# [Fix] OpenAI/Local 模式：
 					# 不要创建新的 User 消息（会破坏对话链），而是将图片附加到最近的 User 消息上
@@ -157,16 +156,14 @@ func _attach_image_to_last_user_message(p_data: PackedByteArray, p_mime: String)
 	# 优先检查本次工作流中产生的新消息
 	for i in range(workflow_messages.size() - 1, -1, -1):
 		if workflow_messages[i].role == ChatMessage.ROLE_USER:
-			workflow_messages[i].image_data = p_data
-			workflow_messages[i].image_mime = p_mime
+			workflow_messages[i].add_image(p_data, p_mime)
 			AIChatLogger.debug("[Workflow] Attached image to Workflow User message index: %d" % i)
 			return
 	
 	# 然后检查基础历史记录 (倒序)
 	for i in range(base_history.size() - 1, -1, -1):
 		if base_history[i].role == ChatMessage.ROLE_USER:
-			base_history[i].image_data = p_data
-			base_history[i].image_mime = p_mime
+			base_history[i].add_image(p_data, p_mime)
 			AIChatLogger.debug("[Workflow] Attached image to Base History User message index: %d" % i)
 			return
 	

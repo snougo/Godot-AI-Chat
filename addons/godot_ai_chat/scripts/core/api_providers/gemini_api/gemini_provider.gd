@@ -83,7 +83,7 @@ func build_request_body(_p_model_name: String, p_messages: Array[ChatMessage], p
 			parts.append({"text": msg.content})
 		
 		# --- 多模态多图支持 ---
-		# 1. 新版多图数组
+		# 新版多图数组
 		if not msg.images.is_empty():
 			for img in msg.images:
 				parts.append({
@@ -93,21 +93,12 @@ func build_request_body(_p_model_name: String, p_messages: Array[ChatMessage], p
 					}
 				})
 		
-		# 2. 旧版单图兼容 (仅当新版为空时)
-		elif not msg.image_data.is_empty():
-			parts.append({
-				"inline_data": {
-					"mime_type": msg.image_mime,
-					"data": Marshalls.raw_to_base64(msg.image_data)
-				}
-			})
-		
 		if not parts.is_empty():
 			gemini_contents.append({"role": role, "parts": parts})
 	
 	var body: Dictionary = {
 		"contents": gemini_contents,
-		"generationConfig": {"temperature": p_temperature},
+		"generationConfig": {"temperature": snappedf(p_temperature, 0.1)},
 		"safetySettings": [
 			{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_ONLY_HIGH"},
 			{"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_ONLY_HIGH"},

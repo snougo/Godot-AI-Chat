@@ -127,14 +127,35 @@ func _thread_task() -> void:
 		return
 	
 	var response_code: int = client.get_response_code()
+	
 	if response_code != 200:
+		# [调试关键] 捕获错误响应体
+		var error_body: PackedByteArray = PackedByteArray()
+		
 		while client.get_status() == HTTPClient.STATUS_BODY:
 			client.poll()
 			if client.get_status() != HTTPClient.STATUS_BODY:
 				break
-			var _dummy: PackedByteArray = client.read_response_body_chunk()
+			var chunk: PackedByteArray = client.read_response_body_chunk()
+			if chunk.size() > 0:
+				error_body.append_array(chunk)
 		
-		_emit_failure("HTTP Error %d" % response_code)
+		var error_text: String = error_body.get_string_from_utf8()
+		
+		# [调试输出] 打印完整的错误响应
+		#print("🔴 HTTP Error ", response_code, " Response Body:")
+		#print(error_text)
+		#print("📋 Request URL: ", _url)
+		#print("📤 Request Body: ", _body_json.left(500))  # 打印请求体前500字符
+		
+		# 尝试解析 JSON 错误
+		var json_err = JSON.parse_string(error_text)
+		if json_err and json_err is Dictionary and json_err.has("error"):
+			var err_msg = json_err.error.get("message", error_text)
+			_emit_failure("API Error (%d): %s" % [response_code, err_msg])
+		else:
+			_emit_failure("HTTP Error %d: %s" % [response_code, error_text])
+		
 		client.close() 
 		return
 	

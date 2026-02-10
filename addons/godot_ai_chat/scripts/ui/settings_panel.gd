@@ -84,7 +84,6 @@ func _ready() -> void:
 	_api_provider_options.add_item("OpenAI-Compatible")
 	_api_provider_options.add_item("ZhipuAI")
 	_api_provider_options.add_item("Google Gemini")
-	_api_provider_options.add_item("Anthropic")
 	_api_provider_options.add_item("Anthropic-Compatible")
 
 	_load_and_display_settings()
