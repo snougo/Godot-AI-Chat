@@ -34,11 +34,21 @@ var _pending_buffer: String = ""
 ## 记录上一个创建的 UI 节点，用于连续追加内容
 var _last_ui_node: Control = null
 
-## 正则匹配：代码块开始 (锚定行首，但是允许行首出现空格)
-var _re_code_start: RegEx = RegEx.create_from_string("^\\s*```\\s*(.*)\\s*$")
+## 正则匹配：代码块开始 (锚定行首，缩进允许 0-3 个空格)
+## Group 1: Fence (```, ````, etc.)
+## Group 2: Language
+var _re_code_start: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})\\s*(.*)\\s*$")
 
-## 正则匹配：代码块结束 (锚定行首，且仅允许水平空白字符)
-var _re_code_end: RegEx = RegEx.create_from_string("^[ \\t]*```[ \\t]*$")
+## 正则匹配：代码块结束 (锚定行首，缩进允许 0-3 个空格，且仅允许水平空白字符)
+## Group 1: Fence
+var _re_code_end: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})[ \\t]*$")
+
+## 当前代码块使用的围栏字符串 (如 "```" 或 "````")
+var _current_fence_str: String = ""
+
+## 标记当前是否处于行首（用于正确识别代码块围栏）
+## 初始为 true，每次 append 内容后，如果内容以换行符结尾，则置为 true，否则 false
+var _is_line_start: bool = true
 
 ## 打字机状态
 var _typing_active: bool = false
@@ -350,6 +360,8 @@ func _clear_content() -> void:
 	
 	_current_state = ParseState.TEXT
 	_pending_buffer = ""
+	_current_fence_str = ""
+	_is_line_start = true # 重置为 true
 	_last_ui_node = null
 	_typing_active = false
 	_current_typing_node = null
@@ -388,18 +400,29 @@ func _process_smart_chunk(p_incoming_text: String, p_instant: bool) -> void:
 					is_valid_fence = false
 					break
 			
-			if ptr < 0: # 回溯到了 buffer 开头，说明是第一行且符合条件
+			if ptr < 0: 
+				# 回溯到了 buffer 开头
 				line_start_idx = 0
-				is_valid_fence = true
+				# 关键修正：只有当 buffer 开头确实是行首时，才有效
+				is_valid_fence = _is_line_start
 			
 			# 3. 分支处理：无效标记 vs 有效标记
 			if not is_valid_fence:
 				# 情况 A: 标记前有杂质，视为普通文本
-				# 将 ``` 及其之前的部分作为文本追加，然后继续处理剩余部分
-				var safe_len: int = fence_idx + 3
-				var safe_part: String = _pending_buffer.substr(0, safe_len)
+				# 将此部分（包括杂质）作为文本追加，但需要小心处理后续可能的反引号
+				# 例如： "abc ```" 或 "abc ````"
+				
+				# 找到 fence 之后第一个非反引号字符的位置，确定要切多少
+				var after_fence_idx: int = fence_idx + 3
+				while after_fence_idx < _pending_buffer.length():
+					if _pending_buffer[after_fence_idx] == '`':
+						after_fence_idx += 1
+					else:
+						break
+				
+				var safe_part: String = _pending_buffer.substr(0, after_fence_idx)
 				_append_content(safe_part, p_instant)
-				_pending_buffer = _pending_buffer.substr(safe_len)
+				_pending_buffer = _pending_buffer.substr(after_fence_idx)
 				continue
 			
 			# 情况 B: 是有效的代码块标记行（可能是开始或结束）
@@ -460,26 +483,43 @@ func _parse_fence_line(p_line: String, p_instant: bool) -> void:
 		if match_start:
 			_finish_typing()
 			_current_state = ParseState.CODE
-			var lang: String = match_start.get_string(1)
+			_current_fence_str = match_start.get_string(1)
+			var lang: String = match_start.get_string(2)
 			_create_code_block(lang)
 		else:
 			_append_content(p_line + "\n", p_instant)
 	
 	elif _current_state == ParseState.CODE:
 		var match_end: RegExMatch = _re_code_end.search(p_line)
+		var is_closing: bool = false
+		
 		if match_end:
+			var fence_found: String = match_end.get_string(1)
+			# 结束围栏必须至少与开始围栏一样长
+			if fence_found.length() >= _current_fence_str.length():
+				is_closing = true
+		
+		if is_closing:
 			_current_state = ParseState.TEXT
+			_current_fence_str = ""
 			_last_ui_node = null
+			# 退出代码块时，当前行就是闭合行，所以下一行必然是新行
+			_is_line_start = true 
 		else:
 			_append_content(p_line + "\n", p_instant)
 
 
 ## 统一渲染入口
 func _append_content(p_text: String, p_instant: bool) -> void:
+	if p_text.is_empty(): return # 避免空字符串改变状态
+	
 	if _current_state == ParseState.CODE:
 		_append_to_code(p_text)
 	else:
 		_append_to_text(p_text, p_instant)
+	
+	# 更新行首状态
+	_is_line_start = p_text.ends_with("\n")
 
 
 ## 创建思考内容 UI 结构
@@ -598,6 +638,9 @@ func _create_code_block(p_lang: String) -> void:
 	_content_container.move_child(code_edit, _content_container.get_child_count() - 1)
 	_content_container.add_child(header)
 	_content_container.move_child(header, _content_container.get_child_count() - 2)
+	
+	# 创建代码块后，意味着该行是围栏行，所以状态切换为 true (下一行必然是新行)
+	_is_line_start = true
 
 
 ## 追加内容到代码块
@@ -641,11 +684,16 @@ func _typewriter_loop() -> void:
 		return
 	
 	var step: int = 1
-	if lag > 100: step = 20
-	elif lag > 50: step = 10
-	elif lag > 20: step = 5
-	elif lag > 5: step = 2
-	else: step = 1
+	if lag > 100:
+		step = 20
+	elif lag > 50:
+		step = 10
+	elif lag > 20:
+		step = 5
+	elif lag > 5:
+		step = 2
+	else:
+		step = 1
 	
 	_current_typing_node.visible_characters += step
 	

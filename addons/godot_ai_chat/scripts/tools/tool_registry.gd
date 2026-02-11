@@ -17,6 +17,8 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/retrieve_context_tool.gd",
 	
+	"res://addons/godot_ai_chat/scripts/tools/other_tool/view_image_tool.gd",
+	
 	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
 	
@@ -248,11 +250,18 @@ static func _load_core_tools() -> void:
 
 ## 加载并注册单个工具
 static func _load_and_register_tool(p_path: String) -> void:
-	if not FileAccess.file_exists(p_path): 
+	if not FileAccess.file_exists(p_path):
+		AIChatLogger.warn("[ToolRegistry] Tool file not found: %s" % p_path)
 		return
+	
 	var script: Resource = load(p_path)
 	
-	if script and script is GDScript:
+	# [安全修复] 添加 null 检查
+	if script == null:
+		AIChatLogger.error("[ToolRegistry] Failed to load script (null): %s" % p_path)
+		return
+	
+	if script is GDScript:
 		var tool_instance: Object = script.new()
 		# Duck Typing Check
 		if tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):

@@ -64,9 +64,12 @@ static func _load_image(p_path: String) -> Dictionary:
 
 
 static func _parse_scene_to_markdown(p_path: String) -> String:
-	if not FileAccess.file_exists(p_path): return p_path
+	if not FileAccess.file_exists(p_path):
+		return p_path
+	
 	var scene: PackedScene = load(p_path)
-	if not scene: return p_path
+	if not scene:
+		return p_path
 	
 	var state: SceneState = scene.get_state()
 	var md: String = "Context for Scene: `%s`\n```\nScene Tree Structure:\n" % p_path.get_file()
@@ -84,7 +87,7 @@ static func _parse_scene_to_markdown(p_path: String) -> String:
 		if i == 0:
 			# 根节点，跳过父节点查找
 			continue
-			
+		
 		var parent_path: NodePath
 		var name_count: int = current_path.get_name_count()
 		
@@ -107,7 +110,7 @@ static func _parse_scene_to_markdown(p_path: String) -> String:
 			# 兜底：挂在根节点下
 			if not parent_map.has(0): parent_map[0] = []
 			parent_map[0].append(i)
-			
+	
 	md += _build_tree_string(state, 0, "", true, parent_map)
 	md += "```"
 	return md
@@ -130,6 +133,7 @@ static func _build_tree_string(p_state: SceneState, p_idx: int, p_prefix: String
 	line += "%s (%s)" % [node_name, type]
 	if not script_path.is_empty():
 		line += " [script: `%s`]" % script_path
+	
 	line += "\n"
 	
 	var children: Array = p_parent_map.get(p_idx, [])
