@@ -8,7 +8,7 @@ extends Resource
 # --- @export Vars ---
 
 ## API 服务提供商类型
-@export_enum("LM Studio Stateful", "OpenAI-Compatible", "ZhipuAI", "Google Gemini", "Anthropic-Compatible") var api_provider: String = "OpenAI-Compatible"
+@export_enum("OpenAI-Compatible", "LM Studio Stateful", "ZhipuAI", "Google Gemini", "Anthropic-Compatible") var api_provider: String = "OpenAI-Compatible"
 
 ## API 服务的基地址 (例如 "https://api.openai.com" 或本地模型的地址)
 @export var api_base_url: String = ""
@@ -20,13 +20,13 @@ extends Resource
 @export var tavily_api_key: String = ""
 
 ## 每次请求中保留的最大对话轮数
-@export_range(1, 50, 1) var max_chat_turns: int = 8
+@export_range(1, 50, 1) var max_chat_turns: int = 12
 
 ## 网络流式输出请求的超时时间（秒）
 @export var network_timeout: int = 180
 
 ## AI 模型的“温度”参数，控制生成文本的随机性和创造性
-@export_range(0.0, 1.0, 0.1) var temperature: float = 1.0
+@export_range(0.0, 1.0, 0.1) var temperature: float = 0.8
 
 ## 日志级别开关 (Bitmask: DEBUG=1, INFO=2, WARN=4, ERROR=8)
 ## 默认 14 (INFO|WARN|ERROR) = 2+4+8

@@ -55,11 +55,11 @@ text_overrun_behavior = 1
 layout_mode = 2
 size_flags_horizontal = 3
 text_overrun_behavior = 1
-selected = 1
+selected = 0
 item_count = 5
-popup/item_0/text = "LM Studio Stateful"
+popup/item_0/text = "OpenAI-Compatible"
 popup/item_0/id = 0
-popup/item_1/text = "OpenAI-Compatible"
+popup/item_1/text = "LM Studio Stateful"
 popup/item_1/id = 1
 popup/item_2/text = "ZhipuAI"
 popup/item_2/id = 2
@@ -146,7 +146,7 @@ text_overrun_behavior = 1
 layout_mode = 2
 size_flags_horizontal = 3
 min_value = 1.0
-value = 8.0
+value = 12.0
 alignment = 2
 
 [node name="Timeout" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=783722443]
@@ -188,12 +188,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 max_value = 1.0
 step = 0.09999999999126884
-value = 0.999999999912688
+value = 0.7999999999301504
 
 [node name="TemperatureValueLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/Temperature/HBoxContainer" unique_id=570670142]
 custom_minimum_size = Vector2(50, 0)
 layout_mode = 2
-text = "1.00"
+text = "0.80"
 horizontal_alignment = 1
 vertical_alignment = 1
 
