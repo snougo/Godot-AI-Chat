@@ -58,7 +58,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		workspace_path += "/"
 	
 	# 2. 资源加载 (始终加载全局唯一的那个文件)
-	var todo_list: TodoList
+	var todo_list: AiTodoList
 	
 	# 优先尝试获取缓存实例 (实现实时刷新)
 	if ResourceLoader.has_cached(TODO_RESOURCE_PATH):
@@ -69,7 +69,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 如果资源不存在，或加载失败，则新建
 	if not todo_list:
 		if action == "add" or action == "list":
-			todo_list = TodoList.new()
+			todo_list = AiTodoList.new()
 			# 新建后立即保存一次，确保持久化
 			var save_err = _save_resource(todo_list)
 			if not save_err.is_empty():
@@ -91,9 +91,9 @@ func execute(p_args: Dictionary) -> Dictionary:
 
 # --- Private Functions ---
 
-func _list_tasks(p_todo_list: TodoList, p_workspace_path: String) -> Dictionary:
+func _list_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> Dictionary:
 	# 使用 workspace_path 进行过滤
-	var items: Array[TodoItem] = p_todo_list.get_items(p_workspace_path)
+	var items: Array[AiTodoItem] = p_todo_list.get_items(p_workspace_path)
 	var md_lines: PackedStringArray = []
 	md_lines.append("# TODO List (Context: %s)" % p_workspace_path)
 	
@@ -113,7 +113,7 @@ func _list_tasks(p_todo_list: TodoList, p_workspace_path: String) -> Dictionary:
 	return {"success": true, "data": "\n".join(md_lines)}
 
 
-func _add_task(p_todo_list: TodoList, p_content: String, p_workspace_path: String) -> Dictionary:
+func _add_task(p_todo_list: AiTodoList, p_content: String, p_workspace_path: String) -> Dictionary:
 	if p_content.strip_edges().is_empty():
 		return {"success": false, "data": "Error: Content cannot be empty."}
 	
@@ -129,7 +129,7 @@ func _add_task(p_todo_list: TodoList, p_content: String, p_workspace_path: Strin
 	return {"success": true, "data": "Added task to context '%s'" % p_workspace_path}
 
 
-func _complete_task(p_todo_list: TodoList, p_content_match: String) -> Dictionary:
+func _complete_task(p_todo_list: AiTodoList, p_content_match: String) -> Dictionary:
 	if p_content_match.strip_edges().is_empty():
 		return {"success": false, "data": "Error: Content match string cannot be empty."}
 		

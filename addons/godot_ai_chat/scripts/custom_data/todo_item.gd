@@ -1,5 +1,5 @@
 @tool
-class_name TodoItem
+class_name AiTodoItem
 extends Resource
 
 ## 任务内容

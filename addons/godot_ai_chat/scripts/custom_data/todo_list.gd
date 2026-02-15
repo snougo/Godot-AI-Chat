@@ -1,14 +1,14 @@
 @tool
-class_name TodoList
+class_name AiTodoList
 extends Resource
 
 ## 所有任务列表
-@export var items: Array[TodoItem] = []
+@export var items: Array[AiTodoItem] = []
 
 
 ## 添加任务
 func add_item(p_content: String, p_workspace_path: String) -> void:
-	var item = TodoItem.new(p_content, p_workspace_path)
+	var item = AiTodoItem.new(p_content, p_workspace_path)
 	items.append(item)
 	emit_changed()
 
@@ -16,11 +16,11 @@ func add_item(p_content: String, p_workspace_path: String) -> void:
 ## 获取指定上下文的任务列表
 ## 如果 p_workspace_path 为空，返回所有任务
 ## 否则仅返回 p_workspace_path 严格匹配的任务
-func get_items(p_workspace_path: String = "") -> Array[TodoItem]:
+func get_items(p_workspace_path: String = "") -> Array[AiTodoItem]:
 	if p_workspace_path.is_empty():
 		return items
 	
-	var filtered: Array[TodoItem] = []
+	var filtered: Array[AiTodoItem] = []
 	for item in items:
 		# 严格匹配当前工作区，实现“每个工作区独立”的效果
 		if item.workspace_path == p_workspace_path:
