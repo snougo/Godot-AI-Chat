@@ -24,6 +24,11 @@ func get_stream_parser_type() -> StreamParserType:
 func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	_stream_tool_index_map.clear()
 	
+	# --- 特殊模型处理 ---
+	# kimi-k2.5 模型只接受固定温度值 1，强制覆盖用户设置
+	if p_model_name == "kimi-k2.5":
+		p_temperature = 1.0
+	
 	var system_prompt: String = ""
 	var api_messages: Array[Dictionary] = []
 	
@@ -129,7 +134,9 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 		
 		"content_block_start":
 			var block: Dictionary = p_chunk_data.get("content_block", {})
-			if block.get("type", "") == "tool_use":
+			var block_type: String = block.get("type", "")
+			
+			if block_type == "tool_use":
 				var new_call: Dictionary = {
 					"id": block.get("id", ""),
 					"type": "function",
@@ -144,37 +151,49 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 				
 				p_target_msg.tool_calls.append(new_call)
 				_stream_tool_index_map[index] = p_target_msg.tool_calls.size() - 1
+			
+			elif block_type == "thinking":
+				# 思维块开始，初始化思维链内容（如果需要）
+				pass
 		
 		"content_block_delta":
 			var delta: Dictionary = p_chunk_data.get("delta", {})
 			var delta_type: String = delta.get("type", "")
 			
-			if delta_type == "text_delta":
-				var text: String = delta.get("text", "")
-				p_target_msg.content += text
-				ui_update.content_delta = text
-			
-			elif delta_type == "input_json_delta":
-				var fragment: String = ""
-				if delta.has("partial_json"):
-					fragment = delta.partial_json
-				elif delta.has("args"):
-					fragment = delta.args
-				elif delta.has("arguments"):
-					fragment = delta.arguments
+			match delta_type:
+				"text_delta":
+					var text: String = delta.get("text", "")
+					p_target_msg.content += text
+					ui_update.content_delta = text
 				
-				if not fragment.is_empty():
-					if _stream_tool_index_map.has(index):
-						var array_idx: int = _stream_tool_index_map[index]
-						if array_idx < p_target_msg.tool_calls.size():
-							var target_tool = p_target_msg.tool_calls[array_idx]
-							target_tool.function.arguments += fragment
+				"thinking_delta":
+					# 捕获思维链增量内容 (kimi-k2.5 等模型)
+					var thinking_text: String = delta.get("thinking", "")
+					if not thinking_text.is_empty():
+						p_target_msg.reasoning_content += thinking_text
+					# 思维链不直接显示在 UI 内容增量中
+				
+				"input_json_delta":
+					var fragment: String = ""
+					if delta.has("partial_json"):
+						fragment = delta.partial_json
+					elif delta.has("args"):
+						fragment = delta.args
+					elif delta.has("arguments"):
+						fragment = delta.arguments
+					
+					if not fragment.is_empty():
+						if _stream_tool_index_map.has(index):
+							var array_idx: int = _stream_tool_index_map[index]
+							if array_idx < p_target_msg.tool_calls.size():
+								var target_tool = p_target_msg.tool_calls[array_idx]
+								target_tool.function.arguments += fragment
+							else:
+								push_warning("[BaseAnthropic] Tool array index out of bounds: %d (size: %d)" % [array_idx, p_target_msg.tool_calls.size()])
 						else:
-							push_warning("[BaseAnthropic] Tool array index out of bounds: %d (size: %d)" % [array_idx, p_target_msg.tool_calls.size()])
-					else:
-						# Fallback: 如果未映射，尝试追加到最后一个工具
-						if not p_target_msg.tool_calls.is_empty():
-							p_target_msg.tool_calls.back().function.arguments += fragment
+							# Fallback: 如果未映射，尝试追加到最后一个工具
+							if not p_target_msg.tool_calls.is_empty():
+								p_target_msg.tool_calls.back().function.arguments += fragment
 		
 		"message_delta":
 			if p_chunk_data.has("usage"):
@@ -292,15 +311,27 @@ func _build_user_content(p_msg: ChatMessage) -> Variant:
 	return content_array
 
 
-# 构建助手消息内容（支持文本和工具调用）
+# 构建助手消息内容（支持文本、思维链和工具调用）
 func _build_assistant_content(p_msg: ChatMessage) -> Variant:
-	if p_msg.tool_calls.is_empty():
+	# 如果没有工具调用且没有思维链内容，直接返回字符串
+	if p_msg.tool_calls.is_empty() and p_msg.reasoning_content.is_empty():
 		return p_msg.content
 	
 	var content_array: Array = []
+	
+	# 1. 添加思维链内容（如果存在）- kimi-k2.5 等模型需要
+	if not p_msg.reasoning_content.is_empty():
+		# Anthropic 格式使用 thinking 类型块
+		content_array.append({
+			"type": "thinking",
+			"thinking": p_msg.reasoning_content
+		})
+	
+	# 2. 添加文本内容（如果存在）
 	if not p_msg.content.is_empty():
 		content_array.append({ "type": "text", "text": p_msg.content })
 	
+	# 3. 添加工具调用（如果存在）
 	for tc in p_msg.tool_calls:
 		var args_obj: Dictionary = {}
 		if tc.has("function") and tc.function.has("arguments"):

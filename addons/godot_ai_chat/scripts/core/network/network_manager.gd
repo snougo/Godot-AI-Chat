@@ -83,6 +83,13 @@ func get_model_list() -> void:
 
 ## 发起聊天流
 func start_chat_stream(p_messages: Array[ChatMessage]) -> void:
+	# [修复] 检查是否有正在进行的请求
+	if current_stream_request != null:
+		AIChatLogger.warn("[NetworkManager] A stream request is already in progress. Cancelling previous request.")
+		cancel_stream()
+		# 等待一帧确保取消完成
+		await get_tree().process_frame
+	
 	if current_model_name.is_empty():
 		chat_request_failed.emit("No model selected.")
 		return
