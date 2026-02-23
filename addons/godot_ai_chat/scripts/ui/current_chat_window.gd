@@ -15,7 +15,7 @@ signal token_usage_updated(usage: Dictionary)
 # --- Constants ---
 const CULLING_INTERVAL: float = 0.2 # 每秒检测5次，足够平滑且低耗
 ## 消息块场景
-const CHAT_MESSAGE_BLOCK_SCENE: PackedScene = preload("res://addons/godot_ai_chat/scene/chat_message_block.tscn")
+const CHAT_MESSAGE_BLOCK_SCENE: PackedScene = preload(PluginPaths.CHAT_MESSAGE_BLOCK_SCENE)
 
 # --- Public Vars ---
 
@@ -147,14 +147,13 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 	if not chat_history.messages.is_empty():
 		var last: ChatMessage = chat_history.messages.back()
 		if last.role != ChatMessage.ROLE_ASSISTANT:
-			# [Fix] 增加对 reasoning_content 的检查
+			# 增加对 reasoning_content 的检查
 			# 只要消息包含思考内容、文本内容或工具调用中的任意一项，就必须保存
 			if not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty():
 				chat_history.add_message(target_msg)
 
 
 ## 回滚未完成的消息（用于停止生成时）
-## [Refactor] 采用数据优先策略：先清理 history，再根据 history 重绘 UI
 func rollback_incomplete_message() -> void:
 	# 即使历史为空，也可能存在游离的 UI 块（例如第一条消息生成时停止），所以仍需刷新
 	if chat_history.messages.is_empty():
@@ -263,7 +262,7 @@ func _update_visibility_culling() -> void:
 	# --- 打印 Debug 信息 ---
 	# 只有当数据发生变化或者每隔一定时间打印一次，避免刷屏
 	# 这里为了演示简单，我们只在总数大于 0 时打印
-	if visible_count > 10:
+	if visible_count > 12:
 		AIChatLogger.debug("Debug: Total: %d | Visible: %d | Suspended: %d" % [total_count, visible_count, suspended_count])
 	
 	# [调试] 如果卡死依然发生，请观察控制台输出
@@ -309,7 +308,7 @@ func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls
 	var block: ChatMessageBlock = _create_block()
 	block.set_content(p_role, p_content, current_model_name if p_role == ChatMessage.ROLE_ASSISTANT else "", p_tool_calls, p_reasoning)
 	
-	# [修复] 支持多图循环渲染
+	# 支持多图循环渲染
 	for img in p_images:
 		if img is Dictionary and img.has("data"):
 			block.display_image(img.data, img.get("mime", "image/png"))

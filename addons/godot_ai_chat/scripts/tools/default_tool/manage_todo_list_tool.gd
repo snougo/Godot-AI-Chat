@@ -5,12 +5,6 @@ extends AiTool
 ## 数据统一存储在插件目录下的 'todo_list.tres' 中，但支持按工作区上下文(context)进行筛选。
 
 
-# --- Constants ---
-
-## 全局唯一的存储路径
-const TODO_RESOURCE_PATH = "res://addons/godot_ai_chat/todo_list.tres"
-
-
 # --- Built-in Functions ---
 
 func _init() -> void:
@@ -61,10 +55,10 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var todo_list: AiTodoList
 	
 	# 优先尝试获取缓存实例 (实现实时刷新)
-	if ResourceLoader.has_cached(TODO_RESOURCE_PATH):
-		todo_list = ResourceLoader.load(TODO_RESOURCE_PATH, "Resource", ResourceLoader.CACHE_MODE_REUSE)
-	elif FileAccess.file_exists(TODO_RESOURCE_PATH):
-		todo_list = ResourceLoader.load(TODO_RESOURCE_PATH, "Resource")
+	if ResourceLoader.has_cached(PluginPaths.TODO_LIST_PATH):
+		todo_list = ResourceLoader.load(PluginPaths.TODO_LIST_PATH, "Resource", ResourceLoader.CACHE_MODE_REUSE)
+	elif FileAccess.file_exists(PluginPaths.TODO_LIST_PATH):
+		todo_list = ResourceLoader.load(PluginPaths.TODO_LIST_PATH, "Resource")
 	
 	# 如果资源不存在，或加载失败，则新建
 	if not todo_list:
@@ -146,13 +140,13 @@ func _complete_task(p_todo_list: AiTodoList, p_content_match: String) -> Diction
 
 func _save_resource(p_res: Resource) -> String:
 	# 确保目录存在
-	var dir = TODO_RESOURCE_PATH.get_base_dir()
+	var dir = PluginPaths.TODO_LIST_PATH.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir):
 		DirAccess.make_dir_recursive_absolute(dir)
 		
-	var error: int = ResourceSaver.save(p_res, TODO_RESOURCE_PATH)
+	var error: int = ResourceSaver.save(p_res, PluginPaths.TODO_LIST_PATH)
 	if error != OK:
 		return "ResourceSaver failed with error code: %d" % error
 	
-	ToolBox.update_editor_filesystem(TODO_RESOURCE_PATH)
+	ToolBox.update_editor_filesystem(PluginPaths.TODO_LIST_PATH)
 	return ""

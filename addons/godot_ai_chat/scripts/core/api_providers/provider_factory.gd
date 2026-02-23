@@ -22,5 +22,5 @@ static func create_provider(p_provider_type: String) -> BaseLLMProvider:
 		"Anthropic-Compatible":
 			return AnthropicCompatibleProvider.new()
 		_:
-			push_error("[ProviderFactory] Unknown provider type: %s" % p_provider_type)
+			AIChatLogger.error("[ProviderFactory] Unknown provider type: %s" % p_provider_type)
 			return null

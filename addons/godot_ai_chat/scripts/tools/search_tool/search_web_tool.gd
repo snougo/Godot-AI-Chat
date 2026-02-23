@@ -65,7 +65,13 @@ func _validate_api_key(p_api_key: String) -> Dictionary:
 ## [return]: 搜索结果字典
 func _perform_web_search(p_query: String, p_api_key: String) -> Dictionary:
 	var http := HTTPRequest.new()
+	http.timeout = 30.0  # 设置 30 秒超时
 	Engine.get_main_loop().root.add_child(http)
+	
+	# 安全清理函数
+	var cleanup := func():
+		if is_instance_valid(http) and http.is_inside_tree():
+			http.queue_free()
 	
 	var url: String = "https://api.tavily.com/search"
 	var headers: PackedStringArray = ["Content-Type: application/json"]
@@ -79,19 +85,21 @@ func _perform_web_search(p_query: String, p_api_key: String) -> Dictionary:
 	
 	var err: Error = http.request(url, headers, HTTPClient.METHOD_POST, body)
 	if err != OK:
-		http.queue_free()
+		cleanup.call()
 		return {"success": false, "data": "Error: Failed to send HTTP request."}
 	
 	var response: Array = await http.request_completed
 	var result_body: PackedByteArray = response[3]
 	var response_code: int = response[1]
 	
-	http.queue_free()
+	# 确保资源被释放
+	cleanup.call()
 	
 	if response_code != 200:
 		return {"success": false, "data": "Error: Tavily API returned code %d" % response_code}
 	
 	return _parse_search_response(result_body)
+
 
 
 ## 解析搜索响应

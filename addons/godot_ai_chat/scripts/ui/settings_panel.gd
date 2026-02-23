@@ -21,9 +21,6 @@ enum SaveButtonState {
 	SAVING  ## 正在保存状态
 }
 
-## 插件设置资源文件的固定路径
-const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
-
 # --- @onready Vars ---
 
 @onready var _api_provider_label: Label = $Panel/MarginContainer/VBoxContainer/APIProvider/APIProviderLabel
@@ -105,11 +102,11 @@ func _update_ui(p_new_state: SaveButtonState) -> void:
 
 ## 从文件加载设置，如果文件不存在则创建一个新的
 func _load_and_display_settings() -> void:
-	if ResourceLoader.exists(SETTINGS_PATH):
-		settings_resource = load(SETTINGS_PATH)
+	if ResourceLoader.exists(PluginPaths.SETTINGS_PATH):
+		settings_resource = load(PluginPaths.SETTINGS_PATH)
 	else:
 		settings_resource = PluginSettings.new()
-		ResourceSaver.save(settings_resource, SETTINGS_PATH)
+		ResourceSaver.save(settings_resource, PluginPaths.SETTINGS_PATH)
 
 	_populate_ui_from_resource()
 	_update_ui(SaveButtonState.IDLE)
@@ -183,7 +180,7 @@ func _on_save_button_pressed() -> void:
 	# 立即应用更改
 	AIChatLogger.set_flags(new_flags)
 	
-	if ResourceSaver.save(settings_resource, SETTINGS_PATH) == OK:
+	if ResourceSaver.save(settings_resource, PluginPaths.SETTINGS_PATH) == OK:
 		settings_saved.emit()
 	
 	_update_ui(SaveButtonState.IDLE)

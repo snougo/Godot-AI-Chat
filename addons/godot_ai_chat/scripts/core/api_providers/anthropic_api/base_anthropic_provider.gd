@@ -64,16 +64,16 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 	var json: Variant = JSON.parse_string(json_str)
 	
 	if json == null:
-		push_error("BaseAnthropicProvider: Failed to parse JSON response")
+		AIChatLogger.error("BaseAnthropicProvider: Failed to parse JSON response")
 		return {"error": "Invalid JSON response", "raw": json_str.substr(0, 500)}
 	
 	if not json is Dictionary:
-		push_error("BaseAnthropicProvider: Response is not a Dictionary")
+		AIChatLogger.error("BaseAnthropicProvider: Response is not a Dictionary")
 		return {"error": "Unexpected response format", "raw": str(json).substr(0, 500)}
 	
 	if json.has("error"):
 		var error_msg: String = json.error.get("message", str(json.error)) if json.error is Dictionary else str(json.error)
-		push_error("BaseAnthropicProvider: API Error: " + error_msg)
+		AIChatLogger.error("BaseAnthropicProvider: API Error: " + error_msg)
 		return {"error": error_msg, "raw": json}
 	
 	if json.has("content"):
@@ -189,7 +189,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 								var target_tool = p_target_msg.tool_calls[array_idx]
 								target_tool.function.arguments += fragment
 							else:
-								push_warning("[BaseAnthropic] Tool array index out of bounds: %d (size: %d)" % [array_idx, p_target_msg.tool_calls.size()])
+								AIChatLogger.warn("[BaseAnthropic] Tool array index out of bounds: %d (size: %d)" % [array_idx, p_target_msg.tool_calls.size()])
 						else:
 							# Fallback: 如果未映射，尝试追加到最后一个工具
 							if not p_target_msg.tool_calls.is_empty():
@@ -286,7 +286,7 @@ func _build_user_content(p_msg: ChatMessage) -> Variant:
 	# 1. 处理新版多图数组（img 是 Dictionary）
 	for img in p_msg.images:
 		if not img.has("data") or not img.data is PackedByteArray:
-			push_warning("BaseAnthropicProvider: Image item missing valid data field")
+			AIChatLogger.warn("BaseAnthropicProvider: Image item missing valid data field")
 			continue
 		
 		var base64_str: String = Marshalls.raw_to_base64(img.data)
@@ -341,7 +341,7 @@ func _build_assistant_content(p_msg: ChatMessage) -> Variant:
 				if parsed != null and (parsed is Dictionary or parsed is Array):
 					args_obj = parsed
 				else:
-					push_warning("BaseAnthropicProvider: Invalid tool arguments JSON: " + args_str.substr(0, 200))
+					AIChatLogger.warn("[BaseAnthropicProvider] Invalid tool arguments JSON: " + args_str.substr(0, 200))
 		
 		content_array.append({
 			"type": "tool_use",

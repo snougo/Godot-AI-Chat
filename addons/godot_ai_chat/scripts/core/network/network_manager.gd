@@ -83,7 +83,7 @@ func get_model_list() -> void:
 
 ## 发起聊天流
 func start_chat_stream(p_messages: Array[ChatMessage]) -> void:
-	# [修复] 检查是否有正在进行的请求
+	# 检查是否有正在进行的请求
 	if current_stream_request != null:
 		AIChatLogger.warn("[NetworkManager] A stream request is already in progress. Cancelling previous request.")
 		cancel_stream()
@@ -110,13 +110,13 @@ func start_chat_stream(p_messages: Array[ChatMessage]) -> void:
 	current_stream_request.chunk_received.connect(func(chunk: Dictionary): new_stream_chunk_received.emit(chunk))
 	current_stream_request.usage_received.connect(func(usage: Dictionary): chat_usage_data_received.emit(usage))
 	
-	# [修复] 在失败回调中先清理引用，再发射信号
+	# 在失败回调中先清理引用，再发射信号
 	current_stream_request.failed.connect(func(err_msg: String): 
 		_clear_current_stream_request()
 		chat_request_failed.emit(err_msg)
 	)
 	
-	# [修复] 在完成回调中先清理引用，再发射信号
+	# 在完成回调中先清理引用，再发射信号
 	current_stream_request.finished.connect(func(): 
 		_clear_current_stream_request()
 		chat_stream_request_completed.emit()
@@ -131,7 +131,7 @@ func cancel_stream() -> void:
 	if current_stream_request:
 		current_stream_request.cancel()
 		chat_stream_request_canceled.emit()
-		# [修复] 取消后立即清理引用
+		# 取消后立即清理引用
 		_clear_current_stream_request()
 
 
@@ -152,7 +152,7 @@ func _update_provider_config() -> bool:
 	return true
 
 
-## [新增] 清理当前流式请求引用
+## 清理当前流式请求引用
 func _clear_current_stream_request() -> void:
 	if current_stream_request:
 		current_stream_request = null

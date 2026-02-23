@@ -27,13 +27,14 @@ var _body_json: String
 var _body_dict: Dictionary 
 
 var _stop_flag: bool = false
+var _stop_flag_lock: Mutex = Mutex.new()
 var _task_id: int = -1
 
 ## 双层缓冲机制：字节缓冲
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
 ## 双层缓冲机制：文本缓冲
 var _incoming_text_buffer: String = ""
-## [新增] SSE 状态跟踪：当前正在处理的事件类型
+## SSE 状态跟踪：当前正在处理的事件类型
 var _current_sse_event: String = ""
 
 
@@ -58,7 +59,11 @@ func start() -> void:
 
 ## 取消当前请求
 func cancel() -> void:
+	#_stop_flag = true
+	# 使用 Mutex 保护跨线程访问
+	_stop_flag_lock.lock()
 	_stop_flag = true
+	_stop_flag_lock.unlock()
 
 
 # --- Private Functions ---
@@ -96,7 +101,7 @@ func _thread_task() -> void:
 	# 等待连接
 	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
 		client.poll()
-		if _stop_flag:
+		if _should_stop():
 			client.close() 
 			return
 		OS.delay_msec(10)
@@ -116,7 +121,7 @@ func _thread_task() -> void:
 	# 4. 等待响应
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
-		if _stop_flag:
+		if _should_stop():
 			client.close() 
 			return
 		OS.delay_msec(10)
@@ -167,7 +172,7 @@ func _thread_task() -> void:
 	var parser_type: BaseLLMProvider.StreamParserType = _provider.get_stream_parser_type()
 	
 	while client.get_status() == HTTPClient.STATUS_BODY:
-		if _stop_flag:
+		if _should_stop():
 			client.close() 
 			return
 		
@@ -244,10 +249,9 @@ func _process_sse_buffer() -> void:
 								json_obj.data["_event_type"] = _current_sse_event
 							_emit_chunk_data(json_obj.data)
 					else:
-						#push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
 						# 只有当确实解析失败时才警告，忽略空的心跳包
 						if json_raw != "[DONE]":
-							push_warning("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
+							AIChatLogger.warn("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
 	
 	# 处理完 data 后，通常意味着这个 event/data 对结束了
 	# 但为了安全起见，我们不立即清空 event，防止有多行 data 的情况（虽然我们不支持合并）
@@ -387,3 +391,11 @@ func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
 	if (last_byte & 0xC0) == 0xC0:
 		return false
 	return true
+
+
+## 线程安全地检查是否应该停止
+func _should_stop() -> bool:
+	_stop_flag_lock.lock()
+	var result: bool = _stop_flag
+	_stop_flag_lock.unlock()
+	return result

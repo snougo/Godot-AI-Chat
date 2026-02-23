@@ -3,10 +3,6 @@ extends EditorPlugin
 
 # 主场景路径
 const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
-# 对话存档文件夹
-const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
-# 插件配置文件
-const PLUGIN_SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 # 插件主实例
 var chat_hub_instance: Control = null
@@ -20,7 +16,7 @@ func _enter_tree() -> void:
 	# 加载并实例化主界面
 	var scene: Resource = load(CHAT_HUB_SCENE_PATH)
 	if not scene:
-		push_error("[Godot AI Chat] Failed to load ChatHub scene at: " + CHAT_HUB_SCENE_PATH)
+		AIChatLogger.error("[Godot AI Chat] Failed to load ChatHub scene at: " + CHAT_HUB_SCENE_PATH)
 		return
 	
 	chat_hub_instance = scene.instantiate()
@@ -40,7 +36,7 @@ func _enter_tree() -> void:
 		var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
 		chat_ui.initialize_editor_dependencies(editor_file_system)
 	else:
-		push_error("[Godot AI Chat] Could not find 'ChatUI' node in ChatHub scene.")
+		AIChatLogger.error("[Godot AI Chat] Could not find 'ChatUI' node in ChatHub scene.")
 
 
 func _exit_tree() -> void:
@@ -68,14 +64,14 @@ func _initialize_plugin_file_environment() -> void:
 	var need_scan: bool = false
 	
 	# 确保对话存档目录存在
-	if not DirAccess.dir_exists_absolute(SESSION_DIR):
-		DirAccess.make_dir_recursive_absolute(SESSION_DIR)
+	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
+		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
 		need_scan = true
 	
 	# 确保插件配置文件存在
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
 	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
-	if not FileAccess.file_exists(PLUGIN_SETTINGS_PATH):
+	if not FileAccess.file_exists(PluginPaths.SETTINGS_PATH):
 		AIChatLogger.debug("[Godot AI Chat] Settings file not found, creating default...")
 		ToolBox.get_plugin_settings() # 这会创建默认文件
 		need_scan = true

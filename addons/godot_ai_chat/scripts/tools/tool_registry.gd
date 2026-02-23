@@ -9,9 +9,6 @@ extends RefCounted
 
 # --- Enums / Constants ---
 
-## 技能目录
-const SKILLS_DIR: String = "res://addons/godot_ai_chat/skills/"
-
 ## 核心工具路径 (始终加载)
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
@@ -205,16 +202,16 @@ static func convert_schema_to_gemini(p_schema: Dictionary) -> Dictionary:
 ## 扫描技能目录
 static func _scan_skills() -> void:
 	available_skills.clear()
-	if not DirAccess.dir_exists_absolute(SKILLS_DIR):
+	if not DirAccess.dir_exists_absolute(PluginPaths.SKILLS_DIR):
 		return
 	
-	var dir: DirAccess = DirAccess.open(SKILLS_DIR)
+	var dir: DirAccess = DirAccess.open(PluginPaths.SKILLS_DIR)
 	if dir:
 		dir.list_dir_begin()
 		var folder_name: String = dir.get_next()
 		while folder_name != "":
 			if dir.current_is_dir() and not folder_name.begins_with("."):
-				_load_skill_from_folder(SKILLS_DIR.path_join(folder_name))
+				_load_skill_from_folder(PluginPaths.SKILLS_DIR.path_join(folder_name))
 			folder_name = dir.get_next()
 		dir.list_dir_end()
 

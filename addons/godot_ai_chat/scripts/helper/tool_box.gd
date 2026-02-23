@@ -5,10 +5,6 @@ extends RefCounted
 ##
 ## 包含设置管理、Token 估算、文件系统刷新等辅助功能。
 
-# --- Constants ---
-
-## 插件设置资源文件的固定路径
-const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 
 # --- Public Functions ---
 
@@ -16,16 +12,16 @@ const SETTINGS_PATH: String = "res://addons/godot_ai_chat/plugin_settings.tres"
 static func get_plugin_settings() -> PluginSettings:
 	var plugin_settings: PluginSettings
 	
-	if ResourceLoader.exists(SETTINGS_PATH):
+	if ResourceLoader.exists(PluginPaths.SETTINGS_PATH):
 		# 使用 CACHE_MODE_IGNORE 确保读取最新设置
-		plugin_settings = ResourceLoader.load(SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
+		plugin_settings = ResourceLoader.load(PluginPaths.SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:
 		plugin_settings = PluginSettings.new()
-		var err: Error = ResourceSaver.save(plugin_settings, SETTINGS_PATH)
+		var err: Error = ResourceSaver.save(plugin_settings, PluginPaths.SETTINGS_PATH)
 		if err == OK:
-			update_editor_filesystem(SETTINGS_PATH)
+			update_editor_filesystem(PluginPaths.SETTINGS_PATH)
 		else:
-			push_error("[Godot AI Chat] Failed to create settings file: %s" % error_string(err))
+			AIChatLogger.error("[Godot AI Chat] Failed to create settings file: %s" % error_string(err))
 	
 	return plugin_settings
 

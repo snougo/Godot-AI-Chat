@@ -40,8 +40,6 @@ enum UIState {
 	ERROR                ## 发生错误
 }
 
-const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
-
 # --- @onready Vars ---
 
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
@@ -329,44 +327,9 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 		"Session Total (Snowball):\n - Prompt: %d\n - Completion: %d\n - Total: %d"
 	) % [p, c, t, display_prompt, display_completion, display_total]
 
-#func update_token_usage_display(p_usage: Dictionary) -> void:
-	#var p: int = p_usage.get("prompt_tokens", 0)
-	#var c: int = p_usage.get("completion_tokens", 0)
-	#var t: int = p_usage.get("total_tokens", p + c)
-	#_current_token_usage.text = "Token Cost: Total: %d (Prompt: %d, Completion: %d)" % [t, p, c]
-	
-	# [Feature] Update Current Turn (Overwrite, NOT Accumulate)
-	# Because API streaming updates usually provide the "total usage so far for this request".
-	#_current_turn_usage = {
-		#"prompt": p,
-		#"completion": c,
-		#"total": t
-	#}
-	
-	# Calculate Display Totals
-	#var display_total: int = _archived_total_usage.total + t
-	#var display_prompt: int = _archived_total_usage.prompt + p
-	#var display_completion: int = _archived_total_usage.completion + c
-	
-	# Update UI
-	#_current_token_usage.text = "Cost: %d (Sum: %d) | Prompt: %d | Compl: %d" % [
-		#t, 
-		#display_total,
-		#p,
-		#c
-	#]
-	
-	# Tooltip 详细显示
-	#_current_token_usage.tooltip_text = (
-		#"Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" +
-		#"Session Total (Snowball):\n - Prompt: %d\n - Completion: %d\n - Total: %d"
-	#) % [p, c, t, display_prompt, display_completion, display_total]
-
 
 ## 重置 Token 显示
 func reset_token_usage_display() -> void:
-	#_current_token_usage.text = "Token Cost: Total: 0 (Prompt: 0, Completion: 0)"
-	
 	# [Feature] 清零所有数据
 	_archived_total_usage = { "prompt": 0, "completion": 0, "total": 0 }
 	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
@@ -534,7 +497,7 @@ func _on_save_as_markdown_button_pressed() -> void:
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	_file_dialog.clear_filters()
 	_file_dialog.add_filter("*.md", "Markdown File")
-	_file_dialog.current_dir = SESSION_DIR
+	_file_dialog.current_dir = PluginPaths.SESSION_DIR
 	_file_dialog.current_file = _generate_default_filename(".md")
 	_file_dialog.popup_centered()
 

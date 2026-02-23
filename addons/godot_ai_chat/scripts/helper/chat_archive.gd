@@ -6,10 +6,6 @@ extends RefCounted
 ##
 ## 负责聊天存档的管理，包括列举存档文件和导出为 Markdown 格式。
 
-# --- Constants ---
-
-## 存档目录路径
-const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
 
 # --- Public Functions ---
 
@@ -17,7 +13,7 @@ const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
 ## [return]: 按时间倒序排列的文件名数组
 static func get_session_list() -> Array[String]:
 	var archives: Array[String] = []
-	var dir: DirAccess = DirAccess.open(SESSION_DIR)
+	var dir: DirAccess = DirAccess.open(PluginPaths.SESSION_DIR)
 	
 	if dir:
 		dir.list_dir_begin()
@@ -67,5 +63,5 @@ static func save_to_markdown(p_messages: Array[ChatMessage], p_file_path: String
 		ToolBox.refresh_editor_filesystem()
 		return true
 	else:
-		push_error("Failed to export markdown: %s" % FileAccess.get_open_error())
+		AIChatLogger.error("Failed to export markdown: %s" % FileAccess.get_open_error())
 		return false

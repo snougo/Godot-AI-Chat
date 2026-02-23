@@ -6,15 +6,9 @@ extends RefCounted
 ##
 ## 负责管理聊天会话的生命周期（创建、加载、保存）。
 
-# --- Constants ---
-
-## 存档目录
-const SESSION_DIR: String = "res://addons/godot_ai_chat/chat_sessions/"
-
 # --- Public Vars ---
 
 ## 当前活动的会话路径
-#var current_history_path: String = ""
 var current_session_path: String = ""
 
 # --- Private Vars ---
@@ -43,12 +37,12 @@ func create_new_session() -> String:
 	var now_time: Dictionary = Time.get_datetime_dict_from_system(false)
 	var base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [now_time.year, now_time.month, now_time.day, now_time.hour, now_time.minute, now_time.second]
 	var extension: String = ".tres"
-	var final_path: String = SESSION_DIR.path_join(base_filename + extension)
+	var final_path: String = PluginPaths.SESSION_DIR.path_join(base_filename + extension)
 	
 	# 避免重名
 	var counter: int = 1
 	while FileAccess.file_exists(final_path):
-		final_path = SESSION_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
+		final_path = PluginPaths.SESSION_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
 		counter += 1
 	
 	# 创建资源
@@ -56,7 +50,7 @@ func create_new_session() -> String:
 	var err: Error = ResourceSaver.save(new_history, final_path)
 	
 	if err != OK:
-		push_error("[SessionManager] Failed to create chat file: %s" % error_string(err))
+		AIChatLogger.error("[SessionManager] Failed to create chat file: %s" % error_string(err))
 		return ""
 	
 	current_session_path = final_path
@@ -72,7 +66,7 @@ func create_new_session() -> String:
 
 ## 加载会话
 func load_session(p_session_name: String) -> bool:
-	var path: String = SESSION_DIR.path_join(p_session_name)
+	var path: String = PluginPaths.SESSION_DIR.path_join(p_session_name)
 	
 	if not FileAccess.file_exists(path):
 		return false
@@ -88,17 +82,17 @@ func load_session(p_session_name: String) -> bool:
 
 ## 删除指定会话并返回是否成功
 func delete_session(p_session_name: String) -> bool:
-	var archive_path: String = SESSION_DIR.path_join(p_session_name)
+	var archive_path: String = PluginPaths.SESSION_DIR.path_join(p_session_name)
 	
 	# 检查文件是否存在
 	if not FileAccess.file_exists(archive_path):
-		push_error("[SessionManager] Archive file not found: %s" % p_session_name)
+		AIChatLogger.error("[SessionManager] Archive file not found: %s" % p_session_name)
 		return false
 	
 	# 删除文件
 	var err: Error = DirAccess.remove_absolute(archive_path)
 	if err != OK:
-		push_error("[SessionManager] Failed to delete archive: %s" % error_string(err))
+		AIChatLogger.error("[SessionManager] Failed to delete archive: %s" % error_string(err))
 		return false
 	
 	# 如果删除的是当前会话，清除当前会话状态
@@ -128,7 +122,7 @@ func load_latest_session() -> String:
 	if success:
 		return latest_archive
 	else:
-		push_error("[SessionManager] Failed to load latest session: %s" % latest_archive)
+		AIChatLogger.error("[SessionManager] Failed to load latest session: %s" % latest_archive)
 		return ""
 
 
@@ -141,8 +135,8 @@ func has_active_session() -> bool:
 
 ## 确保目录存在
 func _ensure_archive_dir() -> void:
-	if not DirAccess.dir_exists_absolute(SESSION_DIR):
-		DirAccess.make_dir_recursive_absolute(SESSION_DIR)
+	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
+		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
 
 
 ## [内部] 将资源应用到 UI 并建立自动保存连接

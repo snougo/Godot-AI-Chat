@@ -16,7 +16,7 @@ enum ParseState {
 }
 
 ## 预加载代码高亮主题
-const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload("res://addons/godot_ai_chat/assets/code_hightlight.tres")
+const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
 
 # --- @onready Vars ---
 
