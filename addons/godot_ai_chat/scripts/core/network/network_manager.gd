@@ -109,8 +109,18 @@ func start_chat_stream(p_messages: Array[ChatMessage]) -> void:
 	
 	current_stream_request.chunk_received.connect(func(chunk: Dictionary): new_stream_chunk_received.emit(chunk))
 	current_stream_request.usage_received.connect(func(usage: Dictionary): chat_usage_data_received.emit(usage))
-	current_stream_request.failed.connect(func(err_msg: String): chat_request_failed.emit(err_msg))
-	current_stream_request.finished.connect(func(): chat_stream_request_completed.emit())
+	
+	# [修复] 在失败回调中先清理引用，再发射信号
+	current_stream_request.failed.connect(func(err_msg: String): 
+		_clear_current_stream_request()
+		chat_request_failed.emit(err_msg)
+	)
+	
+	# [修复] 在完成回调中先清理引用，再发射信号
+	current_stream_request.finished.connect(func(): 
+		_clear_current_stream_request()
+		chat_stream_request_completed.emit()
+	)
 	
 	new_chat_request_sending.emit()
 	current_stream_request.start()
@@ -121,6 +131,8 @@ func cancel_stream() -> void:
 	if current_stream_request:
 		current_stream_request.cancel()
 		chat_stream_request_canceled.emit()
+		# [修复] 取消后立即清理引用
+		_clear_current_stream_request()
 
 
 # --- Private Functions ---
@@ -138,6 +150,12 @@ func _update_provider_config() -> bool:
 		return false
 	
 	return true
+
+
+## [新增] 清理当前流式请求引用
+func _clear_current_stream_request() -> void:
+	if current_stream_request:
+		current_stream_request = null
 
 
 # --- Signal Callbacks ---

@@ -151,7 +151,11 @@ func _thread_task() -> void:
 		# 尝试解析 JSON 错误
 		var json_err = JSON.parse_string(error_text)
 		if json_err and json_err is Dictionary and json_err.has("error"):
-			var err_msg = json_err.error.get("message", error_text)
+			var err_msg: String = error_text
+			if json_err.error is Dictionary:
+				err_msg = json_err.error.get("message", error_text)
+			else:
+				err_msg = str(json_err.error)
 			_emit_failure("API Error (%d): %s" % [response_code, err_msg])
 		else:
 			_emit_failure("HTTP Error %d: %s" % [response_code, error_text])
