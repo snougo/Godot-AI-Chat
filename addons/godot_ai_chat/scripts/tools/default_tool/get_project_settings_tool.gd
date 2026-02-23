@@ -74,33 +74,15 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"setting_path": {
 				"type": "string",
-				"description": "Required when mode='by_path'. Full setting path (e.g., 'display/window/size/viewport_width')."
+				"description": "Full setting path (e.g., 'display/window/size/viewport_width'). MUST be provided when mode='by_path'."
 			},
 			"category": {
 				"type": "string",
 				"enum": COMMON_CATEGORIES,
-				"description": "Required when mode='by_category'. Setting category to query (e.g., 'display', 'input')."
+				"description": "Setting category to query (e.g., 'display', 'input'). MUST be provided when mode='by_category'."
 			}
 		},
-		"required": ["mode"],
-		"allOf": [
-			{
-				"if": {
-					"properties": {"mode": {"const": MODE_BY_PATH}}
-				},
-				"then": {
-					"required": ["setting_path"]
-				}
-			},
-			{
-				"if": {
-					"properties": {"mode": {"const": MODE_BY_CATEGORY}}
-				},
-				"then": {
-					"required": ["category"]
-				}
-			}
-		]
+		"required": ["mode"]
 	}
 
 
