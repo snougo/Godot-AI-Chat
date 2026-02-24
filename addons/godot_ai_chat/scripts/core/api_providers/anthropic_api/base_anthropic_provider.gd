@@ -129,7 +129,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 			if p_chunk_data.has("message"):
 				var msg_info: Dictionary = p_chunk_data.message
 				if msg_info.has("usage"):
-					_merge_and_normalize_usage(msg_info.usage)
+					_update_and_normalize_usage(msg_info.usage)
 					ui_update.usage = _current_stream_usage.duplicate()
 		
 		"content_block_start":
@@ -171,6 +171,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 					var thinking_text: String = delta.get("thinking", "")
 					if not thinking_text.is_empty():
 						p_target_msg.reasoning_content += thinking_text
+						ui_update["reasoning_delta"] = thinking_text
 					# 思维链不直接显示在 UI 内容增量中
 				
 				"input_json_delta":
@@ -196,8 +197,9 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 								p_target_msg.tool_calls.back().function.arguments += fragment
 		
 		"message_delta":
+			# message_delta 中的 usage 是最终统计，直接覆盖即可
 			if p_chunk_data.has("usage"):
-				_merge_and_normalize_usage(p_chunk_data.usage)
+				_update_and_normalize_usage(p_chunk_data.usage)
 				ui_update.usage = _current_stream_usage.duplicate()
 		
 		"message_stop":
@@ -210,7 +212,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 # ----- Helper Functions -----
 
 # 合并并转换键名 (Anthropic -> OpenAI 格式)
-func _merge_and_normalize_usage(p_new_usage: Dictionary) -> void:
+func _update_and_normalize_usage(p_new_usage: Dictionary) -> void:
 	if p_new_usage.has("input_tokens"):
 		_current_stream_usage.prompt_tokens = p_new_usage.input_tokens
 	if p_new_usage.has("output_tokens"):
@@ -224,6 +226,8 @@ func _normalize_usage(p_usage: Dictionary) -> Dictionary:
 		result.prompt_tokens = p_usage.input_tokens
 	if p_usage.has("output_tokens"):
 		result.completion_tokens = p_usage.output_tokens
+	if result.has("prompt_tokens") and result.has("completion_tokens"):
+		result.total_tokens = result.prompt_tokens + result.completion_tokens
 	return result
 
 

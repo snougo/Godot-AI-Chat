@@ -293,7 +293,7 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 	var p: int = p_usage.get("prompt_tokens", 0)
 	var c: int = p_usage.get("completion_tokens", 0)
 	
-	# [修复] 单调递增检查，防止流式传输中数值闪烁
+	# 单调递增检查，防止流式传输中数值闪烁
 	# 依赖 prepare_for_new_request() 在每轮开始前重置 _current_turn_usage
 	if p < _current_turn_usage.prompt:
 		p = _current_turn_usage.prompt

@@ -78,7 +78,7 @@ func _perform_web_search(p_query: String, p_api_key: String) -> Dictionary:
 	var body: String = JSON.stringify({
 		"api_key": p_api_key,
 		"query": p_query,
-		"search_depth": "basic",
+		"search_depth": "advanced",
 		"include_answer": true,
 		"max_results": 6
 	})
