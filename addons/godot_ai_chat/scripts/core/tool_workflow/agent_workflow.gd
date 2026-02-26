@@ -36,7 +36,12 @@ var is_in_workflow: bool = false
 ## 取消当前正在运行的工作流
 func cancel_workflow() -> void:
 	if current_workflow:
-		current_workflow.cleanup()
+		# 确保调用 cancel() 以阻止僵尸协程
+		if current_workflow.has_method("cancel"):
+			current_workflow.cancel()
+		else:
+			current_workflow.cleanup()
+		
 		current_workflow = null
 	
 	is_in_workflow = false

@@ -6,12 +6,13 @@ extends RefCounted
 ##
 ## 负责构建发送给 AI 的上下文消息列表（System Prompt + History + Skills）。
 
+
 # --- Public Functions ---
 
-# 构建完整的上下文
-# [param p_history]: 原始聊天记录资源
-# [param p_settings]: 插件设置
-# [return]: 准备发送给 API 的 ChatMessage 数组
+## 构建完整的上下文
+## [param p_history]: 原始聊天记录资源
+## [param p_settings]: 插件设置
+## [return]: 准备发送给 API 的 ChatMessage 数组
 static func build_context(p_history: ChatMessageHistory, p_settings: PluginSettings) -> Array[ChatMessage]:
 	if not p_history or not p_settings:
 		return []

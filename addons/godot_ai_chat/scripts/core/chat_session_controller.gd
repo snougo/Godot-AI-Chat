@@ -14,11 +14,15 @@ var _is_creating_new_chat: bool = false
 var _is_plugin_init: bool = false
 
 
+# --- Built-in Functions ---
+
 func _init(p_session_manager: SessionManager, p_chat_ui: ChatUI, p_window: CurrentChatWindow) -> void:
 	_session_manager = p_session_manager
 	_chat_ui = p_chat_ui
 	_current_chat_window = p_window
 
+
+# --- Public Functions ---
 
 ## 插件初始化时的自动加载逻辑
 func auto_load_session() -> void:
@@ -110,6 +114,8 @@ func handle_export_markdown(p_path: String) -> void:
 	if success:
 		_chat_ui.show_confirmation("Exported to %s" % p_path)
 
+
+# --- Private Functions ---
 
 ## 刷新 UI 信号连接（主要是轮数显示）
 func _refresh_ui_connections() -> void:

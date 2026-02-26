@@ -215,7 +215,7 @@ func update_token_usage(p_usage: Dictionary) -> void:
 
 # --- Private Functions ---
 
-## 执行可视性剔除逻辑
+# 执行可视性剔除逻辑
 func _update_visibility_culling() -> void:
 	if not is_instance_valid(chat_scroll_container) or not is_instance_valid(chat_list_container):
 		return
@@ -262,7 +262,7 @@ func _update_visibility_culling() -> void:
 	# --- 打印 Debug 信息 ---
 	# 只有当数据发生变化或者每隔一定时间打印一次，避免刷屏
 	# 这里为了演示简单，我们只在总数大于 0 时打印
-	if visible_count > 12:
+	if visible_count > 16:
 		AIChatLogger.debug("Debug: Total: %d | Visible: %d | Suspended: %d" % [total_count, visible_count, suspended_count])
 	
 	# [调试] 如果卡死依然发生，请观察控制台输出
@@ -270,7 +270,7 @@ func _update_visibility_culling() -> void:
 	#print("Culling: Suspended %d / %d" % [suspended_count, chat_list_container.get_child_count()])
 
 
-## 刷新整个消息列表显示
+# 刷新整个消息列表显示
 func _refresh_display() -> void:
 	# 1. 先清空现有内容
 	for c in chat_list_container.get_children():
@@ -303,7 +303,7 @@ func _refresh_display() -> void:
 	_update_visibility_culling()
 
 
-## 添加一个消息块到 UI
+# 添加一个消息块到 UI
 func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls: Array = [], p_images: Array = [], p_reasoning: String = "") -> void:
 	var block: ChatMessageBlock = _create_block()
 	block.set_content(p_role, p_content, current_model_name if p_role == ChatMessage.ROLE_ASSISTANT else "", p_tool_calls, p_reasoning)
@@ -316,21 +316,21 @@ func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls
 	_scroll_to_bottom()
 
 
-## 实例化一个新的消息块
+# 实例化一个新的消息块
 func _create_block() -> ChatMessageBlock:
 	var block: ChatMessageBlock = CHAT_MESSAGE_BLOCK_SCENE.instantiate()
 	chat_list_container.add_child(block)
 	return block
 
 
-## 获取列表中的最后一个消息块
+# 获取列表中的最后一个消息块
 func _get_last_block() -> ChatMessageBlock:
 	if chat_list_container.get_child_count() == 0:
 		return null
 	return chat_list_container.get_child(chat_list_container.get_child_count() - 1) as ChatMessageBlock
 
 
-## 滚动到列表底部
+# 滚动到列表底部
 func _scroll_to_bottom() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame

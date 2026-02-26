@@ -2,9 +2,13 @@
 class_name AiTodoList
 extends Resource
 
+# --- @export Vars ---
+
 ## 所有任务列表
 @export var items: Array[AiTodoItem] = []
 
+
+# --- Public Functions ---
 
 ## 添加任务
 func add_item(p_content: String, p_workspace_path: String) -> void:

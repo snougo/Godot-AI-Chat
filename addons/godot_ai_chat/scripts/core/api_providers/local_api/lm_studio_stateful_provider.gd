@@ -7,7 +7,12 @@ extends OpenAICompatibleProvider
 ## This provider uses the /v1/responses endpoint which supports stateful conversations.
 ## NOTE: Client-side tools (Function Calling) are NOT supported by this endpoint in LM Studio yet.
 
+# --- Constants ---
+
 const RESPONSE_ID_META_KEY: String = "lm_studio_response_id"
+
+
+# --- Public Functions ---
 
 ## 获取请求的 URL
 func get_request_url(p_base_url: String, p_model_name: String, p_api_key: String, p_stream: bool) -> String:

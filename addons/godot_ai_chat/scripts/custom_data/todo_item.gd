@@ -11,6 +11,9 @@ extends Resource
 ## 创建时间
 @export var creation_time: String = ""
 
+
+# --- Built-in Functions ---
+
 func _init(p_content: String = "", p_context_path: String = "") -> void:
 	content = p_content
 	workspace_path = p_context_path

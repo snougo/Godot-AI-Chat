@@ -9,6 +9,7 @@ extends OpenAICompatibleProvider
 ## 智谱AI支持的模型列表
 const ZHIPUAI_MODELS: Array[String] = ["glm-4.5-air"]
 
+
 # --- Public Functions ---
 
 ## 智谱 V4 完美兼容 SSE

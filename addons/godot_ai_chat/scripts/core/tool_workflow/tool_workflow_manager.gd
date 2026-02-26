@@ -28,8 +28,11 @@ var workflow_messages: Array[ChatMessage] = []
 
 # --- Private Vars ---
 
-## 临时存储正在接收的助手消息
+# 临时存储正在接收的助手消息
 var _temp_assistant_msg: ChatMessage
+# 标记工作流是否已取消
+var _is_cancelled: bool = false
+
 
 # --- Built-in Functions ---
 
@@ -37,6 +40,7 @@ func _init(p_nm: NetworkManager, p_te: ToolExecutor, p_history: Array[ChatMessag
 	network_manager = p_nm
 	tool_executor = p_te
 	base_history = p_history
+
 
 # --- Public Functions ---
 
@@ -54,14 +58,25 @@ func start(p_trigger_msg: ChatMessage) -> void:
 	_execute_tool_calls(p_trigger_msg)
 
 
+## 取消工作流
+func cancel() -> void:
+	_is_cancelled = true
+	cleanup()
+
+
 # --- Private Functions ---
 
-## 执行消息中的所有工具调用
+# 执行消息中的所有工具调用
 func _execute_tool_calls(p_msg: ChatMessage) -> void:
 	var generated_tool_msgs: Array[ChatMessage] = []
 	
 	# 使用索引遍历，以便直接修改字典（引用类型），解决 ID 缺失问题
 	for i in range(p_msg.tool_calls.size()):
+		# 循环开始前检查
+		if _is_cancelled:
+			AIChatLogger.warn("[Workflow] Tool execution aborted due to cancellation.")
+			return
+		
 		var call: Dictionary = p_msg.tool_calls[i]
 		var call_id: String = call.get("id", "")
 		
@@ -98,10 +113,14 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 		if not tool_instance:
 			# 工具不存在时，不跳过，而是返回错误信息给 LLM，保证对话链完整
 			result_str = "[SYSTEM ERROR] Tool '%s' not found. Execution failed." % tool_name
-			push_error("[Workflow] " + result_str)
+			AIChatLogger.error("[Workflow] " + result_str)
 		else:
 			# 支持异步执行
 			var result_dict: Dictionary = await tool_instance.execute(args)
+			# 异步回来后再次检查取消状态 (关键修复)
+			if _is_cancelled:
+				AIChatLogger.warn("[Workflow] Tool execution finished but workflow was cancelled. Aborting.")
+				return
 			
 			# 处理非字符串类型的data
 			var data_val: Variant = result_dict.get("data", "")
@@ -142,6 +161,10 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 		
 		generated_tool_msgs.append(tool_msg)
 	
+	# 循环结束后再次检查
+	if _is_cancelled:
+		return
+	
 	# 5. 按顺序添加消息：先 Tool 后 User
 	workflow_messages.append_array(generated_tool_msgs)
 	for tm in generated_tool_msgs:
@@ -151,7 +174,7 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 	_request_next_step()
 
 
-## 将图片附加到历史记录中最近的一条 User 消息
+# 将图片附加到历史记录中最近的一条 User 消息
 func _attach_image_to_last_user_message(p_data: PackedByteArray, p_mime: String) -> void:
 	# 优先检查本次工作流中产生的新消息
 	for i in range(workflow_messages.size() - 1, -1, -1):
@@ -170,7 +193,7 @@ func _attach_image_to_last_user_message(p_data: PackedByteArray, p_mime: String)
 	AIChatLogger.debug("[Workflow] Warning: No User message found to attach image.")
 
 
-## 请求 AI 进行下一步决策或最终回复
+# 请求 AI 进行下一步决策或最终回复
 func _request_next_step() -> void:
 	var context: Array[ChatMessage] = base_history + workflow_messages
 	
@@ -195,6 +218,10 @@ func _on_chunk(p_chunk: Dictionary) -> void:
 
 
 func _on_stream_done() -> void:
+	# 如果已取消，不要触发完成信号
+	if _is_cancelled:
+		return
+	
 	cleanup()
 	
 	# 检查是否需要多步循环

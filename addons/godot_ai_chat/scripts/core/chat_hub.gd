@@ -18,6 +18,7 @@ var _session_manager: SessionManager
 var _session_controller: ChatSessionController
 var _interaction_controller: ChatInteractionController
 
+
 # --- Built-in Functions ---
 
 func _ready() -> void:

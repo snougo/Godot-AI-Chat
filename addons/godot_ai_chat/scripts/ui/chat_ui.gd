@@ -80,7 +80,7 @@ var is_first_init: bool = false
 
 # --- Private Vars ---
 
-## 标记当前是否在等待删除确认
+# 标记当前是否在等待删除确认
 var _pending_delete_session_name: String = ""
 # [Feature] Token Usage Tracking
 # _archived_total_usage: Stores the sum of all *previous* finalized requests in this session.

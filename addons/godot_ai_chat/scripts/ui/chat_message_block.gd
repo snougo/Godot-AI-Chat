@@ -291,7 +291,7 @@ func is_suspended() -> bool:
 
 # --- Private Functions ---
 
-## 设置标题和角色元数据
+# 设置标题和角色元数据
 func _set_title(p_role: String, p_model_name: String) -> void:
 	set_meta("role", p_role)
 	match p_role:
@@ -316,7 +316,7 @@ func _set_title(p_role: String, p_model_name: String) -> void:
 				expand()
 
 
-## 更新流式工具调用参数 UI
+# 更新流式工具调用参数 UI
 func _update_tool_call_ui(p_node_name: String, p_tool_call: Dictionary) -> void:
 	var panel: Node = _content_container.get_node_or_null(p_node_name)
 	if panel:
@@ -325,7 +325,7 @@ func _update_tool_call_ui(p_node_name: String, p_tool_call: Dictionary) -> void:
 			_update_args_display(args_label, p_tool_call)
 
 
-## 解析并格式化参数显示
+# 解析并格式化参数显示
 func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> void:
 	var args_str: String = ""
 	if p_tool_call.has("function"):
@@ -350,7 +350,7 @@ func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> vo
 	p_label.pop()
 
 
-## 清空所有内容
+# 清空所有内容
 func _clear_content() -> void:
 	for c in _content_container.get_children():
 		c.queue_free()
@@ -369,8 +369,8 @@ func _clear_content() -> void:
 	_reasoning_label = null
 
 
-## 智能分块处理逻辑
-## 核心职责：在流式传输中检测 Markdown 代码块标记（```），解决缩进导致的解析错误
+# 智能分块处理逻辑
+# 核心职责：在流式传输中检测 Markdown 代码块标记（```），解决缩进导致的解析错误
 func _process_smart_chunk(p_incoming_text: String, p_instant: bool) -> void:
 	_pending_buffer += p_incoming_text
 	
@@ -476,7 +476,7 @@ func _process_smart_chunk(p_incoming_text: String, p_instant: bool) -> void:
 			break
 
 
-## 解析包含 ``` 的特定行
+# 解析包含 ``` 的特定行
 func _parse_fence_line(p_line: String, p_instant: bool) -> void:
 	if _current_state == ParseState.TEXT:
 		var match_start: RegExMatch = _re_code_start.search(p_line)
@@ -509,7 +509,7 @@ func _parse_fence_line(p_line: String, p_instant: bool) -> void:
 			_append_content(p_line + "\n", p_instant)
 
 
-## 统一渲染入口
+# 统一渲染入口
 func _append_content(p_text: String, p_instant: bool) -> void:
 	if p_text.is_empty(): return # 避免空字符串改变状态
 	
@@ -522,7 +522,7 @@ func _append_content(p_text: String, p_instant: bool) -> void:
 	_is_line_start = p_text.ends_with("\n")
 
 
-## 创建思考内容 UI 结构
+# 创建思考内容 UI 结构
 func _create_reasoning_ui() -> void:
 	_reasoning_container = FoldableContainer.new()
 	_reasoning_container.name = "ReasoningContainer"
@@ -548,7 +548,7 @@ func _create_reasoning_ui() -> void:
 	_last_ui_node = null
 
 
-## 创建文本块 UI
+# 创建文本块 UI
 func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabel:
 	var rtl: RichTextLabel = RichTextLabel.new()
 	rtl.bbcode_enabled = false
@@ -564,7 +564,7 @@ func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabe
 	return rtl
 
 
-## 追加内容到文本块
+# 追加内容到文本块
 func _append_to_text(p_text: String, p_instant: bool) -> void:
 	if not _last_ui_node is RichTextLabel:
 		_finish_typing()
@@ -581,7 +581,7 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		_trigger_typewriter(_last_ui_node)
 
 
-## 创建代码块 UI
+# 创建代码块 UI
 func _create_code_block(p_lang: String) -> void:
 	_finish_typing()
 	
@@ -643,13 +643,13 @@ func _create_code_block(p_lang: String) -> void:
 	_is_line_start = true
 
 
-## 追加内容到代码块
+# 追加内容到代码块
 func _append_to_code(p_text: String) -> void:
 	if _last_ui_node is CodeEdit:
 		_last_ui_node.insert_text_at_caret(p_text)
 
 
-## 触发打字机效果
+# 触发打字机效果
 func _trigger_typewriter(p_node: RichTextLabel) -> void:
 	_current_typing_node = p_node
 	if not _typing_active:
@@ -657,14 +657,14 @@ func _trigger_typewriter(p_node: RichTextLabel) -> void:
 		_typewriter_loop()
 
 
-## 强制结束打字机效果
+# 强制结束打字机效果
 func _finish_typing() -> void:
 	if _typing_active and is_instance_valid(_current_typing_node):
 		_current_typing_node.visible_characters = -1
 		_typing_active = false
 
 
-## 打字机循环逻辑
+# 打字机循环逻辑
 func _typewriter_loop() -> void:
 	if not _typing_active or not is_instance_valid(_current_typing_node):
 		_typing_active = false

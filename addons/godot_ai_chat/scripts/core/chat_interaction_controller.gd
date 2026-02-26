@@ -12,6 +12,8 @@ var _current_chat_window: CurrentChatWindow
 var _session_manager: SessionManager
 
 
+# --- Built-in Functions ---
+
 func _init(p_ui: ChatUI, p_net: NetworkManager, p_workflow:AgentWorkflow, p_window: CurrentChatWindow, p_session: SessionManager) -> void:
 	_chat_ui = p_ui
 	_network_manager = p_net
@@ -22,30 +24,7 @@ func _init(p_ui: ChatUI, p_net: NetworkManager, p_workflow:AgentWorkflow, p_wind
 	_connect_signals()
 
 
-func _connect_signals() -> void:
-	# 网络事件 -> UI 反馈
-	_network_manager.new_chat_request_sending.connect(func():
-		# [修复] 强制结算上一轮并重置当前计数，确保 UI 单调递增逻辑在新一轮生效
-		_chat_ui.prepare_for_new_request()
-		_chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE)
-	)
-	
-	# 流式响应处理
-	_network_manager.new_stream_chunk_received.connect(func(chunk: Dictionary):
-		if _chat_ui.current_state != ChatUI.UIState.RESPONSE_GENERATING:
-			_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
-		_current_chat_window.handle_stream_chunk(chunk, _network_manager.current_provider)
-	)
-	
-	_network_manager.chat_stream_request_completed.connect(_on_stream_completed)
-	_network_manager.chat_request_failed.connect(_on_chat_failed)
-	
-	# AgentWorkflow 事件
-	_agent_workflow.tool_workflow_started.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.TOOLCALLING))
-	_agent_workflow.tool_workflow_failed.connect(_on_chat_failed)
-	_agent_workflow.assistant_message_ready.connect(_on_assistant_reply_completed)
-	_agent_workflow.tool_message_generated.connect(_on_tool_message_generated)
-
+# --- Public Functions ---
 
 ## 处理用户发送消息
 func handle_user_message(p_text: String) -> void:
@@ -58,7 +37,7 @@ func handle_user_message(p_text: String) -> void:
 	# 处理附件
 	var processed: Dictionary = AttachmentProcessor.process_input(p_text)
 	
-	# [修复] 统一在一个消息中发送文本和所有图片
+	# 统一在一个消息中发送文本和所有图片
 	# processed.images 是 [{"data":..., "mime":...}] 数组
 	_current_chat_window.append_user_message(
 		processed.final_text, 
@@ -77,9 +56,46 @@ func handle_user_message(p_text: String) -> void:
 
 ## 请求停止生成
 func handle_stop_requested() -> void:
+	# 1. 尝试取消网络 (如果活跃，会触发 _on_stream_canceled)
 	_network_manager.cancel_stream()
+	# 2. 尝试取消工作流 (确保非网络活跃状态下的工具流也被取消)
 	_agent_workflow.cancel_workflow()
+	# 3. 兜底处理：如果状态还是忙碌（说明没有触发信号回调），则手动清理
+	# 这种情况通常发生在 TOOLCALLING 状态，或者网络请求已经结束但 UI 还没更新时
+	if _chat_ui.current_state != ChatUI.UIState.IDLE:
+		_perform_stop_cleanup("Stopped")
+
+
+# --- Private Functions ---
+
+func _connect_signals() -> void:
+	# 网络事件 -> UI 反馈
+	_network_manager.new_chat_request_sending.connect(func():
+		# 强制结算上一轮并重置当前计数，确保 UI 单调递增逻辑在新一轮生效
+		_chat_ui.prepare_for_new_request()
+		_chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE)
+	)
 	
+	# 流式响应处理
+	_network_manager.new_stream_chunk_received.connect(func(chunk: Dictionary):
+		if _chat_ui.current_state != ChatUI.UIState.RESPONSE_GENERATING:
+			_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
+		_current_chat_window.handle_stream_chunk(chunk, _network_manager.current_provider)
+	)
+	
+	_network_manager.chat_stream_request_completed.connect(_on_stream_completed)
+	_network_manager.chat_request_failed.connect(_on_chat_failed)
+	_network_manager.chat_stream_request_canceled.connect(_on_stream_canceled)
+	
+	# AgentWorkflow 事件
+	_agent_workflow.tool_workflow_started.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.TOOLCALLING))
+	_agent_workflow.tool_workflow_failed.connect(_on_chat_failed)
+	_agent_workflow.assistant_message_ready.connect(_on_assistant_reply_completed)
+	_agent_workflow.tool_message_generated.connect(_on_tool_message_generated)
+
+
+func _perform_stop_cleanup(reason: String) -> void:
+	# 统一执行停止后的清理工作
 	var is_busy: bool = _chat_ui.current_state in [
 		ChatUI.UIState.RESPONSE_GENERATING, 
 		ChatUI.UIState.WAITING_RESPONSE, 
@@ -92,10 +108,10 @@ func handle_stop_requested() -> void:
 	if _current_chat_window.chat_history:
 		_current_chat_window.chat_history.emit_changed()
 	
-	_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Stopped")
+	_chat_ui.update_ui_state(ChatUI.UIState.IDLE, reason)
 
 
-# --- Internal Signal Callbacks ---
+# --- Signal Callbacks ---
 
 func _on_stream_completed() -> void:
 	# 如果处于工作流中（比如正在执行工具），不要结束 UI 状态
@@ -109,6 +125,13 @@ func _on_stream_completed() -> void:
 		_agent_workflow.process_response(last_msg)
 	else:
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+
+
+func _on_stream_canceled() -> void:
+	# 确保非网络活跃状态下的工具流也被取消
+	_agent_workflow.cancel_workflow()
+	# 执行清理
+	_perform_stop_cleanup("Stopped")
 
 
 func _on_chat_failed(p_error_msg: String) -> void:

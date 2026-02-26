@@ -10,7 +10,6 @@ extends BaseLLMProvider
 
 # Key: content_block_index (int), Value: tool_calls array index (int)
 var _stream_tool_index_map: Dictionary = {}
-
 # 累积 Usage 数据 (Key: prompt_tokens/completion_tokens, Value: int)
 var _current_stream_usage: Dictionary = {}
 
@@ -209,7 +208,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 	return ui_update
 
 
-# ----- Helper Functions -----
+# --- Private Functions ---
 
 # 合并并转换键名 (Anthropic -> OpenAI 格式)
 func _update_and_normalize_usage(p_new_usage: Dictionary) -> void:

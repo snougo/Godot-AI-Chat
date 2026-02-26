@@ -11,6 +11,7 @@ extends Resource
 ## 核心数据存储：强类型的消息列表
 @export var messages: Array[ChatMessage] = []
 
+
 # --- Public Functions ---
 
 ## 添加一条消息到历史记录
@@ -106,7 +107,7 @@ func get_truncated_messages(p_max_turns: int, p_system_prompt: String = "", p_cl
 	for turn in truncated_turns:
 		result.append_array(turn)
 	
-	# [修复] 仅在 p_cleanup_pending_tool_calls 为 true 时才执行清洗。
+	# 仅在 p_cleanup_pending_tool_calls 为 true 时才执行清洗。
 	# 防止在 Agent 连续对话中删除了刚刚生成的 Assistant 消息。
 	if p_cleanup_pending_tool_calls:
 		while not result.is_empty():

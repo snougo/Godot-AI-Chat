@@ -6,6 +6,7 @@ extends BaseLLMProvider
 ##
 ## 处理标准的 OpenAI 格式请求，包括 SSE 解析、Tool Calls 拼装等。
 
+
 # --- Public Functions ---
 
 ## 返回该 Provider 使用的流式解析协议
@@ -173,8 +174,8 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 
 # --- Private Functions ---
 
-## 将 ChatMessage 转换为 OpenAI 格式的字典
-## 统一了普通文本、多模态和工具调用的处理逻辑
+# 将 ChatMessage 转换为 OpenAI 格式的字典
+# 统一了普通文本、多模态和工具调用的处理逻辑
 func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	var dict: Dictionary = { "role": p_msg.role }
 	

@@ -6,6 +6,7 @@ extends TextEdit
 ##
 ## 扩展 TextEdit 以支持文件和文件夹的拖放功能，自动将拖入的路径追加到文本末尾。
 
+
 # --- Built-in Functions ---
 
 ## [Virtual] 检查是否可以放置拖拽数据

@@ -15,6 +15,7 @@ enum StreamParserType {
 	LOCAL_SSE  # 针对本地服务的鲁棒性解析
 }
 
+
 # --- Public Functions ---
 
 ## [必需] 返回该 Provider 使用的流式解析协议

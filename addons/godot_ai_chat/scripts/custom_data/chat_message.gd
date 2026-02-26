@@ -60,7 +60,7 @@ func _init(p_role: String = ROLE_USER, p_content: String = "", p_name: String = 
 
 # --- Public Functions ---
 
-## [新增] 便捷添加图片
+## 便捷添加图片
 func add_image(p_data: PackedByteArray, p_mime: String) -> void:
 	if not p_data.is_empty():
 		images.append({"data": p_data, "mime": p_mime})

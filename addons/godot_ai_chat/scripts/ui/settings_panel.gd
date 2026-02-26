@@ -131,7 +131,7 @@ func _populate_ui_from_resource() -> void:
 	_on_temperature_value_changed(settings_resource.temperature)
 	_system_prompt_input.text = settings_resource.system_prompt
 	
-	# --- 新增：解析位掩码到 CheckBox ---
+	# --- 解析位掩码到 CheckBox ---
 	var flags: int = settings_resource.log_flags
 	# AIChatLogger.FLAG_DEBUG = 1
 	_check_debug.button_pressed = (flags & 1) != 0

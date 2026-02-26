@@ -65,6 +65,8 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 	return list
 
 
+# --- Private Functions ---
+
 func _build_url(p_base: String, p_endpoint: String) -> String:
 	var url: String = p_base.strip_edges()
 	

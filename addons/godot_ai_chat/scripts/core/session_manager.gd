@@ -133,13 +133,13 @@ func has_active_session() -> bool:
 
 # --- Private Functions ---
 
-## 确保目录存在
+# 确保目录存在
 func _ensure_archive_dir() -> void:
 	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
 		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
 
 
-## [内部] 将资源应用到 UI 并建立自动保存连接
+# 将资源应用到 UI 并建立自动保存连接
 func _load_resource_to_ui(p_session_history: ChatMessageHistory, p_session_name: String) -> void:
 	_chat_ui.select_session_by_name(p_session_name)
 	_chat_ui.reset_token_usage_display()
@@ -153,7 +153,7 @@ func _load_resource_to_ui(p_session_history: ChatMessageHistory, p_session_name:
 	p_session_history.changed.connect(_auto_save)
 
 
-## 自动保存回调
+# 自动保存回调
 func _auto_save() -> void:
 	if current_session_path.is_empty():
 		return
@@ -166,7 +166,7 @@ func _auto_save() -> void:
 		ResourceSaver.save(history, current_session_path)
 
 
-## 验证并修复消息完整性
+# 验证并修复消息完整性
 func _validate_message_integrity(p_history: ChatMessageHistory) -> void:
 	for msg in p_history.messages:
 		# 确保 content 字段不为 null
