@@ -33,48 +33,35 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "The folder path starting with 'res://'. NOT the full file path."
+				"description": "The target folder path starting with 'res://'. NOT the full file path."
 			},
 			"file_name": {
 				"type": "string",
-				"description": "The file name WITHOUT extension. E.g. 'design_doc'. Do NOT include '.md' or '.gd'."
-			},
-			"file_format": {
-				"type": "string",
-				"enum": ["md"],
-				"description": "The file format. ONLY 'md' is allowed here."
+				"description": "The file name WITHOUT extension. Do NOT include '.md' extension."
 			},
 			"content": {
 				"type": "string",
 				"description": "The Markdown text content."
 			}
 		},
-		"required": ["path", "file_name", "file_format", "content"]
+		"required": ["path", "file_name", "content"]
 	}
 
 
 func execute(p_args: Dictionary) -> Dictionary:
 	var folder_path: String = p_args.get("path", "")
 	var raw_file_name: String = p_args.get("file_name", "")
-	var file_format: String = p_args.get("file_format", "md")
 	var content: String = p_args.get("content", "")
 	
 	if folder_path.is_empty() or raw_file_name.is_empty() or content.is_empty():
 		return {"success": false, "data": "Error: 'path', 'file_name', and 'content' are all required."}
 	
-	# [Check 1] 格式检查 (虽然 Schema 限制了，但为了健壮性再查一次)
-	if file_format != "md":
-		return {
-			"success": false, 
-			"data": "Error: Invalid format '%s'. This tool ONLY supports 'md'. Use 'create_script' for code files." % file_format
-		}
-	
-	# [Check 2] 文件名清理 (防止模型还是传了 .md 或 .gd)
+	# [Check 1] 文件名清理 (防止模型传了 .md 或 .gd)
 	# 如果用户传了 'script.gd'，这里会变成 'script'，最后变成 'script.md'
 	# 这样即使模型想写脚本，也只会得到一个 Markdown 文件，不会污染项目逻辑
 	var clean_file_name = raw_file_name.get_basename() 
 	
-	# [Check 3] 黑名单检查
+	# [Check 2] 黑名单检查
 	if clean_file_name.to_lower() in RESTRICTED_FILES:
 		return {
 			"success": false, 
@@ -82,9 +69,9 @@ func execute(p_args: Dictionary) -> Dictionary:
 		}
 	
 	folder_path = _ensure_trailing_slash(folder_path)
-	var full_path: String = folder_path + clean_file_name + "." + file_format
+	var full_path: String = folder_path + clean_file_name + ".md"
 	
-	# [Check 4] 路径安全检查
+	# [Check 3] 路径安全检查
 	var safety_check: String = validate_path_safety(full_path)
 	if not safety_check.is_empty():
 		return {"success": false, "data": safety_check}

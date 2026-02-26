@@ -5,6 +5,10 @@ extends RefCounted
 ##
 ## 包含设置管理、Token 估算、文件系统刷新等辅助功能。
 
+# --- Static Variables for Debouncing ---
+static var _scan_pending: bool = false
+static var _scan_delay_ms: int = 100  # 延迟 100ms 执行
+
 
 # --- Public Functions ---
 
@@ -42,7 +46,7 @@ static func estimate_tokens_for_messages(p_messages: Array) -> int:
 	
 	if total_text.is_empty():
 		return 0
-		
+	
 	var estimated_tokens: float = 0.0
 	var chinese_regex: RegEx = RegEx.create_from_string("[\u4e00-\u9fff]")
 	
@@ -102,23 +106,38 @@ static func is_file_open_in_script_editor(p_path: String) -> bool:
 	for editor in script_editor.get_open_script_editors():
 		if editor.has_meta("_edit_res_path") and editor.get_meta("_edit_res_path") == p_path:
 			return true
+	
 	return false
 
 
-## 更新指定文件的编辑器文件系统状态
+## 更新指定文件的编辑器文件系统状态（增量更新，安全）
 static func update_editor_filesystem(p_path: String) -> void:
-	if Engine.is_editor_hint():
-		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-		if editor_filesystem:
-			editor_filesystem.update_file(p_path)
+	if not Engine.is_editor_hint():
+		return
+	
+	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+	if not editor_filesystem:
+		return
+	
+	# 使用 call_deferred 延迟到下一帧执行，避免与当前操作冲突
+	EditorInterface.call_deferred("_update_file_deferred", p_path)
 
 
-## 触发编辑器文件系统的完全扫描
+## 触发编辑器文件系统的完全扫描（延迟+节流，防崩溃）
 static func refresh_editor_filesystem() -> void:
-	if Engine.is_editor_hint():
-		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-		if editor_filesystem:
-			editor_filesystem.scan()
+	if not Engine.is_editor_hint():
+		return
+	
+	# 节流：如果已有待执行的扫描，跳过本次
+	if _scan_pending:
+		AIChatLogger.warn("[ToolBox] Scan already pending, skipping duplicate request.")
+		return
+	
+	_scan_pending = true
+	
+	# 延迟执行，避免与当前帧的其他文件操作冲突
+	var timer: SceneTreeTimer = Engine.get_main_loop().create_timer(_scan_delay_ms / 1000.0)
+	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
 
 
 ## 从 AI 响应中移除 <think>...</think> 标签块
@@ -141,9 +160,31 @@ static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Arra
 	# 如果找到了 <think> 但没找到 </think>，说明思考过程尚未结束
 	# 此时产生的所有工具调用都应视为不稳定或幻觉，予以拦截
 	if think_start != -1 and think_end == -1:
-		AIChatLogger.debug("[ToolBox] Intercepted %d tool calls during unclosed <think> block." % p_tool_calls.size())
+		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed <think> block." % p_tool_calls.size())
 		return []
 	
 	# 如果 <think> 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
 	# 直接放行，不再做内容匹配（防止误杀）
 	return p_tool_calls
+
+
+# --- Private Functions ---
+
+# 内部：延迟执行的单文件更新
+static func _update_file_deferred(p_path: String) -> void:
+	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+	if editor_filesystem:
+		editor_filesystem.update_file(p_path)
+
+
+# 内部：实际执行扫描
+static func _perform_scan() -> void:
+	_scan_pending = false
+	
+	if not Engine.is_editor_hint():
+		return
+	
+	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+	if editor_filesystem:
+		AIChatLogger.debug("[ToolBox] Performing deferred filesystem scan...")
+		editor_filesystem.scan()

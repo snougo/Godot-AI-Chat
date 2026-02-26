@@ -33,7 +33,7 @@ func get_parameters_schema() -> Dictionary:
 				"description": "Required. The current workspace path."
 			}
 		},
-		"required": ["action", "path"]
+		"required": ["action", "content", "path"]
 	}
 
 
@@ -78,7 +78,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"add":
 			return _add_task(todo_list, content, workspace_path)
 		"complete":
-			return _complete_task(todo_list, content) 
+			return _complete_task(todo_list, content, workspace_path)
 		_:
 			return {"success": false, "data": "Unknown action: " + action}
 
@@ -89,7 +89,7 @@ func _list_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> Dictionar
 	# 使用 workspace_path 进行过滤
 	var items: Array[AiTodoItem] = p_todo_list.get_items(p_workspace_path)
 	var md_lines: PackedStringArray = []
-	md_lines.append("# TODO List (Context: %s)" % p_workspace_path)
+	md_lines.append("# TODO List")
 	
 	var active_tasks_count: int = 0
 	
@@ -120,20 +120,31 @@ func _add_task(p_todo_list: AiTodoList, p_content: String, p_workspace_path: Str
 	if not save_result.is_empty():
 		return {"success": false, "data": "Error saving resource: " + save_result}
 	
-	return {"success": true, "data": "Added task to context '%s'" % p_workspace_path}
+	# ✅ 添加成功后，返回当前所有未完成待办
+	var result_msg: String = "✅ Added task to Workspace '%s'\n\n---\n\n" % p_workspace_path
+	var list_result: Dictionary = _list_tasks(p_todo_list, p_workspace_path)
+	result_msg += list_result.data
+	
+	return {"success": true, "data": result_msg}
 
 
-func _complete_task(p_todo_list: AiTodoList, p_content_match: String) -> Dictionary:
+func _complete_task(p_todo_list: AiTodoList, p_content_match: String, p_workspace_path: String) -> Dictionary:
 	if p_content_match.strip_edges().is_empty():
 		return {"success": false, "data": "Error: Content match string cannot be empty."}
-		
+	
 	var found: bool = p_todo_list.mark_as_completed(p_content_match)
 	if found:
 		p_todo_list.emit_changed()
 		var save_result: String = _save_resource(p_todo_list)
 		if not save_result.is_empty():
 			return {"success": false, "data": "Error saving resource: " + save_result}
-		return {"success": true, "data": "Marked task as completed."}
+		
+		# ✅ 完成后，返回当前所有未完成待办
+		var result_msg: String = "✅ Marked task as completed to Workspace '%s'\n\n---\n\n" % p_workspace_path
+		var list_result: Dictionary = _list_tasks(p_todo_list, p_workspace_path)
+		result_msg += list_result.data
+		
+		return {"success": true, "data": result_msg}
 	else:
 		return {"success": false, "data": "Error: Task containing '%s' not found." % p_content_match}
 
@@ -143,7 +154,7 @@ func _save_resource(p_res: Resource) -> String:
 	var dir = PluginPaths.TODO_LIST_PATH.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir):
 		DirAccess.make_dir_recursive_absolute(dir)
-		
+	
 	var error: int = ResourceSaver.save(p_res, PluginPaths.TODO_LIST_PATH)
 	if error != OK:
 		return "ResourceSaver failed with error code: %d" % error
