@@ -3,10 +3,12 @@ class_name WebSearchTool
 extends AiTool
 
 ## 执行在线搜索。
-## 仅在本地文件或 API 文档中无法找到信息时使用。
+## 使用 HTTPClient 实现，无需节点挂载，无场景依赖。
 
 
-# --- Built-in Functions ---
+const REQUEST_TIMEOUT: float = 30.0
+const POLL_DELAY: float = 0.01  # 10ms
+
 
 func _init() -> void:
 	tool_name = "search_web"
@@ -15,7 +17,6 @@ func _init() -> void:
 
 # --- Public Functions ---
 
-## 获取工具参数的 JSON Schema
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -29,53 +30,46 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-## 执行网络搜索操作
-## [param p_args]: 包含 query 的参数字典
-## [return]: 搜索结果字典
 func execute(p_args: Dictionary) -> Dictionary:
 	var query: String = p_args.get("query", "")
-	
 	if query.is_empty():
 		return {"success": false, "data": "Error: Query cannot be empty."}
 	
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
-	var api_key: String = settings.get("tavily_api_key")
+	var api_key: String = settings.tavily_api_key
+	if api_key.is_empty():
+		return {"success": false, "data": "Error: Tavily API Key is not configured."}
 	
-	var validation_result: Dictionary = _validate_api_key(api_key)
-	if not validation_result.get("success", false):
-		return validation_result
-	
-	return await _perform_web_search(query, api_key)
+	return await _fetch_search_results(query, api_key)
 
 
 # --- Private Functions ---
 
-## 验证 API 密钥
-## [param p_api_key]: API 密钥
-## [return]: 验证结果字典
-func _validate_api_key(p_api_key: String) -> Dictionary:
-	if p_api_key == null or p_api_key.is_empty():
-		return {"success": false, "data": "Error: Tavily API Key is not configured in settings."}
-	return {"success": true}
-
-
-## 执行网络搜索
-## [param p_query]: 搜索查询
-## [param p_api_key]: API 密钥
-## [return]: 搜索结果字典
-func _perform_web_search(p_query: String, p_api_key: String) -> Dictionary:
-	var http := HTTPRequest.new()
-	http.timeout = 30.0  # 设置 30 秒超时
-	Engine.get_main_loop().root.add_child(http)
+func _fetch_search_results(p_query: String, p_api_key: String) -> Dictionary:
+	var client := HTTPClient.new()
 	
-	# 安全清理函数
-	var cleanup := func():
-		if is_instance_valid(http) and http.is_inside_tree():
-			http.queue_free()
+	# 建立 TLS 连接
+	var err := client.connect_to_host("api.tavily.com", 443, TLSOptions.client())
+	if err != OK:
+		client.close()
+		return {"success": false, "data": "Error: Connection init failed (%d)" % err}
 	
-	var url: String = "https://api.tavily.com/search"
-	var headers: PackedStringArray = ["Content-Type: application/json"]
-	var body: String = JSON.stringify({
+	# 等待连接握手
+	var timer := 0.0
+	while client.get_status() in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
+		client.poll()
+		await Engine.get_main_loop().create_timer(POLL_DELAY).timeout
+		timer += POLL_DELAY
+		if timer >= REQUEST_TIMEOUT:
+			client.close()
+			return {"success": false, "data": "Error: Connection timeout"}
+	
+	if client.get_status() != HTTPClient.STATUS_CONNECTED:
+		client.close()
+		return {"success": false, "data": "Error: Connection failed (status: %d)" % client.get_status()}
+	
+	# 发送 POST 请求
+	var body := JSON.stringify({
 		"api_key": p_api_key,
 		"query": p_query,
 		"search_depth": "advanced",
@@ -83,50 +77,55 @@ func _perform_web_search(p_query: String, p_api_key: String) -> Dictionary:
 		"max_results": 6
 	})
 	
-	var err: Error = http.request(url, headers, HTTPClient.METHOD_POST, body)
+	err = client.request(HTTPClient.METHOD_POST, "/search", ["Content-Type: application/json"], body)
 	if err != OK:
-		cleanup.call()
-		return {"success": false, "data": "Error: Failed to send HTTP request."}
+		client.close()
+		return {"success": false, "data": "Error: Request failed (%d)" % err}
 	
-	var response: Array = await http.request_completed
-	var result_body: PackedByteArray = response[3]
-	var response_code: int = response[1]
+	# 等待响应
+	timer = 0.0
+	while client.get_status() == HTTPClient.STATUS_REQUESTING:
+		client.poll()
+		await Engine.get_main_loop().create_timer(POLL_DELAY).timeout
+		timer += POLL_DELAY
+		if timer >= REQUEST_TIMEOUT:
+			client.close()
+			return {"success": false, "data": "Error: Request timeout"}
 	
-	# 确保资源被释放
-	cleanup.call()
+	# 检查响应状态码
+	if client.get_response_code() != 200:
+		var code := client.get_response_code()
+		client.close()
+		return {"success": false, "data": "Error: HTTP %d" % code}
 	
-	if response_code != 200:
-		return {"success": false, "data": "Error: Tavily API returned code %d" % response_code}
+	# 读取响应体
+	var response := PackedByteArray()
+	while client.get_status() == HTTPClient.STATUS_BODY:
+		client.poll()
+		response.append_array(client.read_response_body_chunk())
+		if client.get_status() == HTTPClient.STATUS_BODY:
+			await Engine.get_main_loop().create_timer(POLL_DELAY).timeout
 	
-	return _parse_search_response(result_body)
+	client.close()
+	return _parse_response(response)
 
 
-
-## 解析搜索响应
-## [param p_result_body]: 响应体
-## [return]: 解析结果字典
-func _parse_search_response(p_result_body: PackedByteArray) -> Dictionary:
-	var json = JSON.parse_string(p_result_body.get_string_from_utf8())
+func _parse_response(p_data: PackedByteArray) -> Dictionary:
+	var json := JSON.parse_string(p_data.get_string_from_utf8())
 	if json == null:
-		return {"success": false, "data": "Error: Failed to parse JSON response."}
+		return {"success": false, "data": "Error: Invalid JSON response"}
 	
-	var output: String = _format_search_results(json)
+	var output := ""
+	if json.has("answer") and not str(json.answer).is_empty():
+		output += "Direct Answer: " + str(json.answer) + "\n\n"
+	
+	if json.has("results") and json.results is Array:
+		output += "Search Results:\n"
+		for item in json.results:
+			output += "- [%s](%s): %s\n" % [
+				item.get("title", "No Title"),
+				item.get("url", "#"),
+				item.get("content", "")
+			]
 	
 	return {"success": true, "data": output}
-
-
-## 格式化搜索结果
-## [param p_json]: JSON 响应数据
-## [return]: 格式化结果字符串
-func _format_search_results(p_json: Dictionary) -> String:
-	var output: String = ""
-	
-	if p_json.has("answer") and not str(p_json.answer).is_empty():
-		output += "Direct Answer: " + str(p_json.answer) + "\n\n"
-	
-	if p_json.has("results") and p_json.results is Array:
-		output += "Search Results:\n"
-		for item in p_json.results:
-			output += "- [%s](%s): %s\n" % [item.get("title", "No Title"), item.get("url", "#"), item.get("content", "")]
-	
-	return output
