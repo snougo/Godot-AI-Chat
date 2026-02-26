@@ -112,15 +112,10 @@ static func is_file_open_in_script_editor(p_path: String) -> bool:
 
 ## 更新指定文件的编辑器文件系统状态（增量更新，安全）
 static func update_editor_filesystem(p_path: String) -> void:
-	if not Engine.is_editor_hint():
-		return
-	
-	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-	if not editor_filesystem:
-		return
-	
-	# 直接延迟调用 editor_filesystem 的 update_file 方法
-	editor_filesystem.call_deferred("update_file", p_path)
+	if Engine.is_editor_hint():
+		var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+		if editor_filesystem:
+			editor_filesystem.update_file(p_path)
 
 
 ## 触发编辑器文件系统的完全扫描（延迟+节流，防崩溃）
@@ -169,13 +164,6 @@ static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Arra
 
 
 # --- Private Functions ---
-
-# 内部：延迟执行的单文件更新
-static func _update_file_deferred(p_path: String) -> void:
-	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-	if editor_filesystem:
-		editor_filesystem.update_file(p_path)
-
 
 # 内部：实际执行扫描
 static func _perform_scan() -> void:
