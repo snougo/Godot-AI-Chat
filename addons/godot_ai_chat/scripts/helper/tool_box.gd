@@ -119,8 +119,8 @@ static func update_editor_filesystem(p_path: String) -> void:
 	if not editor_filesystem:
 		return
 	
-	# 使用 call_deferred 延迟到下一帧执行，避免与当前操作冲突
-	EditorInterface.call_deferred("_update_file_deferred", p_path)
+	# 直接延迟调用 editor_filesystem 的 update_file 方法
+	editor_filesystem.call_deferred("update_file", p_path)
 
 
 ## 触发编辑器文件系统的完全扫描（延迟+节流，防崩溃）
