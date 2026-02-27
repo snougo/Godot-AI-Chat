@@ -26,11 +26,21 @@ func validate_file_extension(p_path: String, p_allowed_extensions: Array = []) -
 
 
 ## 获取带类型标记的切片化代码视图
-func get_sliced_code_view(p_editor: CodeEdit) -> String:
+## [param p_editor]: CodeEdit 编辑器实例
+## [param p_file_path]: 可选的文件路径，用于覆盖 CodeEdit 的 meta 数据
+func get_sliced_code_view(p_editor: CodeEdit, p_file_path: String = "") -> String:
 	var code: String = p_editor.text
 	var slices: Array = parse_script_to_slices(code)
 	var result: String = "### Script Structure View\n"
-	result += "File: %s\n\n" % [p_editor.get_meta("_edit_res_path") if p_editor.has_meta("_edit_res_path") else "Untitled"]
+	
+	# 优先使用传入的路径，否则尝试从 CodeEdit 的 meta 获取
+	var display_path: String = p_file_path
+	if display_path.is_empty() and p_editor.has_meta("_edit_res_path"):
+		display_path = p_editor.get_meta("_edit_res_path")
+	if display_path.is_empty():
+		display_path = "Untitled"
+	
+	result += "File: %s\n\n" % display_path
 	
 	for i in range(slices.size()):
 		var slice: Dictionary = slices[i]
@@ -46,6 +56,7 @@ func get_sliced_code_view(p_editor: CodeEdit) -> String:
 			var content: String = _get_code_range_formatted(p_editor, slice.start_line, slice.end_line)
 			result += "**[Slice %d] [%s] (Lines %d-%d)**\n" % [i + 1, slice.type, start_l, end_l]
 			result += "```gdscript\n%s```\n\n" % content
+	
 	return result
 
 
@@ -250,3 +261,30 @@ func _get_code_edit(p_path: String) -> CodeEdit:
 
 func _focus_script_editor() -> void:
 	EditorInterface.set_main_screen_editor("Script")
+
+
+# 获取当前已打开脚本的 CodeEdit 实例（不打开新脚本）
+func _get_current_code_edit() -> CodeEdit:
+	var script_editor := EditorInterface.get_script_editor()
+	
+	# 确保当前有打开的脚本
+	var current_script := script_editor.get_current_script()
+	if not current_script:
+		return null
+	
+	var current_path := current_script.resource_path
+	
+	# [Security Check] 防止操作受限路径的文件
+	var safety_err := validate_path_safety(current_path)
+	if not safety_err.is_empty():
+		AIChatLogger.warn("[BaseScriptTool] Security Block: Cannot edit file in restricted path: " + current_path)
+		return null
+	
+	EditorInterface.set_main_screen_editor("Script")
+	
+	# 获取 CodeEdit 实例
+	var editor_base = script_editor.get_current_editor()
+	if editor_base:
+		return editor_base.get_base_editor() as CodeEdit
+	
+	return null

@@ -3,7 +3,7 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "get_edited_scene_tree"
+	tool_name = "get_edited_scene"
 	tool_description = "Retrieves the hierarchy of the currently edited scene in the Godot Editor."
 
 

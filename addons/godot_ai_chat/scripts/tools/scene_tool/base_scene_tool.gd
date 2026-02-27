@@ -245,9 +245,9 @@ func _traverse_node(node: Node, root: Node, depth: int, lines: PackedStringArray
 	# Add script info if present
 	var script = node.get_script()
 	if script:
-		var script_path: String = script.resource_path.get_file()
-		extra_info += " 📜" + script_path
-		
+		var script_path: String = script.resource_path  # 显示完整路径
+		extra_info += " Attached Script: 📜" + script_path
+	
 	lines.append("%s- %s (%s)%s" % [indent, node.name, node.get_class(), extra_info])
 	for c in node.get_children():
 		_traverse_node(c, root, depth + 1, lines)
