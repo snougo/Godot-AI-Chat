@@ -16,8 +16,8 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_project_settings_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_markdown_tool.gd",
 	
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_available_skills_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/update_skill_status_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/scene_tool/get_edited_scene_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/scene_tool/check_node_properties_tool.gd",
