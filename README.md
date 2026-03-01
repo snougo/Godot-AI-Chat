@@ -1,45 +1,123 @@
 # Godot AI Chat
-[English](https://github.com/snougo/Godot-AI-Chat/blob/main/README.md)/[中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
+[中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
 
 <img width="1624" height="983" alt="截屏2025-10-22 03 16 16" src="https://github.com/user-attachments/assets/498ffaf5-e02a-4f06-9929-583033877e4a" />
 
-## About Godot AI Chat
-Godot AI Chat is a Godot plugin that enables direct conversation with LLMs within the Godot editor interface. It supports both local and remote LLMs. When combined with another Godot plugin, [Context Toolkit](https://github.com/snougo/Context-Toolkit), and appropriate system prompts, it allows the LLM to actively read relevant contextual information while solving problems, thereby providing more pertinent answers.
+## Introduction
+**Godot AI Chat** is an AI assistant plugin deeply integrated into the Godot editor. It is not just a chat window, but a development copilot with **Agent capabilities**.
 
-## How to Install and Enable
-1.  Download the Godot AI Chat and [Context Toolkit](https://github.com/snougo/Context-Toolkit) plugins.
-2.  Drag the downloaded plugin folders into the `addons` folder in your editor's file system.
-3.  Open Project Settings, switch to the Plugins tab, find and enable Godot AI Chat and Context Toolkit (optional).
+Through built-in toolchains and carefully designed system prompts, it can understand your project context, perform file operations, and even assist you in completing complex development tasks via API calls. Build flexible and powerful AI workflows without leaving the editor.
 
-## How to Set Up the Plugin
-When you first enable the plugin, you'll see an error message in the plugin interface: "API Base Url is not set in Settings." This indicates that you need to manually fill in the relevant settings. Please click the "Settings" tab in the plugin interface to access the settings options.
+## Core Features
 
-When you first enter the plugin's settings options, you'll see an interface where only "Base Url" and "API Key" (optional) need to be manually configured.
+- **Agent Experience**: More than just Q&A, the AI can interact with the editor via Function Calling and autonomously complete assigned tasks.
+- **Smart Drag-and-Drop**: Supports **dragging** files/folders into the input box, automatically resolving them into project paths.
+- **Automatic Path Handling**: Supports converting image paths and scene file paths in the input box into actual images and Markdown-formatted scene tree structures upon sending.
+- **Multimodal Support**: Supports sending images to vision-capable models (requires model support).
+- **Security Mechanisms**: Built-in path blocklists and transparent tool parameter display to prevent the AI from mishandling critical files.
+- **Skill Packages**: Based on Anthropic's concepts, load/unload specific capability toolkits on demand to keep the context clean.
+- **Open Extensibility**: Easily connect to mainstream models like OpenAI, Gemini, Claude, and DeepSeek, with support for custom tool development.
 
-Settings options screenshot
 
-<img width="513" height="838" alt="截屏2025-10-22 03 14 50" src="https://github.com/user-attachments/assets/a3c102ac-aed0-4674-ae5c-d973ab89fce0" />
+## Installation & Setup
 
-If you only need the chat functionality, simply fill in the correct Base Url and API Key (optional). If you have also enabled the [Context Toolkit plugin](https://github.com/snougo/Context-Toolkit), you will need to modify the default system prompt. Don't worry, I have provided corresponding Chinese and English versions of the system prompt in the plugin folder. Of course, if you are a speaker of another language, you can have AI translate the provided system prompts into your language. For other settings, if you are unsure what they do, you can keep them at their defaults. Finally, click the "Save" button to apply your changes.
+> ⚠️ **Note**: This plugin only supports **Godot 4.5** and above.
 
-### Setting Options Explanation
+1. **Download Dependencies**:
+   - Download this plugin: `Godot AI Chat`
+   - Download dependency plugin: Context Toolkit [<sup>1</sup>](https://github.com/snougo/Context-Toolkit)
+     > *Context Toolkit provides file context APIs; this plugin's default tool `get_context` relies on it.*
 
--   **Base Url**:
-    Points to the API base address of the AI service provider you are using. For example:
-    -   For **LM Studio** (OpenAI-compatible API): `http://127.0.0.1:1234`
-    -   For **OpenRouter** (OpenAI-compatible API): `https://openrouter.ai/api`
-    -   For **Local Ollama service** (OpenAI-compatible API): `http://localhost:11434`
-    -   For **Google Gemini** (Gemini official API): `https://generativelanguage.googleapis.com`
-    > Note: This plugin only supports OpenAI-compatible API addresses designed with standard `/v1/...` endpoints. Other non-standard endpoint designs for OpenAI-compatible API addresses cannot be used normally.
+2. **Install**:
+   - Unzip both plugin packages.
+   - Drag the `godot_ai_chat` and `context_toolkit` folders into your project's `addons/` directory.
 
--   **API Key**: Used for authenticating access to the AI service provider. Local services (e.g., LM Studio, Ollama) do not require an API key, but remote APIs (e.g., OpenAI, Google Gemini, etc.) must provide a valid key.
+3. **Enable**:
+   - Open the Godot Editor, go to `Project` -> `Project Settings` -> `Plugins`.
+   - Check the boxes to enable `Godot AI Chat` and `Context Toolkit (Optional)`.
 
--   **Max Chat Turns**: Controls the number of historical turns retained in each conversation. The default value is 5. Setting it too low may lead to context loss (e.g., the model cannot understand user intent), while setting it too high may exceed the model's context window, triggering API limits, or causing performance degradation.
-    > Recommended values: 3 to 10, can be dynamically modified during chat.
 
--   **Timeout (sec)**: Sets the timeout duration for conversation requests (in seconds). The default value is 180 seconds. If the API response is slow or the network is unstable, you can appropriately extend this.
+## Configuration Guide
 
--   **Temperature**: Controls the "creativity" level of the model's output. Lower values (e.g., 0.1) result in more conservative, deterministic output; higher values (e.g., 1.0) result in more random, creative output.
-    > Recommended values: 0.5 to 0.8, balancing stability and diversity.
+Upon first activation, the status bar will prompt `Please Configure Plugin Settings`. Please complete the following configurations in the plugin's **Settings** panel.
 
--   **System Prompt**: Used to guide the role or behavior the model should adopt during the conversation.
+> ⚠️ **Note**: Coding Plan subscription services provided by model vendors can usually only be used with their specific clients, so they likely cannot be used with this plugin.
+
+### 1. API Provider Settings
+The core power of the AI. This plugin supports multiple API standards:
+
+> ⚠️ Note: ZhipuAI in the API providers list is actually a non-standard OpenAI-compatible API, rather than a unique API type.
+
+| API Type | Description | Representative Vendors |
+| :--- | :--- | :--- |
+| **OpenAI Compatible** | The most universal standard interface | OpenAI, DeepSeek, Kimi (Moonshot), SiliconFlow, OpenRouter, LM Studio (Local), Ollama (Local) |
+| **Gemini** | Google native interface | Google Gemini |
+| **Anthropic** | Claude series interface | Anthropic, some relay services |
+
+### 2. Base URL (API Endpoint)
+Points to the AI provider's interface address.
+
+<details>
+<summary>Click to view common Base URL list</summary>
+
+- **Local Execution (No Key)**
+  - LM Studio: `http://127.0.0.1:1234`
+  - Ollama: `http://127.0.0.1:11434/v1`
+- **Remote Services**
+  - OpenRouter: `https://openrouter.ai/api`
+  - Google Gemini: `https://generativelanguage.googleapis.com`
+  - Moonshot (Kimi): `https://api.moonshot.cn`
+  - SiliconFlow: `https://api.siliconflow.cn`
+  - DeepSeek: `https://api.deepseek.com`
+  - ZhipuAI: `https://open.bigmodel.cn/api/paas/v4/`
+
+> **Tip**: If your provider is not listed, please check their documentation for "API Endpoint" or "Base URL".
+</details>
+
+### 3. API Key
+- **Remote Services**: Required.
+- **Local Services** (e.g., LM Studio): Usually left empty.
+
+### 4. Other Key Settings
+- **Tavily API Key**: The model can only use the `search_web` tool if this is configured.
+- **Max Chat Turns**: Default `12`. Controls the number of conversation turns sent to the model. Too high may consume excessive Tokens or trigger limits; too low may cause context loss.
+- **Temperature**: Default `0.8`. Lower values make answers more rigorous (suitable for coding), while higher values make answers more divergent (suitable for creativity).
+- **System Prompt**: The system prompt is the first special message sent to the AI model. Unlike normal chat messages, the model gives higher weight and attention to the system prompt, ensuring all subsequent replies follow its settings.
+
+> The plugin repository includes a carefully designed default system prompt document `system_prompt.md`, ready to use out of the box. It is recommended that first-time users experience the default prompt first, then personalize it according to actual needs.
+> This prompt is optimized for Godot development scenarios, including:
+> - Role Setting (Godot Development Assistant)
+> - Output Style (Chinese/English, Concise)
+> - Core Workflow (Analyze, Think, Plan, Execute, Track)
+> - Workspace Concepts and Instruction Explanations
+
+
+## Interface Overview
+
+!Chat Interface [<sup>2</sup>](path/to/screenshot.png) *(Replace with actual screenshot)*
+
+From top to bottom, the interface includes:
+1.  **Status Bar**: Displays plugin status, error messages, etc., in real-time.
+2.  **Token Monitor**: Displays current conversation and historical cumulative Token usage to help you control costs.
+3.  **Function Area**:
+    - **Model Hot-Switching**: Quickly switch between different models.
+    - **Session Management**: New, Load, Delete, and Archive conversations.
+    - **Export**: Save conversation records as Markdown.
+4.  **Smart Input Box**: Supports text input and **File Drag-and-Drop Reference**.
+
+
+## Advanced Features
+
+### Skill System (Skill Packages)
+Based on Anthropic's best practices, we encapsulate specific capabilities as **Skills**.
+- **On-Demand Loading**: For example, "Shader Writing" or "UI Layout" skills are only mounted when needed.
+- **Save Context**: Avoids stuffing all tool instructions into the AI at once, saving Tokens and improving accuracy.
+- **SOP Standardization**: Transforms Standard Operating Procedures (SOP) into reusable AI skills.
+
+### Adding New Tools
+1.  **Auto-Generation Tool**: You can directly ask the AI: "Help me write a tool script to generate noise textures, remember to look at `ai_tool.gd` first before implementing."
+2.  **Hot Reload**: Add the new tool script path to `ToolRegistry.CORE_TOOLS_PATHS` and restart the plugin to take effect immediately.
+3.  **Minimalist Architecture**: Usually, you only need to inherit the `AiTool` base class and implement 2 interface methods.
+
+## 📄 License
+MIT License.
