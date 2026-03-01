@@ -25,7 +25,7 @@ Through built-in toolchains and carefully designed system prompts, it can unders
 
 1. **Download Dependencies**:
    - Download this plugin: `Godot AI Chat`
-   - Download dependency plugin: Context Toolkit [<sup>1</sup>](https://github.com/snougo/Context-Toolkit)
+   - Download dependency plugin: [Context Toolkit](https://github.com/snougo/Context-Toolkit)
      > *Context Toolkit provides file context APIs; this plugin's default tool `get_context` relies on it.*
 
 2. **Install**:
