@@ -1,7 +1,7 @@
 # Godot AI Chat
 [中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
 
-<img width="1624" height="983" alt="截屏2025-10-22 03 16 16" src="https://github.com/user-attachments/assets/498ffaf5-e02a-4f06-9929-583033877e4a" />
+https://github.com/user-attachments/assets/43831933-6188-4cc9-895a-63c9e74da4ca
 
 ## Introduction
 **Godot AI Chat** is an AI assistant plugin deeply integrated into the Godot editor. It is not just a chat window, but a development copilot with **Agent capabilities**.
@@ -94,7 +94,9 @@ Points to the AI provider's interface address.
 
 ## Interface Overview
 
-!Chat Interface [<sup>2</sup>](path/to/screenshot.png) *(Replace with actual screenshot)*
+Chat Interface
+
+<img width="505" height="836" alt="截屏2026-03-01 23 35 31" src="https://github.com/user-attachments/assets/373b9a08-0b48-498d-9c2e-98bc6ddb573c" />
 
 From top to bottom, the interface includes:
 1.  **Status Bar**: Displays plugin status, error messages, etc., in real-time.
