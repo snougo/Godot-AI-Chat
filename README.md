@@ -94,8 +94,6 @@ Points to the AI provider's interface address.
 
 ## Interface Overview
 
-Chat Interface
-
 <img width="505" height="836" alt="截屏2026-03-01 23 35 31" src="https://github.com/user-attachments/assets/373b9a08-0b48-498d-9c2e-98bc6ddb573c" />
 
 From top to bottom, the interface includes:
