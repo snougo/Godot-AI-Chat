@@ -1,6 +1,6 @@
 # Godot AI Chat
 
-https://github.com/user-attachments/assets/61972442-9f5c-4365-8c40-0f60c166ed69
+<img width="1624" height="1080" alt="截屏2026-03-02 22 49 06" src="https://github.com/user-attachments/assets/9fbb86cd-d7a9-427f-b76c-65eab58e8a06" />
 
 ## 简介
 **Godot AI Chat** 是一款深度集成于Godot编辑器的AI聊天插件。除了普通的AI聊天功能，还提供了基于 `ReAct` 框架实现的**智能体功能**。
