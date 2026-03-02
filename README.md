@@ -1,7 +1,7 @@
 # Godot AI Chat
 [中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
 
-https://github.com/user-attachments/assets/61972442-9f5c-4365-8c40-0f60c166ed69
+<img width="1624" height="1080" alt="截屏2026-03-02 22 49 06" src="https://github.com/user-attachments/assets/9fbb86cd-d7a9-427f-b76c-65eab58e8a06" />
 
 ## Introduction
 **Godot AI Chat** is an AI chat plugin deeply integrated into the Godot editor. Besides standard AI chat features, it also provides **Agent capabilities** implemented based on the `ReAct` framework.
