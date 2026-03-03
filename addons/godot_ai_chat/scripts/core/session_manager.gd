@@ -48,7 +48,6 @@ func create_new_session() -> String:
 	# 创建资源
 	var new_history: ChatMessageHistory = ChatMessageHistory.new()
 	var err: Error = ResourceSaver.save(new_history, final_path)
-	
 	if err != OK:
 		AIChatLogger.error("[SessionManager] Failed to create chat file: %s" % error_string(err))
 		return ""

@@ -16,8 +16,8 @@ const PLUGIN_DIR: String = "res://addons/godot_ai_chat/"
 ## 插件设置资源文件路径
 const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings.tres"
 
-## TODO列表资源文件路径
-const TODO_LIST_PATH: String = PLUGIN_DIR + "todo_list.tres"
+# TODO列表资源文件路径
+#const TODO_LIST_PATH: String = PLUGIN_DIR + "todo_list.tres"
 
 # --- Data Storage ---
 
@@ -44,3 +44,13 @@ const SCENE_DIR: String = PLUGIN_DIR + "scene/"
 
 ## 聊天消息块场景路径
 const CHAT_MESSAGE_BLOCK_SCENE: String = SCENE_DIR + "chat_message_block.tscn"
+
+
+# --- Public Functions ---
+
+## 根据工作区路径生成 Todo List 文件路径
+## @param workspace_path 工作区根目录 (如 "res://project/")
+## @return Todo List 资源文件完整路径（例如："res://project/todo_list.tres"）
+static func get_todo_list_path(workspace_path: String) -> String:
+	var dir := workspace_path if workspace_path.ends_with("/") else workspace_path + "/"
+	return dir + "todo_list.tres"

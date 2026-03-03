@@ -21,14 +21,61 @@ func get_active_scene_root() -> Node:
 	return EditorInterface.get_edited_scene_root()
 
 
-## 根据路径从根节点获取目标节点
+# 根据路径从根节点获取目标节点
+## 根据路径从根节点获取目标节点（支持多种格式）
 ## [param p_root]: 场景根节点
 ## [param p_path]: 节点路径（"." 表示根节点）
 ## [return]: 目标节点，如果未找到返回 null
 func get_node_from_root(p_root: Node, p_path: String) -> Node:
-	if p_path == "." or p_path.is_empty():
+	if p_path.is_empty() or p_path == "." or p_path == "/":
 		return p_root
-	return p_root.get_node_or_null(p_path)
+	
+	# 清理路径前缀，统一处理
+	var target_path: String = p_path
+	
+	# 移除开头的 "./" 或 "/"
+	if target_path.begins_with("./"):
+		target_path = target_path.substr(2)
+	elif target_path.begins_with("/"):
+		target_path = target_path.substr(1)
+	
+	# 如果清理后为空，返回根节点
+	if target_path.is_empty():
+		return p_root
+	
+	# 检查路径是否匹配根节点名称
+	if target_path == p_root.name:
+		return p_root
+	
+	# 使用 Godot 标准相对路径获取节点
+	# 支持格式: "ChildNode", "ChildNode/GrandChild", "A/B/C"
+	return p_root.get_node_or_null(target_path)
+
+
+## 递归获取节点的完整属性（包括 Resource 内部属性）
+func get_all_node_properties(p_node: Node) -> Dictionary:
+	var properties := {}
+	var prop_list := p_node.get_property_list()
+	
+	for p in prop_list:
+		if not (p.usage & PROPERTY_USAGE_EDITOR):
+			continue
+		
+		var value = p_node.get(p.name)
+		
+		if value is Resource:
+			properties[p.name] = {
+				"value": str(value),
+				"type": p.type,
+				"properties": _get_resource_properties_recursive(value)
+			}
+		else:
+			properties[p.name] = {
+				"value": str(value),
+				"type": p.type,
+			}
+	
+	return properties
 
 
 ## 将属性字典应用到节点
@@ -51,7 +98,7 @@ func apply_properties(p_node: Node, p_props: Dictionary) -> void:
 		var final_val: Variant = raw_val
 		
 		if target_type != TYPE_NIL:
-			final_val = convert_to_type(raw_val, target_type)
+			final_val = convert_to_type_with_validation(raw_val, target_type)
 		else:
 			final_val = try_infer_type_from_string(raw_val)
 		
@@ -154,35 +201,93 @@ func is_value_approx_equal(p_a: Variant, p_b: Variant) -> bool:
 			return p_a == p_b
 
 
-## 将值转换为目标类型
+## 将值转换为目标类型，返回字典包含结果和错误信息
 ## [param p_value]: 原始值
 ## [param p_target_type]: 目标类型
-## [return]: 转换后的值
-func convert_to_type(p_value: Variant, p_target_type: int) -> Variant:
+## [return]: {"success": bool, "value": Variant, "error": String}
+func convert_to_type_with_validation(p_value: Variant, p_target_type: int) -> Dictionary:
 	if typeof(p_value) == p_target_type:
-		return p_value
+		return {"success": true, "value": p_value, "error": ""}
+	
+	var result: Variant = p_value
+	var error_msg: String = ""
 	
 	match p_target_type:
 		TYPE_BOOL:
-			return str(p_value).to_lower() == "true"
+			if p_value is String:
+				var lower_val = p_value.to_lower()
+				if lower_val in ["true", "false", "1", "0", "yes", "no", "on", "off"]:
+					result = lower_val in ["true", "1", "yes", "on"]
+				else:
+					error_msg = "Cannot convert '%s' to bool. Expected: true/false." % p_value
+			else:
+				error_msg = "Cannot convert %s to bool." % str(p_value)
+		
 		TYPE_INT:
-			return str(p_value).to_int()
+			if p_value is String:
+				if p_value.is_valid_int():
+					result = p_value.to_int()
+				else:
+					error_msg = "Cannot convert '%s' to int." % p_value
+			elif p_value is float:
+				result = int(p_value)
+			else:
+				error_msg = "Cannot convert %s to int." % str(p_value)
+		
 		TYPE_FLOAT:
-			return str(p_value).to_float()
+			if p_value is String:
+				if p_value.is_valid_float():
+					result = p_value.to_float()
+				else:
+					error_msg = "Cannot convert '%s' to float." % p_value
+			elif p_value is int:
+				result = float(p_value)
+			else:
+				error_msg = "Cannot convert %s to float." % str(p_value)
+		
 		TYPE_STRING:
-			return str(p_value)
+			result = str(p_value)
+		
 		TYPE_STRING_NAME:
-			return StringName(str(p_value))
+			result = StringName(str(p_value))
+		
 		TYPE_VECTOR2:
-			return _convert_to_vector2(p_value)
+			var conversion = _convert_to_vector2_with_validation(p_value)
+			if conversion.success:
+				result = conversion.value
+			else:
+				error_msg = conversion.error
+		
 		TYPE_VECTOR3:
-			return _convert_to_vector3(p_value)
+			var conversion = _convert_to_vector3_with_validation(p_value)
+			if conversion.success:
+				result = conversion.value
+			else:
+				error_msg = conversion.error
+		
 		TYPE_COLOR:
-			return _convert_to_color(p_value)
+			var conversion = _convert_to_color_with_validation(p_value)
+			if conversion.success:
+				result = conversion.value
+			else:
+				error_msg = conversion.error
+		
 		TYPE_OBJECT:
-			return _convert_to_object(p_value)
+			var conversion = _convert_to_object_with_validation(p_value)
+			if conversion.success:
+				result = conversion.value
+			else:
+				error_msg = conversion.error
+		
 		_:
-			return p_value
+			# 其他类型，尝试直接返回原值
+			result = p_value
+	
+	return {
+		"success": error_msg.is_empty(),
+		"value": result,
+		"error": error_msg
+	}
 
 
 ## 从字符串推断类型
@@ -234,7 +339,34 @@ func get_type_name(p_type_int: int) -> String:
 		TYPE_DICTIONARY: return "Dictionary"
 		_: return "Variant"
 
+
+## 查找相似的节点路径（用于错误提示）
+## [param p_root]: 根节点
+## [param p_input_path]: 用户输入的路径
+## [return]: 相似路径列表
+func find_similar_paths(p_root: Node, p_input_path: String) -> Array[String]:
+	var similar_paths: Array[String] = []
+	var input_lower: String = p_input_path.to_lower()
+	
+	# 检查根节点
+	if p_root.name.to_lower().contains(input_lower) or input_lower.contains(p_root.name.to_lower()):
+		similar_paths.append(p_root.name)
+	
+	# 递归检查子节点
+	_collect_similar_paths(p_root, p_root.name, input_lower, similar_paths)
+	
+	return similar_paths
+
+
 # --- Private Functions ---
+
+func _get_resource_properties_recursive(resource: Object) -> Dictionary:
+	var props := {}
+	for p in resource.get_property_list():
+		if (p.usage & PROPERTY_USAGE_EDITOR):
+			props[p.name] = str(resource.get(p.name))
+	return props
+
 
 func _traverse_node(node: Node, root: Node, depth: int, lines: PackedStringArray):
 	if node != root and node.owner != root:
@@ -253,61 +385,139 @@ func _traverse_node(node: Node, root: Node, depth: int, lines: PackedStringArray
 		_traverse_node(c, root, depth + 1, lines)
 
 
-## 转换为 Vector2
-func _convert_to_vector2(p_value: Variant) -> Variant:
-	if p_value is Array and p_value.size() >= 2:
-		return Vector2(p_value[0], p_value[1])
+# 递归收集相似路径
+func _collect_similar_paths(p_node: Node, p_current_path: String, p_input_lower: String, p_results: Array[String]) -> void:
+	for child in p_node.get_children():
+		var child_path: String = p_current_path + "/" + child.name
+		
+		# 检查节点名称是否相似
+		if child.name.to_lower().contains(p_input_lower) or p_input_lower.contains(child.name.to_lower()):
+			p_results.append(child_path)
+		
+		# 递归检查子节点
+		_collect_similar_paths(child, child_path, p_input_lower, p_results)
+
+
+# 带验证的 Vector2 转换
+func _convert_to_vector2_with_validation(p_value: Variant) -> Dictionary:
+	if p_value is Vector2:
+		return {"success": true, "value": p_value, "error": ""}
+	
+	if p_value is Array:
+		if p_value.size() >= 2:
+			return {"success": true, "value": Vector2(p_value[0], p_value[1]), "error": ""}
+		else:
+			return {"success": false, "value": null, "error": "Vector2 requires 2 values, got %d." % p_value.size()}
+	
 	if p_value is String:
-		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
+		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "").strip_edges()
 		var parts: PackedStringArray = clean_str.split(",")
 		if parts.size() >= 2:
-			return Vector2(parts[0].to_float(), parts[1].to_float())
-	return p_value
+			var x_valid = parts[0].strip_edges().is_valid_float()
+			var y_valid = parts[1].strip_edges().is_valid_float()
+			if x_valid and y_valid:
+				return {"success": true, "value": Vector2(parts[0].to_float(), parts[1].to_float()), "error": ""}
+			else:
+				return {"success": false, "value": null, "error": "Invalid Vector2 format: '%s'. Expected: '[x, y]' or 'x, y' with numeric values." % p_value}
+		else:
+			return {"success": false, "value": null, "error": "Invalid Vector2 format: '%s'. Expected: '[x, y]' or 'x, y'." % p_value}
+	
+	return {"success": false, "value": null, "error": "Cannot convert %s to Vector2." % str(p_value)}
 
 
-## 转换为 Vector3
-func _convert_to_vector3(p_value: Variant) -> Variant:
-	if p_value is Array and p_value.size() >= 3:
-		return Vector3(p_value[0], p_value[1], p_value[2])
+# 带验证的 Vector3 转换
+func _convert_to_vector3_with_validation(p_value: Variant) -> Dictionary:
+	if p_value is Vector3:
+		return {"success": true, "value": p_value, "error": ""}
+	
+	if p_value is Array:
+		if p_value.size() >= 3:
+			return {"success": true, "value": Vector3(p_value[0], p_value[1], p_value[2]), "error": ""}
+		else:
+			return {"success": false, "value": null, "error": "Vector3 requires 3 values, got %d." % p_value.size()}
+	
 	if p_value is String:
-		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
+		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "").strip_edges()
 		var parts: PackedStringArray = clean_str.split(",")
 		if parts.size() >= 3:
-			return Vector3(parts[0].to_float(), parts[1].to_float(), parts[2].to_float())
-	return p_value
+			var x_valid = parts[0].strip_edges().is_valid_float()
+			var y_valid = parts[1].strip_edges().is_valid_float()
+			var z_valid = parts[2].strip_edges().is_valid_float()
+			if x_valid and y_valid and z_valid:
+				return {"success": true, "value": Vector3(parts[0].to_float(), parts[1].to_float(), parts[2].to_float()), "error": ""}
+			else:
+				return {"success": false, "value": null, "error": "Invalid Vector3 format: '%s'. Expected: '[x, y, z]' or 'x, y, z' with numeric values." % p_value}
+		else:
+			return {"success": false, "value": null, "error": "Invalid Vector3 format: '%s'. Expected: '[x, y, z]' or 'x, y, z'." % p_value}
+	
+	return {"success": false, "value": null, "error": "Cannot convert %s to Vector3." % str(p_value)}
 
 
-## 转换为 Color
-func _convert_to_color(p_value: Variant) -> Variant:
-	if p_value is Array and p_value.size() >= 3:
-		if p_value.size() == 4:
-			return Color(p_value[0], p_value[1], p_value[2], p_value[3])
-		return Color(p_value[0], p_value[1], p_value[2])
+# 带验证的 Color 转换
+func _convert_to_color_with_validation(p_value: Variant) -> Dictionary:
+	if p_value is Color:
+		return {"success": true, "value": p_value, "error": ""}
+	
+	if p_value is Array:
+		if p_value.size() == 3:
+			return {"success": true, "value": Color(p_value[0], p_value[1], p_value[2]), "error": ""}
+		elif p_value.size() == 4:
+			return {"success": true, "value": Color(p_value[0], p_value[1], p_value[2], p_value[3]), "error": ""}
+		else:
+			return {"success": false, "value": null, "error": "Color requires 3 or 4 values (RGB or RGBA), got %d." % p_value.size()}
+	
 	if p_value is String:
-		if "," in p_value:
-			var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "")
-			var parts: PackedStringArray = clean_str.split(",")
-			if parts.size() >= 3:
+		# 检查是否是颜色名称或十六进制
+		if p_value.begins_with("#") or p_value.is_valid_html_color():
+			return {"success": true, "value": Color(p_value), "error": ""}
+		
+		var clean_str: String = p_value.replace("(", "").replace(")", "").replace("[", "").replace("]", "").strip_edges()
+		var parts: PackedStringArray = clean_str.split(",")
+		if parts.size() >= 3:
+			var r_valid = parts[0].strip_edges().is_valid_float()
+			var g_valid = parts[1].strip_edges().is_valid_float()
+			var b_valid = parts[2].strip_edges().is_valid_float()
+			var a_valid = true
+			if parts.size() >= 4:
+				a_valid = parts[3].strip_edges().is_valid_float()
+			
+			if r_valid and g_valid and b_valid and a_valid:
 				var r: float = parts[0].to_float()
 				var g: float = parts[1].to_float()
 				var b: float = parts[2].to_float()
 				if parts.size() >= 4:
-					return Color(r, g, b, parts[3].to_float())
-				return Color(r, g, b)
-		return Color(p_value)
-	return p_value
+					return {"success": true, "value": Color(r, g, b, parts[3].to_float()), "error": ""}
+				return {"success": true, "value": Color(r, g, b), "error": ""}
+			else:
+				return {"success": false, "value": null, "error": "Invalid Color format: '%s'. Expected: '[r, g, b]' or '[r, g, b, a]' with numeric values 0-1 or 0-255." % p_value}
+		else:
+			return {"success": false, "value": null, "error": "Invalid Color format: '%s'. Expected: '[r, g, b]' or '[r, g, b, a]'." % p_value}
+	
+	return {"success": false, "value": null, "error": "Cannot convert %s to Color." % str(p_value)}
 
 
-## 转换为 Object (支持 res:// 和 new:ClassName)
-func _convert_to_object(p_value: Variant) -> Variant:
+# 带验证的 Object 转换
+func _convert_to_object_with_validation(p_value: Variant) -> Dictionary:
+	if p_value is Object:
+		return {"success": true, "value": p_value, "error": ""}
+	
 	if p_value is String:
 		if p_value.begins_with("res://"):
 			if ResourceLoader.exists(p_value):
-				return ResourceLoader.load(p_value)
+				return {"success": true, "value": ResourceLoader.load(p_value), "error": ""}
+			else:
+				return {"success": false, "value": null, "error": "Resource not found: '%s'." % p_value}
 		elif p_value.begins_with("new:"):
 			var type_name: String = p_value.substr(4)
 			if ClassDB.class_exists(type_name):
-				return ClassDB.instantiate(type_name)
+				return {"success": true, "value": ClassDB.instantiate(type_name), "error": ""}
+			else:
+				return {"success": false, "value": null, "error": "Class does not exist: '%s'." % type_name}
+		elif p_value.to_lower() == "null":
+			return {"success": true, "value": null, "error": ""}
 		elif ClassDB.class_exists(p_value):
-			return ClassDB.instantiate(p_value)
-	return p_value
+			return {"success": true, "value": ClassDB.instantiate(p_value), "error": ""}
+		else:
+			return {"success": false, "value": null, "error": "Invalid object value: '%s'. Expected: 'res://path', 'new:ClassName', 'null', or valid class name." % p_value}
+	
+	return {"success": false, "value": null, "error": "Cannot convert %s to Object." % str(p_value)}

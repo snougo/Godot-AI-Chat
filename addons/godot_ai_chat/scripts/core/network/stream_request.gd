@@ -30,12 +30,15 @@ var _stop_flag: bool = false
 var _stop_flag_lock: Mutex = Mutex.new()
 var _task_id: int = -1
 
-## 双层缓冲机制：字节缓冲
+# 双层缓冲机制：字节缓冲
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
-## 双层缓冲机制：文本缓冲
+# 双层缓冲机制：文本缓冲
 var _incoming_text_buffer: String = ""
-## SSE 状态跟踪：当前正在处理的事件类型
+# SSE 状态跟踪：当前正在处理的事件类型
 var _current_sse_event: String = ""
+
+# 保存 HTTPClient 引用以便强制关闭
+var _http_client: HTTPClient = null  
 
 
 # --- Built-in Functions ---
@@ -55,15 +58,19 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 func start() -> void:
 	_stop_flag = false
 	_task_id = WorkerThreadPool.add_task(self._thread_task, false, "Godot AI Chat Stream Request")
+	AIChatLogger.debug("StreamRequest: Task ID %d started" % _task_id)
 
 
 ## 取消当前请求
 func cancel() -> void:
-	#_stop_flag = true
 	# 使用 Mutex 保护跨线程访问
 	_stop_flag_lock.lock()
 	_stop_flag = true
 	_stop_flag_lock.unlock()
+	
+	# 强制关闭 HTTPClient 连接，让服务器感知到客户端已断开
+	if _http_client != null:
+		_http_client.close()
 
 
 # --- Private Functions ---
@@ -74,6 +81,7 @@ func _thread_task() -> void:
 	_body_json = JSON.stringify(_body_dict)
 	
 	var client: HTTPClient = HTTPClient.new()
+	_http_client = client  # 保存引用以便 cancel() 可以强制关闭连接
 	var err: Error = OK
 	
 	# 1. 解析 URL

@@ -10,6 +10,8 @@ extends RefCounted
 
 ## 当工作流最终完成并获得最终回复时触发
 signal completed(final_msg: ChatMessage, history: Array[ChatMessage])
+## 当工作流被取消时触发
+signal cancelled
 ## 当工作流执行失败时触发
 signal failed(error: String)
 ## 当生成工具执行结果消息时触发
@@ -62,6 +64,7 @@ func start(p_trigger_msg: ChatMessage) -> void:
 func cancel() -> void:
 	_is_cancelled = true
 	cleanup()
+	cancelled.emit()  # 通知监听者工作流已取消
 
 
 # --- Private Functions ---

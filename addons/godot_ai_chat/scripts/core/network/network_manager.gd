@@ -91,10 +91,12 @@ func start_chat_stream(p_messages: Array[ChatMessage]) -> void:
 		await get_tree().process_frame
 	
 	if current_model_name.is_empty():
+		AIChatLogger.warn("NetworkManager: No model selected!")
 		chat_request_failed.emit("No model selected.")
 		return
 	
 	if not _update_provider_config():
+		AIChatLogger.warn("NetworkManager: Provider config update failed!")
 		chat_request_failed.emit("Configuration Error")
 		return
 	

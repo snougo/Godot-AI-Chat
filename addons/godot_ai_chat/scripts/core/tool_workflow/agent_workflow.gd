@@ -14,6 +14,8 @@ signal assistant_message_ready(final_message: ChatMessage, workflow_history: Arr
 signal tool_message_generated(tool_message: ChatMessage)
 ## 工具工作流开始时触发
 signal tool_workflow_started
+## 当工作流被取消时触发
+signal workflow_cancelled
 ## 工具工作流失败时触发
 signal tool_workflow_failed(error: String)
 
@@ -115,6 +117,7 @@ func _start_tool_workflow(p_trigger_msg: ChatMessage) -> void:
 	current_workflow = ToolWorkflowManager.new(network_manager, tool_executor, truncated_history)
 	current_workflow.completed.connect(_on_workflow_completed)
 	current_workflow.failed.connect(_on_workflow_failed)
+	current_workflow.cancelled.connect(func(): workflow_cancelled.emit())  # 转发取消信号
 	current_workflow.tool_msg_generated.connect(func(m: ChatMessage): tool_message_generated.emit(m))
 	
 	# 启动工作流，直接传入包含 tool_calls 的消息

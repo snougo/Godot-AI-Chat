@@ -92,6 +92,7 @@ func _connect_signals() -> void:
 	_agent_workflow.tool_workflow_failed.connect(_on_chat_failed)
 	_agent_workflow.assistant_message_ready.connect(_on_assistant_reply_completed)
 	_agent_workflow.tool_message_generated.connect(_on_tool_message_generated)
+	_agent_workflow.workflow_cancelled.connect(_on_stream_canceled)
 
 
 func _perform_stop_cleanup(reason: String) -> void:
