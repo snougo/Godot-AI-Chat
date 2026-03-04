@@ -75,7 +75,7 @@ func cancel() -> void:
 
 # --- Private Functions ---
 
-## 线程任务主循环
+# 线程任务主循环
 func _thread_task() -> void:
 	# [Optimization] Perform CPU-intensive JSON serialization in the worker thread
 	_body_json = JSON.stringify(_body_dict)
@@ -210,7 +210,7 @@ func _thread_task() -> void:
 	finished.emit.call_deferred()
 
 
-## 处理 SSE 协议缓冲区
+# 处理 SSE 协议缓冲区
 func _process_sse_buffer() -> void:
 	while true:
 		var newline_pos: int = _incoming_text_buffer.find("\n")
@@ -242,7 +242,6 @@ func _process_sse_buffer() -> void:
 				var result: Dictionary = _try_parse_one_json(json_raw)
 				if result.success:
 					if result.data is Dictionary:
-						#_emit_chunk_data(result.data)
 						# [注入] 将 Event 类型注入到数据中，供上层 Provider 使用
 						if not _current_sse_event.is_empty():
 							result.data["_event_type"] = _current_sse_event
@@ -252,7 +251,6 @@ func _process_sse_buffer() -> void:
 					var err: Error = json_obj.parse(json_raw)
 					if err == OK:
 						if json_obj.data is Dictionary:
-							#_emit_chunk_data(json_obj.data)
 							if not _current_sse_event.is_empty():
 								json_obj.data["_event_type"] = _current_sse_event
 							_emit_chunk_data(json_obj.data)
@@ -266,7 +264,7 @@ func _process_sse_buffer() -> void:
 	# 在遇到下一个 event: 时会自动覆盖
 
 
-## 处理 JSON List 协议缓冲区 (Gemini)
+# 处理 JSON List 协议缓冲区 (Gemini)
 func _process_json_list_buffer() -> void:
 	var search_offset: int = 0
 	while true:
@@ -319,17 +317,17 @@ func _process_json_list_buffer() -> void:
 			break
 
 
-## 延迟发射 JSON 数据信号
+# 延迟发射 JSON 数据信号
 func _emit_chunk_data(p_json: Dictionary) -> void:
 	chunk_received.emit.call_deferred(p_json)
 
 
-## 延迟发射失败信号
+# 延迟发射失败信号
 func _emit_failure(p_msg: String) -> void:
 	failed.emit.call_deferred(p_msg)
 
 
-## 尝试从字符串开头解析一个完整的 JSON 对象
+# 尝试从字符串开头解析一个完整的 JSON 对象
 func _try_parse_one_json(p_s: String) -> Dictionary:
 	if p_s.is_empty() or p_s[0] != "{":
 		return { "success": false, "length": 0 }
@@ -368,7 +366,7 @@ func _try_parse_one_json(p_s: String) -> Dictionary:
 	return { "success": false, "length": 0 }
 
 
-## 检查缓冲区是否可以安全地转换为 UTF-8 字符串
+# 检查缓冲区是否可以安全地转换为 UTF-8 字符串
 func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
 	if p_buffer.is_empty():
 		return true
@@ -401,7 +399,7 @@ func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
 	return true
 
 
-## 线程安全地检查是否应该停止
+# 线程安全地检查是否应该停止
 func _should_stop() -> bool:
 	_stop_flag_lock.lock()
 	var result: bool = _stop_flag

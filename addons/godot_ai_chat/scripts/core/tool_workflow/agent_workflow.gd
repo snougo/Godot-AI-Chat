@@ -13,18 +13,18 @@ signal assistant_message_ready(final_message: ChatMessage, workflow_history: Arr
 ## 当生成工具执行结果消息时触发
 signal tool_message_generated(tool_message: ChatMessage)
 ## 工具工作流开始时触发
-signal tool_workflow_started
+signal agent_workflow_started
 ## 当工作流被取消时触发
-signal workflow_cancelled
+signal agent_workflow_cancelled
 ## 工具工作流失败时触发
-signal tool_workflow_failed(error: String)
+signal agent_workflow_failed(error: String)
 
 # --- Public Vars ---
 
 ## 工具执行器实例
 var tool_executor: ToolExecutor = ToolExecutor.new()
 ## 当前正在运行的工具工作流管理器
-var current_workflow: ToolWorkflowManager = null
+var current_tool_workflow: ToolWorkflowManager = null
 ## 网络管理器引用
 var network_manager: NetworkManager
 ## 当前聊天窗口引用
@@ -37,14 +37,14 @@ var is_in_workflow: bool = false
 
 ## 取消当前正在运行的工作流
 func cancel_workflow() -> void:
-	if current_workflow:
+	if current_tool_workflow:
 		# 确保调用 cancel() 以阻止僵尸协程
-		if current_workflow.has_method("cancel"):
-			current_workflow.cancel()
+		if current_tool_workflow.has_method("cancel"):
+			current_tool_workflow.cancel()
 		else:
-			current_workflow.cleanup()
+			current_tool_workflow.cleanup()
 		
-		current_workflow = null
+		current_tool_workflow = null
 	
 	is_in_workflow = false
 
@@ -104,7 +104,7 @@ func process_response(p_msg: ChatMessage) -> void:
 ## 启动工具工作流
 func _start_tool_workflow(p_trigger_msg: ChatMessage) -> void:
 	is_in_workflow = true
-	tool_workflow_started.emit()
+	agent_workflow_started.emit()
 	
 	# 使用截断后的历史记录，而不是完整历史
 	var settings: PluginSettings = ToolBox.get_plugin_settings()
@@ -114,25 +114,25 @@ func _start_tool_workflow(p_trigger_msg: ChatMessage) -> void:
 		false
 	)
 	
-	current_workflow = ToolWorkflowManager.new(network_manager, tool_executor, truncated_history)
-	current_workflow.completed.connect(_on_workflow_completed)
-	current_workflow.failed.connect(_on_workflow_failed)
-	current_workflow.cancelled.connect(func(): workflow_cancelled.emit())  # 转发取消信号
-	current_workflow.tool_msg_generated.connect(func(m: ChatMessage): tool_message_generated.emit(m))
+	current_tool_workflow = ToolWorkflowManager.new(network_manager, tool_executor, truncated_history)
+	current_tool_workflow.tool_workfolw_completed.connect(_on_tool_workflow_completed)
+	current_tool_workflow.tool_workflow_failed.connect(_on_tool_workflow_failed)
+	current_tool_workflow.tool_workfolw_cancelled.connect(func(): agent_workflow_cancelled.emit())  # 转发取消信号
+	current_tool_workflow.tool_msg_generated.connect(func(m: ChatMessage): tool_message_generated.emit(m))
 	
 	# 启动工作流，直接传入包含 tool_calls 的消息
-	current_workflow.start(p_trigger_msg)
+	current_tool_workflow.start(p_trigger_msg)
 
 
 # --- Signal Callbacks ---
 
-func _on_workflow_completed(p_final_msg: ChatMessage, p_additional_history: Array[ChatMessage]) -> void:
+func _on_tool_workflow_completed(p_final_msg: ChatMessage, p_additional_history: Array[ChatMessage]) -> void:
 	is_in_workflow = false
-	current_workflow = null
+	current_tool_workflow = null
 	assistant_message_ready.emit(p_final_msg, p_additional_history)
 
 
-func _on_workflow_failed(p_err: String) -> void:
+func _on_tool_workflow_failed(p_err: String) -> void:
 	is_in_workflow = false
-	current_workflow = null
-	tool_workflow_failed.emit(p_err)
+	current_tool_workflow = null
+	agent_workflow_failed.emit(p_err)

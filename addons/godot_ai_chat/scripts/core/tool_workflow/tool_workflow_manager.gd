@@ -9,11 +9,11 @@ extends RefCounted
 # --- Signals ---
 
 ## 当工作流最终完成并获得最终回复时触发
-signal completed(final_msg: ChatMessage, history: Array[ChatMessage])
+signal tool_workfolw_completed(final_msg: ChatMessage, history: Array[ChatMessage])
 ## 当工作流被取消时触发
-signal cancelled
+signal tool_workfolw_cancelled
 ## 当工作流执行失败时触发
-signal failed(error: String)
+signal tool_workflow_failed(error: String)
 ## 当生成工具执行结果消息时触发
 signal tool_msg_generated(msg: ChatMessage)
 
@@ -64,7 +64,7 @@ func start(p_trigger_msg: ChatMessage) -> void:
 func cancel() -> void:
 	_is_cancelled = true
 	cleanup()
-	cancelled.emit()  # 通知监听者工作流已取消
+	tool_workfolw_cancelled.emit()  # 通知监听者工作流已取消
 
 
 # --- Private Functions ---
@@ -77,7 +77,7 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 	for i in range(p_msg.tool_calls.size()):
 		# 循环开始前检查
 		if _is_cancelled:
-			AIChatLogger.warn("[Workflow] Tool execution aborted due to cancellation.")
+			AIChatLogger.warn("[ToolWorkflow] Tool execution aborted due to cancellation.")
 			return
 		
 		var call: Dictionary = p_msg.tool_calls[i]
@@ -89,13 +89,13 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 		if call_id.is_empty():
 			call_id = "call_%d_%d" % [Time.get_ticks_msec(), i]
 			call["id"] = call_id
-			AIChatLogger.debug("[Workflow] Fixed missing tool_call_id: %s" % call_id)
+			AIChatLogger.debug("[ToolWorkflow] Fixed missing tool_call_id: %s" % call_id)
 		
 		var func_def: Dictionary = call.get("function", {})
 		var tool_name: String = func_def.get("name", "")
 		var raw_args_str: String = func_def.get("arguments", "{}")
 		
-		AIChatLogger.debug("[Workflow] Executing tool: %s (ID: %s)" % [tool_name, call_id])
+		AIChatLogger.debug("[ToolWorkflow] Executing tool: %s (ID: %s)" % [tool_name, call_id])
 		
 		# 1. 清洗参数
 		# 使用 JSONRepairHelper 直接修复
@@ -116,13 +116,13 @@ func _execute_tool_calls(p_msg: ChatMessage) -> void:
 		if not tool_instance:
 			# 工具不存在时，不跳过，而是返回错误信息给 LLM，保证对话链完整
 			result_str = "[SYSTEM ERROR] Tool '%s' not found. Execution failed." % tool_name
-			AIChatLogger.error("[Workflow] " + result_str)
+			AIChatLogger.error("[ToolWorkflow] " + result_str)
 		else:
 			# 支持异步执行
 			var result_dict: Dictionary = await tool_instance.execute(args)
 			# 异步回来后再次检查取消状态 (关键修复)
 			if _is_cancelled:
-				AIChatLogger.warn("[Workflow] Tool execution finished but workflow was cancelled. Aborting.")
+				AIChatLogger.warn("[ToolWorkflow] Tool execution finished but workflow was cancelled. Aborting.")
 				return
 			
 			# 处理非字符串类型的data
@@ -183,17 +183,17 @@ func _attach_image_to_last_user_message(p_data: PackedByteArray, p_mime: String)
 	for i in range(workflow_messages.size() - 1, -1, -1):
 		if workflow_messages[i].role == ChatMessage.ROLE_USER:
 			workflow_messages[i].add_image(p_data, p_mime)
-			AIChatLogger.debug("[Workflow] Attached image to Workflow User message index: %d" % i)
+			AIChatLogger.debug("[ToolWorkflow] Attached image to ToolWorkflow User message index: %d" % i)
 			return
 	
 	# 然后检查基础历史记录 (倒序)
 	for i in range(base_history.size() - 1, -1, -1):
 		if base_history[i].role == ChatMessage.ROLE_USER:
 			base_history[i].add_image(p_data, p_mime)
-			AIChatLogger.debug("[Workflow] Attached image to Base History User message index: %d" % i)
+			AIChatLogger.debug("[ToolWorkflow] Attached image to Base History User message index: %d" % i)
 			return
 	
-	AIChatLogger.debug("[Workflow] Warning: No User message found to attach image.")
+	AIChatLogger.debug("[ToolWorkflow] Warning: No User message found to attach image.")
 
 
 # 请求 AI 进行下一步决策或最终回复
@@ -232,4 +232,4 @@ func _on_stream_done() -> void:
 		workflow_messages.append(_temp_assistant_msg)
 		_execute_tool_calls(_temp_assistant_msg)
 	else:
-		completed.emit(_temp_assistant_msg, workflow_messages)
+		tool_workfolw_completed.emit(_temp_assistant_msg, workflow_messages)

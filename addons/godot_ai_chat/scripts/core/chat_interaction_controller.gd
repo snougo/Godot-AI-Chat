@@ -10,6 +10,8 @@ var _network_manager: NetworkManager
 var _agent_workflow: AgentWorkflow
 var _current_chat_window: CurrentChatWindow
 var _session_manager: SessionManager
+var _is_performing_cleanup: bool = false
+var _current_request_completed: bool = false
 
 
 # --- Built-in Functions ---
@@ -28,6 +30,9 @@ func _init(p_ui: ChatUI, p_net: NetworkManager, p_workflow:AgentWorkflow, p_wind
 
 ## 处理用户发送消息
 func handle_user_message(p_text: String) -> void:
+	# 重置标志
+	_current_request_completed = false
+	
 	if not _session_manager.has_active_session() or _current_chat_window.chat_history == null:
 		_chat_ui.show_confirmation("No chat active.\nPlease click 'New Button' or 'Load Button' to start.")
 		return
@@ -56,6 +61,10 @@ func handle_user_message(p_text: String) -> void:
 
 ## 请求停止生成
 func handle_stop_requested() -> void:
+	if _is_performing_cleanup:
+		return
+	_is_performing_cleanup = true
+	
 	# 1. 尝试取消网络 (如果活跃，会触发 _on_stream_canceled)
 	_network_manager.cancel_stream()
 	# 2. 尝试取消工作流 (确保非网络活跃状态下的工具流也被取消)
@@ -64,6 +73,8 @@ func handle_stop_requested() -> void:
 	# 这种情况通常发生在 TOOLCALLING 状态，或者网络请求已经结束但 UI 还没更新时
 	if _chat_ui.current_state != ChatUI.UIState.IDLE:
 		_perform_stop_cleanup("Stopped")
+	
+	_is_performing_cleanup = false
 
 
 # --- Private Functions ---
@@ -88,11 +99,11 @@ func _connect_signals() -> void:
 	_network_manager.chat_stream_request_canceled.connect(_on_stream_canceled)
 	
 	# AgentWorkflow 事件
-	_agent_workflow.tool_workflow_started.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.TOOLCALLING))
-	_agent_workflow.tool_workflow_failed.connect(_on_chat_failed)
+	_agent_workflow.agent_workflow_started.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.TOOLCALLING))
+	_agent_workflow.agent_workflow_failed.connect(_on_chat_failed)
 	_agent_workflow.assistant_message_ready.connect(_on_assistant_reply_completed)
 	_agent_workflow.tool_message_generated.connect(_on_tool_message_generated)
-	_agent_workflow.workflow_cancelled.connect(_on_stream_canceled)
+	_agent_workflow.agent_workflow_cancelled.connect(_on_stream_canceled)
 
 
 func _perform_stop_cleanup(reason: String) -> void:
@@ -115,13 +126,17 @@ func _perform_stop_cleanup(reason: String) -> void:
 # --- Signal Callbacks ---
 
 func _on_stream_completed() -> void:
+	if _current_request_completed:
+		return
+	_current_request_completed = true
+	
 	# 如果处于工作流中（比如正在执行工具），不要结束 UI 状态
 	if _agent_workflow.is_in_workflow:
 		return
 	
 	var last_msg: ChatMessage = _current_chat_window.chat_history.get_last_message()
 	
-	# 如果最后一条是助手消息，交给 Backend 检查是否需要触发工具
+	# 如果最后一条是助手消息，交给 AgentWorkflow 检查是否需要触发工具
 	if last_msg and last_msg.role == ChatMessage.ROLE_ASSISTANT:
 		_agent_workflow.process_response(last_msg)
 	else:
@@ -129,10 +144,17 @@ func _on_stream_completed() -> void:
 
 
 func _on_stream_canceled() -> void:
+	# 标记为已完成，阻止 _on_stream_completed 执行
+	_current_request_completed = true
+	
+	if _is_performing_cleanup:
+		return
+	_is_performing_cleanup = true
 	# 确保非网络活跃状态下的工具流也被取消
-	_agent_workflow.cancel_workflow()
+	#_agent_workflow.cancel_workflow()
 	# 执行清理
 	_perform_stop_cleanup("Stopped")
+	_is_performing_cleanup = false
 
 
 func _on_chat_failed(p_error_msg: String) -> void:

@@ -17,6 +17,8 @@ enum ParseState {
 
 ## 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
+## 预加载代码查看器窗口
+const CODE_VIEWER_WINDOW_RES: PackedScene = preload("res://addons/godot_ai_chat/scene/popup_code_viewer_window.tscn")
 
 # --- @onready Vars ---
 
@@ -25,42 +27,47 @@ const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIG
 
 # --- Private Vars ---
 
-## 当前解析状态
+# 当前解析状态
 var _current_state: ParseState = ParseState.TEXT
 
-## 混合缓冲区：只有当遇到潜在的 ``` 标记时，文本才会被暂时存入这里等待换行确认
+# 混合缓冲区：只有当遇到潜在的 ``` 标记时，文本才会被暂时存入这里等待换行确认
 var _pending_buffer: String = ""
 
-## 记录上一个创建的 UI 节点，用于连续追加内容
+# 记录上一个创建的 UI 节点，用于连续追加内容
 var _last_ui_node: Control = null
 
-## 正则匹配：代码块开始 (锚定行首，缩进允许 0-3 个空格)
-## Group 1: Fence (```, ````, etc.)
-## Group 2: Language
-var _re_code_start: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})\\s*(.*)\\s*$")
+# 正则匹配：代码块开始 (锚定行首，缩进允许 0-3 个空格)
+# Group 1: Fence (```, ````, etc.)
+# Group 2: Language
+#var _re_code_start: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})\\s*(.*)\\s*$")
+var _re_code_start: RegEx = RegEx.create_from_string("^ {0,8}(`{3,})\\s*(.*)\\s*$")
 
-## 正则匹配：代码块结束 (锚定行首，缩进允许 0-3 个空格，且仅允许水平空白字符)
-## Group 1: Fence
-var _re_code_end: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})[ \\t]*$")
+# 正则匹配：代码块结束 (锚定行首，缩进允许 0-3 个空格，且仅允许水平空白字符)
+# Group 1: Fence
+#var _re_code_end: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})[ \\t]*$")
+var _re_code_end: RegEx = RegEx.create_from_string("^ {0,8}(`{3,})[ \\t]*$")
 
-## 当前代码块使用的围栏字符串 (如 "```" 或 "````")
+# 当前代码块使用的围栏字符串 (如 "```" 或 "````")
 var _current_fence_str: String = ""
 
-## 标记当前是否处于行首（用于正确识别代码块围栏）
-## 初始为 true，每次 append 内容后，如果内容以换行符结尾，则置为 true，否则 false
+# 标记当前是否处于行首（用于正确识别代码块围栏）
+# 初始为 true，每次 append 内容后，如果内容以换行符结尾，则置为 true，否则 false
 var _is_line_start: bool = true
 
-## 打字机状态
+# 打字机状态
 var _typing_active: bool = false
-## 当前正在执行打字机效果的节点
+# 当前正在执行打字机效果的节点
 var _current_typing_node: RichTextLabel = null
 
-## 思考内容 UI 引用
+# 思考内容 UI 引用
 var _reasoning_container: FoldableContainer = null
 var _reasoning_label: RichTextLabel = null
 
-## 消息块是否被挂起
+# 消息块是否被挂起
 var _is_suspended: bool = false
+
+# 当前打开的代码查看窗口引用
+var _current_popup_code_view_window: PopupCodeViewWindow = null
 
 
 # --- Built-in Functions ---
@@ -355,6 +362,10 @@ func _clear_content() -> void:
 	for c in _content_container.get_children():
 		c.queue_free()
 	
+	if is_instance_valid(_current_popup_code_view_window):
+		_current_popup_code_view_window.queue_free()
+		_current_popup_code_view_window = null
+	
 	if _content_container.has_meta("shown_calls"):
 		_content_container.set_meta("shown_calls", [])
 	
@@ -606,35 +617,48 @@ func _create_code_block(p_lang: String) -> void:
 	lang_label.text = p_lang if not p_lang.is_empty() else "Code"
 	lang_label.modulate = Color(0.7, 0.7, 0.7)
 	
-	var copy_btn: Button = Button.new()
-	copy_btn.text = "Copy"
-	copy_btn.flat = true
-	copy_btn.focus_mode = Control.FOCUS_NONE
+	var copy_code_button: Button = Button.new()
+	copy_code_button.text = "Copy"
+	copy_code_button.flat = true
+	copy_code_button.focus_mode = Control.FOCUS_NONE
 	
-	copy_btn.pressed.connect(func():
+	copy_code_button.pressed.connect(func():
 		DisplayServer.clipboard_set(code_edit.text)
 		
 		# 记录原始文本，防止多次点击导致逻辑混乱
-		if copy_btn.text != "Copied ✓":
+		if copy_code_button.text != "Copied ✓":
 			var original_text: String = "Copy"
-			copy_btn.text = "Copied ✓"
-			copy_btn.modulate = Color.GREEN_YELLOW 
+			copy_code_button.text = "Copied ✓"
+			copy_code_button.modulate = Color.GREEN_YELLOW 
 			
 			# 等待 3 秒
-			if copy_btn.is_inside_tree():
-				await copy_btn.get_tree().create_timer(3.0).timeout
+			if copy_code_button.is_inside_tree():
+				await copy_code_button.get_tree().create_timer(3.0).timeout
 			
 			# 恢复状态 (需检查节点是否仍有效)
-			if is_instance_valid(copy_btn):
-				copy_btn.text = original_text
-				copy_btn.modulate = Color.WHITE
+			if is_instance_valid(copy_code_button):
+				copy_code_button.text = original_text
+				copy_code_button.modulate = Color.WHITE
 	)
 	
 	header.add_child(lang_label)
 	header.add_child(Control.new())
 	header.get_child(1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_child(copy_btn)
+	header.add_child(copy_code_button)
 	
+	var popup_code_window_button: Button = Button.new()
+	popup_code_window_button.text = "Popout"
+	popup_code_window_button.flat = true
+	popup_code_window_button.focus_mode = Control.FOCUS_NONE
+	popup_code_window_button.pressed.connect(func():
+		DisplayServer.clipboard_set(code_edit.text)
+		var code_content: String = DisplayServer.clipboard_get()
+		AIChatLogger.debug(code_content)
+		_show_code_in_popup_window(code_content)
+	)
+	
+	header.add_child(popup_code_window_button)
+
 	_content_container.move_child(code_edit, _content_container.get_child_count() - 1)
 	_content_container.add_child(header)
 	_content_container.move_child(header, _content_container.get_child_count() - 2)
@@ -698,3 +722,31 @@ func _typewriter_loop() -> void:
 	_current_typing_node.visible_characters += step
 	
 	get_tree().create_timer(0.016).timeout.connect(_typewriter_loop)
+
+
+# 打开独立代码查看窗口
+func _show_code_in_popup_window(p_code_content: String) -> void:
+	var new_popuo_code_viewer_window: PopupCodeViewWindow = CODE_VIEWER_WINDOW_RES.instantiate()
+	_current_popup_code_view_window = new_popuo_code_viewer_window
+	# 添加到场景树
+	add_child(_current_popup_code_view_window)
+	
+	_current_popup_code_view_window.get_ok_button().pressed.connect(func():
+		remove_child(_current_popup_code_view_window)
+		_current_popup_code_view_window.queue_free()
+		_current_popup_code_view_window = null
+		
+		await get_tree().create_timer(1.0).timeout
+		if is_instance_valid(new_popuo_code_viewer_window):
+			AIChatLogger.debug("PopupCodeViewWindow Instance is still in Memory")
+		else:
+			AIChatLogger.debug("PopupCodeViewWindow Instance has been removed form Memory")
+	)
+	
+	# 设置为可见
+	_current_popup_code_view_window.visible = true
+	# 设置代码内容
+	var code_edit: CodeEdit = _current_popup_code_view_window.popup_code_edit
+	code_edit.text = p_code_content
+	# 弹出窗口
+	_current_popup_code_view_window.popup_centered(Vector2i(800, 600))
