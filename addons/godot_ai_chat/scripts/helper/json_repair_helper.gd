@@ -45,7 +45,7 @@ static func repair_json(p_text: String) -> String:
 
 # --- Private Functions ---
 
-## 剥离 ```json ... ``` 包裹
+# 剥离 ```json ... ``` 包裹
 static func _strip_markdown(p_text: String) -> String:
 	var result: String = p_text.strip_edges()
 	
@@ -65,7 +65,7 @@ static func _strip_markdown(p_text: String) -> String:
 	return result.strip_edges()
 
 
-## 核心算法：修复被截断的 JSON 字符串
+# 核心算法：修复被截断的 JSON 字符串
 static func _repair_truncated_json(p_json_str: String) -> String:
 	var stack: Array[String] = []
 	var in_string: bool = false

@@ -34,7 +34,7 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		"temperature": snappedf(p_temperature, 0.1)
 	}
 	
-	# [重要] 暂时禁用工具，因为 LM Studio Stateful API 目前不支持 'function' 类型
+	# [重要] 暂时禁用工具，暂时未知为何无法启用工具字段
 	# if not p_tool_definitions.is_empty():
 	# 	body["tools"] = p_tool_definitions
 	

@@ -213,6 +213,14 @@ func update_token_usage(p_usage: Dictionary) -> void:
 		token_usage_updated.emit(p_usage)
 
 
+## 强制刷新并结束当前正在生成的 UI 消息块
+func flush_stream_buffer() -> void:
+	var last_block: ChatMessageBlock = _get_last_block()
+	if last_block and last_block.has_method("finish_stream"):
+		# 这将把 _pending_buffer 里残留的字符（如未闭合的反引号）刷出来，并立即停止打字机效果
+		last_block.finish_stream()
+
+
 # --- Private Functions ---
 
 # 执行可视性剔除逻辑

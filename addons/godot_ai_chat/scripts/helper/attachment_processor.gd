@@ -46,6 +46,7 @@ static func process_input(p_raw_text: String) -> Dictionary:
 
 # --- Private Functions ---
 
+# 加载图片文件
 static func _load_image(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):
 		return {}
@@ -64,6 +65,7 @@ static func _load_image(p_path: String) -> Dictionary:
 	return {"data": buffer, "mime": mime}
 
 
+# 解析场景文件为 Markdown 格式
 static func _parse_scene_to_markdown(p_path: String) -> String:
 	if not FileAccess.file_exists(p_path):
 		return p_path
@@ -117,6 +119,7 @@ static func _parse_scene_to_markdown(p_path: String) -> String:
 	return md
 
 
+# 递归构建场景树字符串
 static func _build_tree_string(p_state: SceneState, p_idx: int, p_prefix: String, p_is_last: bool, p_parent_map: Dictionary) -> String:
 	var node_name: String = p_state.get_node_name(p_idx)
 	var type: String = p_state.get_node_type(p_idx)

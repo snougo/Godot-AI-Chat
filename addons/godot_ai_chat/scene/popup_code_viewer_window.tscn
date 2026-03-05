@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cmrvr2w3783ou"]
 
-[ext_resource type="Script" uid="uid://d1pvfxgxleccv" path="res://addons/godot_ai_chat/scripts/ui/popup_code_viewer_window.gd" id="1_k8kuh"]
+[ext_resource type="Script" uid="uid://d1pvfxgxleccv" path="res://addons/godot_ai_chat/scripts/core/ui/popup_code_viewer_window.gd" id="1_k8kuh"]
 [ext_resource type="CodeHighlighter" uid="uid://y4ttoisb3itk" path="res://addons/godot_ai_chat/assets/code_hightlight.tres" id="2_1hy52"]
 
 [node name="PopupCodeViewerWindow" type="AcceptDialog" unique_id=618318180 node_paths=PackedStringArray("popup_code_edit")]

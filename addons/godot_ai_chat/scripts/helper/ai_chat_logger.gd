@@ -44,6 +44,11 @@ static func set_flags(flags: int) -> void:
 
 # --- Private Functions ---
 
+## 格式化并输出日志
+## [param p_msg]: 日志消息
+## [param p_module]: 模块名称
+## [param p_level_tag]: 级别标签
+## [param p_color]: 显示颜色
 static func _print_formatted(msg: String, module: String, level_tag: String, color: Color) -> void:
 	var time = Time.get_time_dict_from_system()
 	var time_str = "%02d:%02d:%02d" % [time.hour, time.minute, time.second]
