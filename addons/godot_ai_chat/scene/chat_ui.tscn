@@ -78,7 +78,7 @@ label_settings = SubResource("LabelSettings_2kdn8")
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="ChatTrunDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
+[node name="ChatTurnDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_w6mml")
 text = "Turns:"

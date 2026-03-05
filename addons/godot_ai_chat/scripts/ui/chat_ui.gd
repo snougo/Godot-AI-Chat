@@ -43,7 +43,7 @@ enum UIState {
 # --- @onready Vars ---
 
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
-@onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTrunDisplay
+@onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTurnDisplay
 @onready var _current_token_usage: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenUsage
 
 @onready var _session_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/SessionSelector

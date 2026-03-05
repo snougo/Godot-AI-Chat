@@ -9,9 +9,9 @@ extends RefCounted
 # --- Signals ---
 
 ## 当工作流最终完成并获得最终回复时触发
-signal tool_workfolw_completed(final_msg: ChatMessage, history: Array[ChatMessage])
+signal tool_workflow_completed(final_msg: ChatMessage, history: Array[ChatMessage])
 ## 当工作流被取消时触发
-signal tool_workfolw_cancelled
+signal tool_workflow_cancelled
 ## 当工作流执行失败时触发
 signal tool_workflow_failed(error: String)
 ## 当生成工具执行结果消息时触发
@@ -64,7 +64,7 @@ func start(p_trigger_msg: ChatMessage) -> void:
 func cancel() -> void:
 	_is_cancelled = true
 	cleanup()
-	tool_workfolw_cancelled.emit()  # 通知监听者工作流已取消
+	tool_workflow_cancelled.emit()  # 通知监听者工作流已取消
 
 
 # --- Private Functions ---
@@ -232,4 +232,4 @@ func _on_stream_done() -> void:
 		workflow_messages.append(_temp_assistant_msg)
 		_execute_tool_calls(_temp_assistant_msg)
 	else:
-		tool_workfolw_completed.emit(_temp_assistant_msg, workflow_messages)
+		tool_workflow_completed.emit(_temp_assistant_msg, workflow_messages)

@@ -115,9 +115,9 @@ func _start_tool_workflow(p_trigger_msg: ChatMessage) -> void:
 	)
 	
 	current_tool_workflow = ToolWorkflowManager.new(network_manager, tool_executor, truncated_history)
-	current_tool_workflow.tool_workfolw_completed.connect(_on_tool_workflow_completed)
+	current_tool_workflow.tool_workflow_completed.connect(_on_tool_workflow_completed)
 	current_tool_workflow.tool_workflow_failed.connect(_on_tool_workflow_failed)
-	current_tool_workflow.tool_workfolw_cancelled.connect(func(): agent_workflow_cancelled.emit())  # 转发取消信号
+	current_tool_workflow.tool_workflow_cancelled.connect(func(): agent_workflow_cancelled.emit())  # 转发取消信号
 	current_tool_workflow.tool_msg_generated.connect(func(m: ChatMessage): tool_message_generated.emit(m))
 	
 	# 启动工作流，直接传入包含 tool_calls 的消息

@@ -401,7 +401,7 @@ func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
 
 # 线程安全地检查是否应该停止
 func _should_stop() -> bool:
-	_stop_flag_lock.lock()
+	#_stop_flag_lock.lock()
 	var result: bool = _stop_flag
-	_stop_flag_lock.unlock()
+	#_stop_flag_lock.unlock()
 	return result
