@@ -43,7 +43,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		return {"success": false, "data": "Title and Content are Required!"}
 	
 	# 标题长度校验
-	if title.length() > 20:
+	if title.length() > 30:
 		return {"success": false, "data": "Memory addition failed, Title too long，Please keep the title under 20 characters."}
 	
 	var archive := _load_or_create_archive()

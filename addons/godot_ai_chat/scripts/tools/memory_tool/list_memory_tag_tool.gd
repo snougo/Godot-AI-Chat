@@ -3,7 +3,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "list_memory_tags"
-	tool_description = "List all existing memory tags."
+	tool_description = "List all existing memory tags with memory details."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -22,8 +22,12 @@ func execute(p_args: Dictionary) -> Dictionary:
 		return {"success": true, "data": "No memory tags found."}
 	
 	var result: String = "### All Memory Tags (%d found):\n\n" % tags.size()
-	for i in range(tags.size()):
-		result += "- %s\n" % tags[i]
+	
+	for tag in tags:
+		var memories := archive.search_memories(tag, 999)
+		result += "- **%s** (%d memories)\n" % [tag, memories.size()]
+		for mem in memories:
+			result += "  - %s\n" % mem.title
 	
 	return {
 		"success": true,
