@@ -1,15 +1,14 @@
 ## Animation State SOP
 
 ### 概览
-本技能旨在标准化操作 `AnimationNodeStateMachine` 的完整流程，确保AI助手在操作动画状态机搭建时遵循统一规范。
+本技能旨在标准化操作 `AnimationNodeStateMachine` 资源的完整流程，确保AI助手在操作动画状态机搭建时遵循统一规范。
 
 ### 触发条件
 当用户请求操作动画状态机、添加动画状态、连接动画过渡或验证动画图结构时触发。
 
 ### 指令
-1. **创建状态机资源**：调用 `create_animation_graph_resource_tool` 工具
+1. **创建状态机资源**：调用 `create_animation_state_resource_tool` 工具
    - 参数 `file_path` (必填): 字符串，必须以 `res://` 开头，例如 `"res://characters/player_asm.tres"`
-   - 确保目标目录已存在，文件不存在时才会创建
 
 2. **添加状态节点**：调用 `add_animation_state_tool` 工具
    - 参数 `file_path` (必填): 状态机资源路径
@@ -26,7 +25,7 @@
    - 参数 `auto_advance` (可选): 布尔值，是否自动推进，默认 `false`
    - 参数 `advance_condition` (可选): 字符串，条件名称，留空则无条件
 
-4. **验证结构完整性**：调用 `get_animation_graph_info_tool` 工具
+4. **验证结构完整性**：调用 `get_animation_state_info_tool` 工具
    - 参数 `file_path` (必填): 状态机资源路径
    - 返回文本摘要，包含所有节点和过渡的详细信息
 

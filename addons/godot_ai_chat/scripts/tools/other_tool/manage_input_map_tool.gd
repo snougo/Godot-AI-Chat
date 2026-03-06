@@ -49,6 +49,8 @@ const MOUSE_BUTTON_ALIASES: Dictionary = {
 	"xbutton2": MOUSE_BUTTON_XBUTTON2,
 }
 
+const USER_HINT: String = "\n[Notice] Changes saved. If not visible in 'Project Settings' UI, restart the editor."
+
 
 # ==================== 初始化 ====================
 
@@ -131,39 +133,40 @@ func _execute_add_update(p_args: Dictionary) -> Dictionary:
 	if actions.is_empty():
 		return {"success": false, "data": "No actions provided."}
 	
-	var log_str: String = ""
-	var changed_anything: bool = false
+	var success_count: int = 0
+	var failed_count: int = 0
+	var log_lines: Array = []
 	
 	for action_data in actions:
 		var action_name: String = action_data.get("name", "")
 		if action_name.is_empty():
-			log_str += "! Skipped: Empty action name\n"
+			log_lines.append("! Skipped: Empty action name")
 			continue
 		
 		var events_list: Array = action_data.get("events", [])
 		var clear: bool = action_data.get("clear_existing", not is_update)
 		
 		var result = _add_or_update_action(action_name, events_list, clear, deadzone)
-		log_str += result.log
+		log_lines.append(result.log)
+		
 		if result.changed:
-			changed_anything = true
+			success_count += 1
+		else:
+			failed_count += 1
 	
-	if changed_anything:
+	if success_count > 0:
 		var err = ProjectSettings.save()
 		if err != OK:
-			return {"success": false, "data": "Failed to save ProjectSettings. Error code: %d" % err}
-		
-		var user_hint = "\n[Notice] Changes saved. If not visible in 'Project Settings' UI, restart the editor."
-		return {"success": true, "data": "Input Map updated successfully.\n" + log_str + user_hint}
+			return {"success": false, "data": "Failed to save ProjectSettings"}
+		return {"success": true, "data": "\n".join(log_lines) + USER_HINT}
 	else:
-		return {"success": true, "data": "No changes made.\n" + log_str}
+		return {"success": true, "data": "No changes made.\n" + "\n".join(log_lines)}
 
 
 func _execute_remove(p_args: Dictionary) -> Dictionary:
 	var action_name: String = p_args.get("action_name", "")
 	var actions: Array = p_args.get("actions", [])
 	
-	# 支持通过 action_name 或 actions 数组删除
 	var names_to_remove: Array = []
 	if not action_name.is_empty():
 		names_to_remove.append(action_name)
@@ -175,34 +178,32 @@ func _execute_remove(p_args: Dictionary) -> Dictionary:
 	if names_to_remove.is_empty():
 		return {"success": false, "data": "No action name specified for removal."}
 	
-	var log_str: String = ""
-	var changed_anything: bool = false
+	var success_count: int = 0
+	var log_lines: Array = []
 	
 	for name in names_to_remove:
 		var setting_path = "input/" + name
-		
-		# 从 ProjectSettings 移除
 		if ProjectSettings.has_setting(setting_path):
 			ProjectSettings.clear(setting_path)
-			log_str += "Removed from ProjectSettings: %s\n" % name
-			changed_anything = true
+			log_lines.append("Removed from ProjectSettings: %s" % name)
+			success_count += 1
 		else:
-			log_str += "! Not found in ProjectSettings: %s\n" % name
+			log_lines.append("! Not found in ProjectSettings: %s" % name)
 		
-		# 从内存 InputMap 移除
 		if InputMap.has_action(name):
 			InputMap.erase_action(name)
-			log_str += "Removed from InputMap: %s\n" % name
+			log_lines.append("Removed from InputMap: %s" % name)
+			success_count += 1
 		else:
-			log_str += "! Not found in InputMap: %s\n" % name
+			log_lines.append("! Not found in InputMap: %s" % name)
 	
-	if changed_anything:
+	if success_count > 0:
 		var err = ProjectSettings.save()
 		if err != OK:
-			return {"success": false, "data": "Failed to save ProjectSettings. Error code: %d" % err}
-		return {"success": true, "data": "Actions removed successfully.\n" + log_str}
+			return {"success": false, "data": "Failed to save ProjectSettings"}
+		return {"success": true, "data": "\n".join(log_lines) + USER_HINT}
 	else:
-		return {"success": true, "data": "No actions were removed.\n" + log_str}
+		return {"success": true, "data": "No actions were removed."}
 
 
 func _execute_list(p_args: Dictionary) -> Dictionary:
@@ -214,6 +215,37 @@ func _execute_list(p_args: Dictionary) -> Dictionary:
 	
 	# 列出所有动作
 	return _list_all_actions()
+
+
+func _execute_clear(p_args: Dictionary) -> Dictionary:
+	var action_name: String = p_args.get("action_name", "")
+	
+	if action_name.is_empty():
+		return {"success": false, "data": "No action_name specified."}
+	
+	var setting_path = "input/" + action_name
+	if not ProjectSettings.has_setting(setting_path):
+		return {"success": false, "data": "Action not found: %s" % action_name}
+	
+	var action_dict: Dictionary = ProjectSettings.get_setting(setting_path)
+	var events_count = action_dict.get("events", []).size()
+	var events_list: Array = action_dict.get("events", [])
+	
+	action_dict["events"] = []
+	ProjectSettings.set_setting(setting_path, action_dict)
+	
+	if InputMap.has_action(action_name):
+		InputMap.action_erase_events(action_name)
+	
+	var err = ProjectSettings.save()
+	if err != OK:
+		return {"success": false, "data": "Failed to save ProjectSettings"}
+	
+	var log_line = "Cleared %d events for action: %s" % [events_count, action_name]
+	for event in events_list:
+		log_line += "\n  - %s" % _event_to_string(event)
+	
+	return {"success": true, "data": log_line + USER_HINT}
 
 
 func _list_single_action(action_name: String) -> Dictionary:
@@ -238,7 +270,6 @@ func _list_single_action(action_name: String) -> Dictionary:
 
 
 func _list_all_actions() -> Dictionary:
-	var actions: Array = ProjectSettings.get_global_class_list()
 	var input_actions: Array = []
 	
 	# 获取所有 input/ 开头的设置
@@ -247,6 +278,9 @@ func _list_all_actions() -> Dictionary:
 		var name: String = prop.name
 		if name.begins_with("input/"):
 			var action_name = name.substr(6)  # 去掉 "input/" 前缀
+			# 过滤编辑器内置动作（ui_ 前缀）
+			if action_name.begins_with("ui_"):
+				continue
 			input_actions.append(action_name)
 	
 	if input_actions.is_empty():
@@ -257,38 +291,18 @@ func _list_all_actions() -> Dictionary:
 		var setting_path = "input/" + action_name
 		var action_dict: Dictionary = ProjectSettings.get_setting(setting_path)
 		var events: Array = action_dict.get("events", [])
-		var event_count = events.size()
 		var deadzone = action_dict.get("deadzone", 0.5)
-		result += "  - %s (events: %d, deadzone: %.2f)\n" % [action_name, event_count, deadzone]
+		
+		# 优化：显示每个动作绑定的按键列表
+		var event_list: Array = []
+		for event in events:
+			event_list.append(_event_to_string(event))
+		
+		result += "  - %s (deadzone: %.2f)\n" % [action_name, deadzone]
+		for ev_str in event_list:
+			result += "      → %s\n" % ev_str
 	
 	return {"success": true, "data": result}
-
-
-func _execute_clear(p_args: Dictionary) -> Dictionary:
-	var action_name: String = p_args.get("action_name", "")
-	
-	if action_name.is_empty():
-		return {"success": false, "data": "No action_name specified for clear operation."}
-	
-	var setting_path = "input/" + action_name
-	
-	if not ProjectSettings.has_setting(setting_path):
-		return {"success": false, "data": "Action not found: %s" % action_name}
-	
-	# 清空 ProjectSettings 中的事件
-	var action_dict: Dictionary = ProjectSettings.get_setting(setting_path)
-	action_dict["events"] = []
-	ProjectSettings.set_setting(setting_path, action_dict)
-	
-	# 清空内存 InputMap 中的事件
-	if InputMap.has_action(action_name):
-		InputMap.action_erase_events(action_name)
-	
-	var err = ProjectSettings.save()
-	if err != OK:
-		return {"success": false, "data": "Failed to save ProjectSettings. Error code: %d" % err}
-	
-	return {"success": true, "data": "Cleared all events for action: %s" % action_name}
 
 
 # ==================== 动作添加/更新 ====================

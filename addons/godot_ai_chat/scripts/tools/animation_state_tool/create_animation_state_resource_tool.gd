@@ -3,7 +3,7 @@ extends AiTool
 
 
 func _init() -> void:
-	tool_name = "create_animation_graph_resource"
+	tool_name = "create_animation_state_resource"
 	tool_description = "Creates a new empty AnimationNodeStateMachine resource (.tres file)."
 
 

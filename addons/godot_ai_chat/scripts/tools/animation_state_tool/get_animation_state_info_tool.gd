@@ -3,7 +3,7 @@ extends AiTool
 
 
 func _init() -> void:
-	tool_name = "get_animation_graph_info"
+	tool_name = "get_animation_state_info"
 	tool_description = "Returns a text summary of the StateMachine (Nodes & Transitions)."
 
 
