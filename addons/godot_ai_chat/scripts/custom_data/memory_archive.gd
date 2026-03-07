@@ -1,5 +1,6 @@
 @tool
-class_name MemoryArchive extends Resource
+class_name MemoryArchive
+extends Resource
 
 const SAVE_PATH: String = PluginPaths.PLUGIN_DIR + "memory_archive.tres"
 
