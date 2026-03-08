@@ -8,9 +8,9 @@ extends AiTool
 
 ## 上下文类型与允许的扩展名映射
 const EXTENSION_MAP: Dictionary = {
-	"scene_file": ["tscn"],
-	"gdscript_file": ["gd", "gdshader"],
-	"text-based_file": ["txt", "md", "json", "cfg", "tres"],
+	"scene": ["tscn"],
+	"gdscript": ["gd", "gdshader"],
+	"text-based_file": ["txt", "md", "json", "cfg", "tres", "gdshader"],
 	"image-meta": ["png", "jpg", "jpeg", "bmp", "tga", "exr"]
 }
 
@@ -30,7 +30,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"context_type": {
 				"type": "string",
-				"enum": ["folder_structure", "scene_file", "gdscript_file", "text-based_file", "image-meta"],
+				"enum": ["folder_structure", "scene", "gdscript", "text-based_file", "image-meta"],
 				"description": "The type of context to retrieve."
 			},
 			"path": {
@@ -119,9 +119,9 @@ func _handle_folder_structure(p_path: String, p_provider: ContextProvider) -> Di
 ## [return]: 检索结果字典
 func _execute_context_retrieval(p_context_type: String, p_path: String, p_provider: ContextProvider) -> Dictionary:
 	match p_context_type:
-		"scene_file":
+		"scene":
 			return p_provider.get_scene_tree_as_markdown(p_path)
-		"gdscript_file":
+		"gdscript":
 			return p_provider.get_script_content_as_markdown(p_path)
 		"text-based_file":
 			return p_provider.get_text_content_as_markdown(p_path)

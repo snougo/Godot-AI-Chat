@@ -3,7 +3,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "add_memory"
-	tool_description = "Add a new memory to the MemoryArchive."
+	tool_description = "Add a new memory to the MemoryArchive. Tags name must be English."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -21,7 +21,7 @@ func get_parameters_schema() -> Dictionary:
 			"tags": {
 				"type": "array",
 				"items": {"type": "string"},
-				"description": "Memory tags for search"
+				"description": "Memory tags for search, Using English For Tags Name."
 			}
 		},
 		"required": ["title", "content", "tags"]

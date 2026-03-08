@@ -3,7 +3,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "search_memories"
-	tool_description = "Search memories by tag."
+	tool_description = "Search memories by tag. Using `list_memory_tags` tool before searching."
 
 
 func get_parameters_schema() -> Dictionary:

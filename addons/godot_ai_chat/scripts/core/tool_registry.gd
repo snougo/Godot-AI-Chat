@@ -15,7 +15,7 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/check_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_context_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_project_settings_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/create_markdown_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_markdown_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_memories_tool.gd",

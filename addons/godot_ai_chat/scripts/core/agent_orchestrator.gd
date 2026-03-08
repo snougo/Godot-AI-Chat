@@ -78,6 +78,12 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettings) 
 			
 			# 清洗模型画蛇添足的 XML 标签
 			tool_name = tool_name.replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
+			
+			# 验证工具名称有效性，跳过幻觉/代码片段
+			if not _is_valid_tool_name(tool_name):
+				AIChatLogger.warn("[AgentOrchestrator] Invalid tool name detected, skipping: \"%s\"" % tool_name)
+				continue
+			
 			if call.has("function"):
 				call.function["name"] = tool_name
 			
@@ -137,3 +143,25 @@ func _attach_image_to_last_user_message(history: ChatMessageHistory, p_data: Pac
 		if history.messages[i].role == ChatMessage.ROLE_USER:
 			history.messages[i].add_image(p_data, p_mime)
 			return
+
+
+# 验证工具名称是否有效
+# 规则：
+# 1. 不能为空
+# 2. 长度不超过 64 字符
+# 3. 只能包含字母、数字、下划线和连字符
+# 4. 必须以字母开头
+func _is_valid_tool_name(p_name: String) -> bool:
+	if p_name.is_empty():
+		return false
+	
+	if p_name.length() > 64:
+		return false
+	
+	# 检查是否包含换行符或特殊字符（明显是代码片段）
+	if "\n" in p_name or "(" in p_name or ")" in p_name:
+		return false
+	
+	# 必须符合函数命名规范
+	var regex := RegEx.create_from_string("^[a-zA-Z][a-zA-Z0-9_-]*$")
+	return regex.search(p_name) != null
