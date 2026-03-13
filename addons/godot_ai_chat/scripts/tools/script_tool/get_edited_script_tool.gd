@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "get_edited_script"
-	tool_description = "Gets the content of the currently open script in the Script Editor, sliced by logic blocks. Returns error if no script is currently open."
+	tool_description = "Gets the content of the currently open script in the Script Editor with line numbers. Returns error if no script is currently open."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -34,7 +34,7 @@ func execute(_p_args: Dictionary) -> Dictionary:
 	
 	_focus_script_editor()
 	
-	# 传入明确的文件路径，确保正确显示
-	var view := get_sliced_code_view(code_edit, current_path)
+	# 返回带行号的完整脚本内容
+	var view: String = get_full_script_with_line_numbers(code_edit)
 	
-	return {"success": true, "data": view}
+	return {"success": true, "data": "File: %s\n\n%s" % [current_path, view]}

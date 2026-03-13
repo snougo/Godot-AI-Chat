@@ -13,14 +13,14 @@ static var _scan_delay_ms: int = 100  # 延迟 100ms 执行
 # --- Public Functions ---
 
 ## 获取插件设置资源。如果文件不存在，则创建一个默认设置文件。
-static func get_plugin_settings() -> PluginSettings:
-	var plugin_settings: PluginSettings
+static func get_plugin_settings() -> PluginSettingsConfig:
+	var plugin_settings: PluginSettingsConfig
 	
 	if ResourceLoader.exists(PluginPaths.SETTINGS_PATH):
 		# 使用 CACHE_MODE_IGNORE 确保读取最新设置
 		plugin_settings = ResourceLoader.load(PluginPaths.SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:
-		plugin_settings = PluginSettings.new()
+		plugin_settings = PluginSettingsConfig.new()
 		var err: Error = ResourceSaver.save(plugin_settings, PluginPaths.SETTINGS_PATH)
 		if err == OK:
 			update_editor_filesystem(PluginPaths.SETTINGS_PATH)
@@ -161,6 +161,38 @@ static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Arra
 	# 如果 <think> 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
 	# 直接放行，不再做内容匹配（防止误杀）
 	return p_tool_calls
+
+
+## 验证工具名称是否有效
+static func is_valid_tool_name(p_name: String) -> bool:
+	# 1. 不能为空
+	if p_name.is_empty():
+		return false
+	# 2. 长度不超过 64 字符
+	if p_name.length() > 64:
+		return false
+	# 检查是否包含换行符或特殊字符（明显是代码片段）
+	if "\n" in p_name or "(" in p_name or ")" in p_name:
+		return false
+	# 必须符合函数命名规范
+	var regex := RegEx.create_from_string("^[a-zA-Z][a-zA-Z0-9_-]*$")
+	
+	return regex.search(p_name) != null
+
+
+## 过滤无效的工具调用
+## 返回一个只包含有效工具名称的新数组
+static func filter_invalid_tool_calls(p_tool_calls: Array) -> Array:
+	var valid: Array = []
+	
+	for tc in p_tool_calls:
+		var name: String = tc.get("function", {}).get("name", "")
+		if is_valid_tool_name(name):
+			valid.append(tc)
+		else:
+			AIChatLogger.warn("[ToolBox] Filtered invalid tool call: \"%s\"" % name)
+	
+	return valid
 
 
 # --- Private Functions ---

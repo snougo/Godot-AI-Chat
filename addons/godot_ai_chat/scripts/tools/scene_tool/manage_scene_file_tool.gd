@@ -49,7 +49,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 2. Extension Check
 	var ext: String = scene_path.get_extension().to_lower()
 	if ext != "tscn":
-		return {"success": false, "data": "Invalid file extension '%s'. Allowed extensions: .tscn, .scn" % ext}
+		return {"success": false, "data": "Invalid file extension '%s'. Allowed extensions: .tscn" % ext}
 	
 	match action:
 		"open", "switch":

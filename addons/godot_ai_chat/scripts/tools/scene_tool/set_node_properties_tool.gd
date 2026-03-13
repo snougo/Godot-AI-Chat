@@ -13,15 +13,23 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"node_path": {
 				"type": "string",
-				"description": "Target node path (e.g., 'RootNode/ChildNode'). Use absolute paths from scene tree root."
+				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')\n\nTip: Use get_edited_scene first to see the current scene structure."
 			},
 			"property_name": {
 				"type": "string",
-				"description": "Property to set (e.g., 'position'). Required."
+				"description": """Target node path. CRITICAL DISTINCTION:
+								- For NODE paths (finding the target node): Use 'Parent/Child' with SLASH '/'
+								  Example: 'Player/Body' to find the Body node
+								
+								- For RESOURCE properties (setting sub-resource properties): Use 'node:resource:property' with COLON ':'
+								  Example: 'TestCapsule:mesh:height' to set CapsuleMesh height
+								  Example: 'TestCapsule:mesh:material:albedo_color' for nested resources
+								
+								NEVER use 'Node/resource/property' with slashes for resource properties!"""
 			},
 			"value": {
 				"type": "string",
-				"description": "Value to set. Supports types:\n- Vec2/3: '[x, y]'\n- Color: '[r, g, b, a]'\n- Resource: 'res://path' or 'new:ClassName'"
+				"description": "Value to set. Supported formats:\n- Bool: 'true' or 'false'\n- Number: '100' or '3.14'\n- Vec2/3: '[x, y]' or '[x, y, z]'\n- Color: '[r, g, b]' or '[r, g, b, a]'\n- String: 'hello'\n- Resource: 'res://path' or 'new:ClassName'"
 			}
 		},
 		"required": ["node_path", "property_name", "value"]
@@ -37,18 +45,8 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var node: Node = get_node_from_root(root, node_path)
 	
 	if not node:
-		# 提供当前场景树结构和路径建议
-		var scene_tree: String = get_scene_tree_string(root)
-		var suggestions: Array[String] = find_similar_paths(root, node_path)
-		var suggestion_text: String = ""
-		
-		if not suggestions.is_empty():
-			suggestion_text = "\n\nDid you mean:\n  - " + "\n  - ".join(suggestions)
-		
-		return {
-			"success": false, 
-			"data": "Node not found: %s\n\nCurrent Scene Tree:\n%s%s" % [node_path, scene_tree, suggestion_text]
-		}
+		var hint = get_node_path_error_hint(root, node_path)
+		return {"success": false, "data": hint}
 	
 	var prop: String = p_args.get("property_name", "")
 	if prop.is_empty():
@@ -118,7 +116,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		var base_obj: Variant = node.get(base_prop)
 		if base_obj == null:
 			return {"success": false, "data": "Cannot set property '%s': Base object '%s' is null." % [prop, base_prop]}
-		if base_obj is Object and not base_obj.has(sub_prop):
+		if base_obj is Object and not _object_has_property(base_obj, sub_prop):
 			return {"success": false, "data": "Property '%s' not found on %s." % [sub_prop, base_prop]}
 	
 	var ur: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
@@ -143,3 +141,13 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"new_value": final_val,
 		"node_properties_snapshot": node_props
 	}}
+
+
+func _object_has_property(obj: Object, prop_name: String) -> bool:
+	if obj == null:
+		return false
+	for p in obj.get_property_list():
+		if p.name == prop_name:
+			return true
+	
+	return false

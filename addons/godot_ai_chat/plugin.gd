@@ -21,7 +21,7 @@ func _enter_tree() -> void:
 	
 	chat_hub_instance = scene.instantiate()
 	# 将界面添加到编辑器停靠栏 (右侧左上区域)
-	add_control_to_dock(DOCK_SLOT_RIGHT_UL, chat_hub_instance)
+	add_control_to_dock(DOCK_SLOT_LEFT_UL, chat_hub_instance)
 	
 	# 注入编辑器依赖
 	# 获取 ChatUI 节点并传递文件系统引用，用于文件选择器等功能

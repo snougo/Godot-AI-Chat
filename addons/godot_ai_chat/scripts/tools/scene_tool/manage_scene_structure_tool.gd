@@ -14,23 +14,23 @@ func get_parameters_schema() -> Dictionary:
 			"action": {
 				"type": "string",
 				"enum": ["add_node", "delete_node", "move_node"],
-				"description": "The action to perform. Using `get_scene_tree` before add/delete/move node."
+				"description": "The action to perform. Use 'get_edited_scene' first to see the current scene structure."
 			},
 			"node_path": {
 				"type": "string",
-				"description": "Target node path. Required for 'delete_node' and 'move_node'."
+				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')\n\nRequired for: delete_node, move_node"
 			},
 			"parent_path": {
 				"type": "string",
-				"description": "Target parent path. Required for 'move_node'. Optional for 'add_node' (defaults to root)."
+				"description": "Target parent path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body')\n\nRequired for: move_node, add_node (defaults to root if empty)"
 			},
 			"node_class": {
 				"type": "string",
-				"description": "Class name (e.g., 'Node3D') or 'res://' path. Required for 'add_node'."
+				"description": "Class name (e.g., 'Node3D', 'Node2D', 'Control', 'Sprite2D') or 'res://path/to/scene.tscn'. Required for 'add_node'."
 			},
 			"node_name": {
 				"type": "string",
-				"description": "Name for the new node. Optional for 'add_node'."
+				"description": "Name for the new node. Optional for 'add_node' (auto-generated if empty)."
 			}
 		},
 		"required": ["action"]
@@ -70,7 +70,8 @@ func _execute_add_node(root: Node, p_args: Dictionary) -> Dictionary:
 	var parent_path: String = p_args.get("parent_path", ".")
 	var parent: Node = get_node_from_root(root, parent_path)
 	if not parent:
-		return {"success": false, "data": "Parent not found: %s" % parent_path}
+		var hint = get_node_path_error_hint(root, parent_path)
+		return {"success": false, "data": "Parent not found.\n" + hint}
 	
 	var type: String = p_args.get("node_class", "")
 	if type.is_empty():
@@ -101,7 +102,8 @@ func _execute_delete_node(root: Node, p_args: Dictionary) -> Dictionary:
 	
 	var node: Node = get_node_from_root(root, node_path)
 	if not node:
-		return {"success": false, "data": "Node not found: %s" % node_path}
+		var hint = get_node_path_error_hint(root, node_path)
+		return {"success": false, "data": "Node not found.\n" + hint}
 	
 	var parent: Node = node.get_parent()
 	var ur: EditorUndoRedoManager = EditorInterface.get_editor_undo_redo()
@@ -124,14 +126,16 @@ func _execute_move_node(root: Node, p_args: Dictionary) -> Dictionary:
 	
 	var node: Node = get_node_from_root(root, node_path)
 	if not node:
-		return {"success": false, "data": "Node not found: %s" % node_path}
+		var hint = get_node_path_error_hint(root, node_path)
+		return {"success": false, "data": "Node not found.\n" + hint}
 	
 	if node == root:
 		return {"success": false, "data": "Cannot move root node."}
 	
 	var new_parent: Node = get_node_from_root(root, target_parent_path)
 	if not new_parent:
-		return {"success": false, "data": "Target parent not found: %s" % target_parent_path}
+		var hint = get_node_path_error_hint(root, target_parent_path)
+		return {"success": false, "data": "Target parent not found.\n" + hint}
 	
 	if node.get_parent() == new_parent:
 		return {"success": false, "data": "Node is already a child of the target parent."}

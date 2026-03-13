@@ -72,9 +72,9 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var full_path: String = folder_path + clean_file_name + ".md"
 	
 	# [Check 3] 路径安全检查
-	#var safety_check: String = validate_path_safety(full_path)
-	#if not safety_check.is_empty():
-		#return {"success": false, "data": safety_check}
+	var safety_check: String = validate_path_safety(full_path)
+	if not safety_check.is_empty():
+		return {"success": false, "data": safety_check}
 	
 	return _create_file(full_path, folder_path, content)
 

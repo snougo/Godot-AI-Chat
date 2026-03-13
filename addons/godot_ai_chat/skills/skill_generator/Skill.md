@@ -15,7 +15,5 @@
 	- 严格按照 [Skill.md 模版] 编写文档，确保“指令”部分具有高度可操作性（每一步骤建议以动词开头，逻辑清晰无歧义）。
 5. **预览与建议**：在回复中展示 `Skill.md` 文档预览，并向用户推荐该技能配套工具。
 
-### 拓展引用
-自定义技能的 `Skill.md` 文档有着固定的模版格式，欲知详情请查阅 `res://addons/godot_ai_chat/skills/skill_generator/reference/` 文件夹中的引用文件。
-
-### 示例
+### 拓展知识
+自定义技能的 `Skill.md` 文档有着固定的模版格式，欲知详情请查阅 `res://addons/godot_ai_chat/skills/skill_generator/reference/` 文件夹中的相关文档。

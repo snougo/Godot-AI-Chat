@@ -166,7 +166,21 @@ func get_role() -> String:
 
 ## 展示工具调用详情
 ## [param p_tool_call]: 工具调用信息字典
+## 展示工具调用详情
+## [param p_tool_call]: 工具调用信息字典
 func show_tool_call(p_tool_call: Dictionary) -> void:
+	# 提取工具名称
+	var tool_name: String = ""
+	if p_tool_call.has("function"):
+		tool_name = p_tool_call.function.get("name", "unknown")
+	else:
+		tool_name = p_tool_call.get("name", "unknown")
+	
+	# [防御] 验证工具名称有效性，跳过幻觉/代码片段
+	#if not ToolBox.is_valid_tool_name(tool_name):
+		#AIChatLogger.warn("[ChatMessageBlock] Skipped invalid tool call UI: \"%s\"" % tool_name)
+		#return
+	
 	var call_id: String = p_tool_call.get("id", "no-id")
 	var safe_node_name: String = ("Tool_" + call_id).validate_node_name()
 	
@@ -198,12 +212,6 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 	title_label.bbcode_enabled = true
 	title_label.fit_content = true
 	title_label.selection_enabled = false
-	
-	var tool_name: String = ""
-	if p_tool_call.has("function"):
-		tool_name = p_tool_call.function.get("name", "unknown")
-	else:
-		tool_name = p_tool_call.get("name", "unknown")
 	
 	title_label.append_text("[b][color=cyan]🔧 Tool Call:[/color][/b] [color=yellow]%s[/color]" % tool_name)
 	vbox.add_child(title_label)
