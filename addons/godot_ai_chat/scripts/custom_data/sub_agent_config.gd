@@ -9,7 +9,7 @@ extends Resource
 @export var api_key: String = ""
 @export var model_name: String = ""
 
-@export_range(1, 80, 1) var max_chat_turns: int = 40
+@export_range(1, 100, 1) var max_chat_turns: int = 40
 @export var network_timeout: int = 180
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.6
 

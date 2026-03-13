@@ -13,10 +13,7 @@ var _history: ChatMessageHistory
 
 
 func _exit_tree():
-	# 清理工具实例
-	for tool_inst in _tools.values():
-		if is_instance_valid(tool_inst):
-			tool_inst.queue_free()
+	# RefCounted 对象会在 _tools.clear() 后引用计数归零自动释放
 	_tools.clear()
 	
 	# 清理历史消息
@@ -28,7 +25,6 @@ func _exit_tree():
 		_config = null
 	
 	AIChatLogger.info("[SubAgent] Removed from scene tree and ready to free.")
-	queue_free()
 
 
 func run_task() -> String:
@@ -63,10 +59,12 @@ func run_task() -> String:
 	if _config.model_name.is_empty():
 		var err = "Sub Agent 启动失败：模型名称 (model_name) 为空！请在 sub_agent_config.tres 中配置。"
 		AIChatLogger.error(err)
+		_remove_sub_agent_node_from_root()
 		return err
 	
 	var provider = ProviderFactory.create_provider(_config.api_provider)
 	if not provider:
+		_remove_sub_agent_node_from_root()
 		return "Failed to initialize Sub Agent Provider."
 	
 	var is_gemini = provider is GeminiProvider
@@ -101,6 +99,7 @@ func run_task() -> String:
 			if result[0] == HTTPRequest.RESULT_TIMEOUT:
 				err_msg = "Sub Agent Timeout!"
 			AIChatLogger.error("[Sub Agent] " + err_msg)
+			_remove_sub_agent_node_from_root()
 			return err_msg
 		
 		# 解析响应
@@ -110,6 +109,7 @@ func run_task() -> String:
 			if response.has("raw"):
 				err_msg += "\nRaw Response: " + str(response.raw)
 			AIChatLogger.error(err_msg)
+			_remove_sub_agent_node_from_root()
 			return "Sub Agent API Error: " + str(response.error)
 		
 		var content = response.get("content", "")
@@ -226,3 +226,4 @@ func _remove_sub_agent_node_from_root() -> void:
 				sub_agent_orchestrator = child
 				# 释放挂载到编辑器根节点上的子代理节点
 				root.remove_child(child)
+				queue_free()

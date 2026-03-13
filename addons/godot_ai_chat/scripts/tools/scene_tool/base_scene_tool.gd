@@ -157,6 +157,10 @@ func instantiate_node_from_type(p_type_str: String) -> Node:
 			if res is PackedScene:
 				return res.instantiate()
 	elif ClassDB.class_exists(p_type_str):
+		# 提前拦截：检查类是否是 Node 的派生类
+		if not ClassDB.is_parent_class(p_type_str, "Node"):
+			return null
+		
 		var instance = ClassDB.instantiate(p_type_str)
 		if instance is Node:
 			return instance
