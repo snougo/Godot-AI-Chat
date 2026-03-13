@@ -35,7 +35,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if query.is_empty():
 		return {"success": false, "data": "Error: Query cannot be empty."}
 	
-	var settings: PluginSettings = ToolBox.get_plugin_settings()
+	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	var api_key: String = settings.tavily_api_key
 	if api_key.is_empty():
 		return {"success": false, "data": "Error: Tavily API Key is not configured."}
