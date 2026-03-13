@@ -101,28 +101,23 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 
 ## 解析非流式响应 (完整 Body)
 func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
-	var json_str: String = p_body_bytes.get_string_from_utf8()
-	var json: Variant = JSON.parse_string(json_str)
+	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
 	
-	if json is Dictionary:
-		if json.has("choices") and not json.choices.is_empty():
-			var msg: Dictionary = json.choices[0].get("message", {})
-			var result: Dictionary = {
-				"content": msg.get("content", ""),
-				"tool_calls": msg.get("tool_calls",[]),
-				"role": msg.get("role", "assistant")
-			}
+	if json is Dictionary and json.has("choices") and not json.choices.is_empty():
+		var msg: Dictionary = json.choices[0].get("message", {})
+		var result: Dictionary = {
+			"content": msg.get("content", ""),
+			"tool_calls": msg.get("tool_calls", []),
+			"role": msg.get("role", "assistant")
+		}
+		
+		# [修复] 解析非流式响应中的思考内容，防止数据丢失
+		if msg.has("reasoning_content"):
+			result["reasoning_content"] = msg.reasoning_content
 			
-			if msg.has("reasoning_content"):
-				result["reasoning_content"] = msg.reasoning_content
-			
-			return result
-		elif json.has("error"):
-			# 捕获 API 明确返回的错误对象 (比如上下文超限等)
-			return {"error": str(json.error), "raw": json_str}
+		return result
 	
-	# 如果找不到 choices 也没有 error，连同原始文本一起返回方便调试
-	return {"error": "Unknown response format", "raw": json_str}
+	return {"error": "Unknown response format"}
 
 
 ## 实现流式碎片拼装逻辑

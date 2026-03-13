@@ -17,12 +17,6 @@ signal finished
 ## 请求失败时触发
 signal failed(error_message: String)
 
-# --- Enums / Constants ---
-
-const INACTIVITY_TIMEOUT_MS: int = 180000  # 180秒无数据则强制退出
-const CONNECT_TIMEOUT_MS: int = 30000  # 10秒连接超时
-const REQUEST_TIMEOUT_MS: int = 30000
-
 # --- Private Vars ---
 
 var _provider: BaseLLMProvider
@@ -44,9 +38,7 @@ var _incoming_text_buffer: String = ""
 var _current_sse_event: String = ""
 
 # 保存 HTTPClient 引用以便强制关闭
-var _http_client: HTTPClient = null
-
-var _last_data_received_time: int = 0
+var _http_client: HTTPClient = null  
 
 
 # --- Built-in Functions ---
@@ -65,7 +57,6 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 ## 开始执行流式请求（在线程池中运行）
 func start() -> void:
 	_stop_flag = false
-	_last_data_received_time = Time.get_ticks_msec()
 	_task_id = WorkerThreadPool.add_task(self._thread_task, false, "Godot AI Chat Stream Request")
 	AIChatLogger.debug("StreamRequest: Task ID %d started" % _task_id)
 
@@ -115,22 +106,12 @@ func _thread_task() -> void:
 		client.close() 
 		return
 	
-	# [Fix] 添加请求发送超时
-	var connect_start_time: int = Time.get_ticks_msec()
-	
 	# 等待连接
 	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
 		client.poll()
 		if _should_stop():
 			client.close() 
 			return
-		
-		# [Fix] 检查请求超时
-		if Time.get_ticks_msec() - connect_start_time > CONNECT_TIMEOUT_MS:
-			_emit_failure("Connection timeout: Could not connect to server within 10 seconds")
-			client.close()
-			return
-		
 		OS.delay_msec(10)
 	
 	if client.get_status() != HTTPClient.STATUS_CONNECTED:
@@ -145,21 +126,12 @@ func _thread_task() -> void:
 		client.close() 
 		return
 	
-	var request_start_time: int = Time.get_ticks_msec()
-	
 	# 4. 等待响应
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
 		if _should_stop():
 			client.close() 
 			return
-		
-		# [Fix] 检查请求超时
-		if Time.get_ticks_msec() - request_start_time > REQUEST_TIMEOUT_MS:
-			_emit_failure("Request timeout: No response received within %d seconds" % (REQUEST_TIMEOUT_MS / 1000))
-			client.close()
-			return
-		
 		OS.delay_msec(10)
 	
 	if not client.has_response():
@@ -220,9 +192,6 @@ func _thread_task() -> void:
 		var chunk: PackedByteArray = client.read_response_body_chunk()
 		
 		if chunk.size() > 0:
-			# [Fix] 收到数据，重置超时计时器
-			_last_data_received_time = Time.get_ticks_msec()
-			
 			_incoming_byte_buffer.append_array(chunk)
 			
 			if _is_buffer_safe_for_utf8(_incoming_byte_buffer):
@@ -234,13 +203,6 @@ func _thread_task() -> void:
 					_process_sse_buffer()
 				elif parser_type == BaseLLMProvider.StreamParserType.JSON_LIST:
 					_process_json_list_buffer()
-		else:
-			# [Fix] 没有收到数据，检查是否超时
-			var elapsed: int = Time.get_ticks_msec() - _last_data_received_time
-			if elapsed > INACTIVITY_TIMEOUT_MS:
-				_emit_failure("Connection timeout: No data received for 30 seconds")
-				client.close()
-				return
 		
 		OS.delay_msec(10)
 	
@@ -439,7 +401,7 @@ func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
 
 # 线程安全地检查是否应该停止
 func _should_stop() -> bool:
-	_stop_flag_lock.lock()
+	#_stop_flag_lock.lock()
 	var result: bool = _stop_flag
-	_stop_flag_lock.unlock()
+	#_stop_flag_lock.unlock()
 	return result

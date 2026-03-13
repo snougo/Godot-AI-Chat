@@ -326,7 +326,7 @@ func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls
 
 # 实例化一个新的消息块
 func _create_block() -> ChatMessageBlock:
-	var block: ChatMessageBlock = CHAT_MESSAGE_BLOCK_SCENE.instantiate(PackedScene.GEN_EDIT_STATE_DISABLED)
+	var block: ChatMessageBlock = CHAT_MESSAGE_BLOCK_SCENE.instantiate()
 	chat_list_container.add_child(block)
 	return block
 

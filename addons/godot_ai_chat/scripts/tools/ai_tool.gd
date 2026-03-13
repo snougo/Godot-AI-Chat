@@ -63,6 +63,6 @@ func validate_path_safety(p_path: String) -> String:
 	# 检查是否是路径黑名单
 	for blocked_pattern in PATH_BLACKLIST:
 		if check_path.find(blocked_pattern) != -1:
-			return "Security Error: Operation denied on restricted directory '%s'. Because this is a controlled area, write operations are prohibited. " % blocked_pattern
+			return "Security Error: Operation denied on restricted directory '%s'." % blocked_pattern
 	
 	return ""

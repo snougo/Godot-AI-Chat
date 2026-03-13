@@ -3,7 +3,7 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "get_node_properties"
+	tool_name = "check_node_properties"
 	tool_description = "Gets detailed information about a node in the current edited scene, including its properties and children (with Resource details)."
 
 
@@ -13,7 +13,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"node_path": {
 				"type": "string",
-				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')\n\nTip: Use get_edited_scene first to see the current scene structure."
+				"description": "Target node path (e.g., 'RootNode/ChildNode'). Use absolute paths from scene tree root."
 			}
 		},
 		"required": []
@@ -29,8 +29,18 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var target: Node = get_node_from_root(root, node_path)
 	
 	if not target:
-		var hint = get_node_path_error_hint(root, node_path)
-		return {"success": false, "data": hint}
+		# ✅ 优化：提供当前场景树结构和路径建议
+		var scene_tree: String = get_scene_tree_string(root)
+		var suggestions: Array[String] = find_similar_paths(root, node_path)
+		var suggestion_text: String = ""
+		
+		if not suggestions.is_empty():
+			suggestion_text = "\n\nDid you mean:\n  - " + "\n  - ".join(suggestions)
+		
+		return {
+			"success": false, 
+			"data": "Node not found: %s\n\nCurrent Scene Tree:\n%s%s" % [node_path, scene_tree, suggestion_text]
+		}
 	
 	# 返回完整节点属性（含 Resource）
 	var all_properties := get_all_node_properties(target)

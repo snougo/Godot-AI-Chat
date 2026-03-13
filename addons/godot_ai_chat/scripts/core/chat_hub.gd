@@ -81,7 +81,7 @@ func _run_chat_loop() -> void:
 	if not _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
 		_network_manager.new_stream_chunk_received.connect(_on_stream_chunk)
 	
-	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	
 	# === 控制流收口：协程挂起，直至整个工具链生成结束 ===
 	await _agent_orchestrator.run_chat_cycle(_current_chat_window.chat_history, settings)
@@ -113,7 +113,7 @@ func _load_history_to_ui(history: ChatMessageHistory, filename: String) -> void:
 
 
 func _update_turn_info() -> void:
-	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	var history: ChatMessageHistory = _current_chat_window.chat_history
 	
 	if history and settings:

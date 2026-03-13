@@ -81,10 +81,6 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	var timeout_sec: float = float(ToolBox.get_plugin_settings().network_timeout)
 	var last_active_time: float = Time.get_ticks_msec() / 1000.0
 	
-	# [Fix] 添加总请求超时（作为后备保护）
-	var request_start_time: float = Time.get_ticks_msec() / 1000.0
-	var total_timeout_sec: float = timeout_sec + 30.0  # 比活动超时多30秒
-	
 	current_stream_request.chunk_received.connect(func(chunk: Dictionary): 
 		# 每次收到新数据块，重置超时计时器
 		last_active_time = Time.get_ticks_msec() / 1000.0
@@ -112,8 +108,6 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 		
 		# 超时看门狗检测
 		var current_time: float = Time.get_ticks_msec() / 1000.0
-		
-		# 无数据活动超时
 		if current_time - last_active_time > timeout_sec:
 			result.error = "Request Timeout: No response for %d seconds." % timeout_sec
 			cancel_stream() # 主动掐断线程
@@ -134,7 +128,7 @@ func cancel_stream() -> void:
 
 
 func _update_provider_config() -> bool:
-	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	var settings: PluginSettings = ToolBox.get_plugin_settings()
 	api_key = settings.api_key
 	api_base_url = settings.api_base_url
 	temperature = settings.temperature

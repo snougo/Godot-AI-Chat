@@ -1,4 +1,4 @@
-class_name PluginSettingsConfig
+class_name PluginSettings
 extends Resource
 
 ## 插件设置数据类
@@ -30,7 +30,7 @@ extends Resource
 
 ## 日志级别开关 (Bitmask: DEBUG=1, INFO=2, WARN=4, ERROR=8)
 ## 默认 14 (INFO|WARN|ERROR) = 2+4+8
-@export_flags("Debug", "Info", "Warn", "Error") var log_flags: int = 14
+@export_flags("Debug", "Info", "Warn", "Error") var log_flags: int = 12
 
 ## 系统提示词（System Prompt），用于设定 AI 的角色和行为准则
 @export_multiline var system_prompt: String = "You are a helpful Godot Engine Assistant."

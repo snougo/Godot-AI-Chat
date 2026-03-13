@@ -14,7 +14,10 @@ const PLUGIN_DIR: String = "res://addons/godot_ai_chat/"
 # --- Configuration ---
 
 ## 插件设置资源文件路径
-const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings_config.tres"
+const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings.tres"
+
+# TODO列表资源文件路径
+#const TODO_LIST_PATH: String = PLUGIN_DIR + "todo_list.tres"
 
 # --- Data Storage ---
 
@@ -38,9 +41,6 @@ const CODE_HIGHLIGHT_THEME: String = ASSETS_DIR + "code_hightlight.tres"
 
 ## 场景目录
 const SCENE_DIR: String = PLUGIN_DIR + "scene/"
-
-## 网络管理器场景路径
-const CHAT_HUB_SCENE: String = SCENE_DIR + "chat_hub.tscn"
 
 ## 聊天消息块场景路径
 const CHAT_MESSAGE_BLOCK_SCENE: String = SCENE_DIR + "chat_message_block.tscn"

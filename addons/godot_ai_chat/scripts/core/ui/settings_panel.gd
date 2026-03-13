@@ -53,7 +53,7 @@ enum SaveButtonState {
 # --- Public Vars ---
 
 ## 持有加载后的设置资源对象
-var settings_resource: PluginSettingsConfig
+var settings_resource: PluginSettings
 
 
 # --- Built-in Functions ---
@@ -105,7 +105,7 @@ func _load_and_display_settings() -> void:
 	if ResourceLoader.exists(PluginPaths.SETTINGS_PATH):
 		settings_resource = load(PluginPaths.SETTINGS_PATH)
 	else:
-		settings_resource = PluginSettingsConfig.new()
+		settings_resource = PluginSettings.new()
 		ResourceSaver.save(settings_resource, PluginPaths.SETTINGS_PATH)
 
 	_populate_ui_from_resource()

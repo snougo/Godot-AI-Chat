@@ -3,8 +3,8 @@ extends BaseScriptTool
 
 
 func _init() -> void:
-	tool_name = "insert_code"
-	tool_description = "Inserts new code at a specific line. The content is inserted exactly as provided - control spacing manually in new_content."
+	tool_name = "insert_new_slice"
+	tool_description = "Inserts new slice at a specific line. The content is inserted exactly as provided - control spacing manually in new_content."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -29,8 +29,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var content: String = p_args.get("new_content", "")
 	
 	var code_edit := _get_code_edit("")
-	if not code_edit: 
-		return {"success": false, "data": "No active script editor."}
+	if not code_edit: return {"success": false, "data": "No active script editor."}
 	
 	var total_lines := code_edit.get_line_count()
 	var insert_idx := line_arg - 1
@@ -53,9 +52,8 @@ func execute(p_args: Dictionary) -> Dictionary:
 	code_edit.set_caret_column(0)
 	code_edit.insert_text_at_caret(content)
 	
-	# 使用父类方法返回带行号的完整脚本内容
-	var view := get_full_script_with_line_numbers(code_edit)
+	var view := get_sliced_code_view(code_edit)
 	return {
 		"success": true, 
-		"data": "Inserted at line %d.\n\nCurrent Script:\n%s" % [line_arg, view]
+		"data": "Inserted at line %d.\n\nCurrent Structure:\n%s" % [line_arg, view]
 	}

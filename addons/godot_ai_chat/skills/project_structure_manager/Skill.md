@@ -37,8 +37,8 @@
 4. **处理共享资源**
 	- 如果一个资源被多个模块引用（例如“爆炸特效”或“通用字体”），将其移动到 `res://shared/` 下的对应分类中，而不是复制多份。
 
-### 拓展知识
-如需深入了解如何为Godot游戏项目构建目录，请查阅 `res://addons/godot_ai_chat/skills/script_tool_sop/reference/` 文件夹中的相关文档。
+### 拓展引用
+如需深入了解不同游戏类型的细分最佳实践，请查阅 `res://addons/godot_ai_chat/skills/script_tool_sop/reference/` 文件夹中的相关文档。
 
 ### 示列
 **场景**：用户正在开发一个名为“Slime”的敌人，目前文件散乱在根目录。

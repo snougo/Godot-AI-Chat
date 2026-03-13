@@ -221,7 +221,6 @@ text = "Debug"
 [node name="InfoCheckBox" type="CheckBox" parent="Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer" unique_id=1307547580]
 layout_mode = 2
 size_flags_horizontal = 3
-button_pressed = true
 text = "Info"
 
 [node name="WarnCheckBox" type="CheckBox" parent="Panel/MarginContainer/VBoxContainer/LogLevel/HBoxContainer" unique_id=432740919]

@@ -29,6 +29,9 @@
    - 参数 `file_path` (必填): 状态机资源路径
    - 返回文本摘要，包含所有节点和过渡的详细信息
 
+### 拓展引用
+如需深入了解动画状态机工具的使用，请查阅 `res://addons/godot_ai_chat/scripts/tools/animation_state_tool/` 文件夹中的脚本实现。
+
 ### 示例
 用户指令："在 `res://characters/player_asm.tres` 中，添加一个叫 'Idle' 的状态并关联 idle_anims.clip，再连接到 'Run' 状态，使用同步切换和0.3秒交叉淡出，自动推进。"
 
