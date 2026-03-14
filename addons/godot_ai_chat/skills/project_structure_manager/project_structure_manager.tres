@@ -7,5 +7,5 @@ script = ExtResource("1_wpjsi")
 skill_name = "Project Structure Manager"
 description = "本技能旨在帮助用户建立符合 Godot 引擎“节点化”与“自包含”设计哲学的项目目录结构。实现高内聚、低耦合，便于资产复用与团队协作。"
 instruction_file = "res://addons/godot_ai_chat/skills/project_structure_manager/Skill.md"
-tools = Array[String](["uid://c4oiyceux12sy", "uid://c6vuy1bx213ea"])
+tools = Array[String](["uid://c4oiyceux12sy", "uid://c6vuy1bx213ea", "uid://c0f8av5wi3pib", "uid://bx3tgapt002nb"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

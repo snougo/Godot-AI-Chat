@@ -8,10 +8,10 @@ extends AiTool
 
 ## 上下文类型与允许的扩展名映射
 const EXTENSION_MAP: Dictionary = {
-	"scene": ["tscn"],
-	"gdscript": ["gd", "gdshader"],
-	"text-based_file": ["txt", "md", "json", "cfg", "tres", "gdshader"],
-	"image-meta": ["png", "jpg", "jpeg", "bmp", "tga", "exr"]
+	"scene_tree_structure": ["tscn"],
+	"code_content": ["gd", "gdshader"],
+	"text_content": ["txt", "md", "json", "cfg", "tres", "gdshader"],
+	"image_meta": ["png", "jpg", "jpeg", "bmp", "tga", "exr"]
 }
 
 
@@ -30,7 +30,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"context_type": {
 				"type": "string",
-				"enum": ["folder_structure", "scene", "gdscript", "text-based_file", "image-meta"],
+				"enum": ["folder_structure", "scene_tree_structure", "code_content", "text_content", "image_meta"],
 				"description": "The type of context to retrieve."
 			},
 			"path": {
@@ -119,13 +119,13 @@ func _handle_folder_structure(p_path: String, p_provider: ContextProvider) -> Di
 ## [return]: 检索结果字典
 func _execute_context_retrieval(p_context_type: String, p_path: String, p_provider: ContextProvider) -> Dictionary:
 	match p_context_type:
-		"scene":
+		"scene_tree_structure":
 			return p_provider.get_scene_tree_as_markdown(p_path)
-		"gdscript":
+		"code_content":
 			return p_provider.get_script_content_as_markdown(p_path)
-		"text-based_file":
+		"text_content":
 			return p_provider.get_text_content_as_markdown(p_path)
-		"image-meta":
+		"image_meta":
 			return p_provider.get_image_metadata_as_markdown(p_path)
 		_:
 			return {"success": false, "data": "Internal Error: Unhandled context type."}

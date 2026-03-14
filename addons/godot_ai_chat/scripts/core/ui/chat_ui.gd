@@ -302,7 +302,7 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 	
 	var t: int = p_usage.get("total_tokens", p + c)
 	
-	# [Feature] Update Current Turn
+	# Update Current Turn
 	_current_turn_usage = {
 		"prompt": p,
 		"completion": c,

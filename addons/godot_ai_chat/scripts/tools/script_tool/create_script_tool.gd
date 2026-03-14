@@ -56,8 +56,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	var view := ""
 	if code_edit:
-		view = get_sliced_code_view(code_edit)
+		view = get_full_script_with_line_numbers(code_edit)
+		return {"success": true, "data": "Created %s.\n\nCurrent Script:\n%s" % [full_path, view]}
 	else:
-		view = "(Failed to open editor automatically, but file was created)"
-	
-	return {"success": true, "data": "Created %s.\n\n%s" % [full_path, view]}
+		return {"success": true, "data": "Created %s.\n\n(Failed to open editor automatically, but file was created successfully)" % full_path}

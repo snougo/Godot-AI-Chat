@@ -216,6 +216,9 @@ func _update_and_normalize_usage(p_new_usage: Dictionary) -> void:
 		_current_stream_usage.prompt_tokens = p_new_usage.input_tokens
 	if p_new_usage.has("output_tokens"):
 		_current_stream_usage.completion_tokens = p_new_usage.output_tokens
+	# 官方 Anthropic API 不返回 total_tokens，手动计算
+	if _current_stream_usage.has("prompt_tokens") and _current_stream_usage.has("completion_tokens"):
+		_current_stream_usage.total_tokens = _current_stream_usage.prompt_tokens + _current_stream_usage.completion_tokens
 
 
 # 单次转换 usage 格式（用于非流式响应）
