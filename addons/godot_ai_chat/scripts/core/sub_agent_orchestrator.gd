@@ -13,17 +13,7 @@ var _history: ChatMessageHistory
 
 
 func _exit_tree():
-	# RefCounted 对象会在 _tools.clear() 后引用计数归零自动释放
-	_tools.clear()
-	
-	# 清理历史消息
-	if is_instance_valid(_history):
-		_history = null
-	
-	# 清理配置
-	if is_instance_valid(_config):
-		_config = null
-	
+	_clean_reference()
 	AIChatLogger.info("[SubAgent] Removed from scene tree and ready to free.")
 
 
@@ -227,3 +217,11 @@ func _remove_sub_agent_node_from_root() -> void:
 				# 释放挂载到编辑器根节点上的子代理节点
 				root.remove_child(child)
 				queue_free()
+
+
+func _clean_reference() -> void:
+	# RefCounted 对象会在 _tools.clear() 后引用计数归零自动释放
+	_tools.clear()
+	# 清理历史消息
+	if is_instance_valid(_history):
+		_history = null

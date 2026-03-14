@@ -4,8 +4,8 @@ extends OpenAICompatibleProvider
 
 ## LM Studio Stateful Provider (/v1/responses)
 ##
-## This provider uses the /v1/responses endpoint which supports stateful conversations.
-## NOTE: Client-side tools (Function Calling) are NOT supported by this endpoint in LM Studio yet.
+## This provider uses the /v1/responses endpoint which supports stateful conversations
+## AND custom tools (function calling).
 
 # --- Constants ---
 
@@ -34,9 +34,25 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		"temperature": snappedf(p_temperature, 0.1)
 	}
 	
-	# [重要] 暂时禁用工具，暂时未知为何无法启用工具字段
-	# if not p_tool_definitions.is_empty():
-	# 	body["tools"] = p_tool_definitions
+	# [修复] 启用工具支持 - 转换为 Responses API 格式
+	if not p_tool_definitions.is_empty():
+		var responses_tools: Array = []
+		for tool in p_tool_definitions:
+			if tool.get("type") == "function" and tool.has("function"):
+				# 从 Chat Completions 格式转换为 Responses API 格式
+				var func_data: Dictionary = tool["function"]
+				responses_tools.append({
+					"type": "function",
+					"name": func_data.get("name", ""),
+					"description": func_data.get("description", ""),
+					"parameters": func_data.get("parameters", {})
+				})
+			else:
+				# 已经是 Responses API 格式或未知格式，直接添加
+				responses_tools.append(tool)
+		
+		if not responses_tools.is_empty():
+			body["tools"] = responses_tools
 	
 	# 寻找上下文锚点
 	var prev_response_id: String = ""
@@ -59,20 +75,17 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 	
 	body["input"] = input_content
 	
-	# 第一次请求如果包含 System Prompt，目前没有标准字段发送，
-	# 除非拼接到 input 里，这里暂时忽略 System Prompt 以保持简单。
-	
 	return body
 
 
-## 处理流式响应块 (适配 LM Studio Native SSE 格式)
-## 处理流式响应块 (适配 LM Studio /v1/responses 实际 SSE 格式)
+## 处理流式响应块 (适配 LM Studio /v1/responses SSE 格式)
 func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) -> Dictionary:
 	var ui_update: Dictionary = { "content_delta": "" }
 	var event_type: String = p_raw_chunk.get("_event_type", "")
 	
-	# [调试] 打印每一个收到的块，用于确认格式
-	# print("[DEBUG] Chunk: ", JSON.stringify(p_raw_chunk))
+	# [调试] 打印工具调用相关事件
+	#if event_type.begins_with("response.") and not event_type.begins_with("response.output_text"):
+		#print("[DEBUG] Event: ", event_type, " Data: ", JSON.stringify(p_raw_chunk))
 	
 	# 1. 处理文本增量 (response.output_text.delta)
 	if event_type == "response.output_text.delta":
@@ -82,7 +95,76 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 			ui_update["content_delta"] = delta
 		return ui_update
 	
-	# 2. 处理结束事件，捕获 response_id (response.completed)
+	# 2. 处理工具调用 - 新的工具调用项添加
+	if event_type == "response.output_item.added":
+		var item: Dictionary = p_raw_chunk.get("item", {})
+		if item.get("type") == "function_call":
+			# [修复] 使用 call_id 而不是 id
+			var call_id: String = item.get("call_id", item.get("id", ""))
+			var tool_call: Dictionary = {
+				"id": call_id,
+				"type": "function",
+				"function": {
+					"name": item.get("name", ""),
+					"arguments": ""
+				}
+			}
+			p_target_msg.tool_calls.append(tool_call)
+			ui_update["tool_call_started"] = true
+			print("[LMStudio] Tool call added: ", call_id, " name: ", item.get("name", ""))
+		return ui_update
+	
+	# 3. 处理工具调用参数增量 (response.function_call_arguments.delta)
+	if event_type == "response.function_call_arguments.delta":
+		var delta: String = p_raw_chunk.get("delta", "")
+		var item_id: String = p_raw_chunk.get("item_id", "")
+		
+		if not delta.is_empty():
+			# [修复] 通过 item_id 找到对应的工具调用
+			var found: bool = false
+			for tc in p_target_msg.tool_calls:
+				if tc.get("id") == item_id:
+					tc.function.arguments += delta
+					found = true
+					break
+			
+			# 如果找不到匹配的 item_id，追加到最后一个（兼容模式）
+			if not found and not p_target_msg.tool_calls.is_empty():
+				var last_index: int = p_target_msg.tool_calls.size() - 1
+				p_target_msg.tool_calls[last_index].function.arguments += delta
+		return ui_update
+	
+	# 4. 处理工具调用参数完成 (response.function_call_arguments.done)
+	if event_type == "response.function_call_arguments.done":
+		var item_id: String = p_raw_chunk.get("item_id", "")
+		var arguments: String = p_raw_chunk.get("arguments", "")
+		
+		# [新增] 使用 done 事件中的完整参数
+		if not arguments.is_empty():
+			for tc in p_target_msg.tool_calls:
+				if tc.get("id") == item_id:
+					tc.function.arguments = arguments  # 覆盖之前的增量
+					print("[LMStudio] Tool call arguments done: ", item_id, " args: ", arguments)
+					break
+		
+		ui_update["tool_call_completed"] = true
+		return ui_update
+	
+	# 5. 处理输出项完成 (response.output_item.done)
+	if event_type == "response.output_item.done":
+		var item: Dictionary = p_raw_chunk.get("item", {})
+		if item.get("type") == "function_call":
+			# [修复] 如果 item 中包含完整的 arguments，也更新一下
+			if item.has("arguments"):
+				var call_id: String = item.get("call_id", item.get("id", ""))
+				for tc in p_target_msg.tool_calls:
+					if tc.get("id") == call_id:
+						tc.function.arguments = item.get("arguments", "")
+						break
+			ui_update["tool_call_completed"] = true
+		return ui_update
+	
+	# 6. 处理结束事件，捕获 response_id (response.completed)
 	if event_type == "response.completed":
 		if p_raw_chunk.has("response"):
 			var resp_obj: Dictionary = p_raw_chunk["response"]
@@ -91,7 +173,6 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 			if resp_obj.has("id"):
 				var rid: String = resp_obj["id"]
 				p_target_msg.set_meta(RESPONSE_ID_META_KEY, rid)
-				# print("[LMStudio] Context Saved: ", rid)
 			
 			# 捕获 Usage
 			if resp_obj.has("usage"):
@@ -103,6 +184,5 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 				}
 		return ui_update
 	
-	# 3. 忽略其他中间状态事件
-	# response.created, response.in_progress, response.output_item.added, ...
+	# 7. 忽略其他中间状态事件
 	return ui_update

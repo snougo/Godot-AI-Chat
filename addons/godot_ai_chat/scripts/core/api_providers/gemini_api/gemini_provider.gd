@@ -154,9 +154,13 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 	# 1. 提取 Usage
 	if p_chunk_data.has("usageMetadata"):
 		var meta: Dictionary = p_chunk_data.usageMetadata
+		var prompt_tokens: int = meta.get("promptTokenCount", 0)
+		var completion_tokens: int = meta.get("candidatesTokenCount", 0)
+		var total_tokens: int = meta.get("totalTokenCount", 0)
 		ui_update["usage"] = {
-			"prompt_tokens": meta.get("promptTokenCount", 0),
-			"completion_tokens": meta.get("candidatesTokenCount", 0)
+			"prompt_tokens": prompt_tokens,
+			"completion_tokens": completion_tokens,
+			"total_tokens": total_tokens
 		}
 	
 	if not p_chunk_data.has("candidates") or p_chunk_data.candidates.is_empty():
