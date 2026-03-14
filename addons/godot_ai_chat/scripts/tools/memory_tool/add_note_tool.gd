@@ -26,8 +26,8 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"importance": {
 				"type": "integer",
-				"min": AiNote.MIN_IMPORTANCE,
-				"max": AiNote.MAX_IMPORTANCE,
+				"minimum": AiNote.MIN_IMPORTANCE,
+				"maximum": AiNote.MAX_IMPORTANCE,
 				"default": 3,
 				"description": "Importance level (%d-%d)" % [AiNote.MIN_IMPORTANCE, AiNote.MAX_IMPORTANCE]
 			}
