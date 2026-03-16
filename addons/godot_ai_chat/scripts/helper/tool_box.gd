@@ -195,6 +195,52 @@ static func filter_invalid_tool_calls(p_tool_calls: Array) -> Array:
 	return valid
 
 
+## 清洗、过滤工具调用，并将被服务端误判的纯文本“抢救”回消息内容中
+static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
+	var valid_calls: Array =[]
+	var salvaged_text: String = ""
+	
+	for tc in p_msg.tool_calls:
+		var raw_name: String = tc.get("function", {}).get("name", "")
+		var clean_name: String = raw_name.replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
+		
+		# 判断是否为合法工具名称
+		if is_valid_tool_name(clean_name) and not clean_name.is_empty():
+			# 合法工具，清洗名字并补充 ID
+			if tc.has("function"):
+				tc.function["name"] = clean_name
+			if tc.get("id", "").is_empty():
+				tc["id"] = "call_%d" % Time.get_ticks_msec()
+			valid_calls.append(tc)
+		else:
+			# 非法工具（被服务端误拦截的文本），触发抢救机制
+			AIChatLogger.warn("[ToolBox] Salvaging invalid tool call back to text: \"%s\"" % raw_name)
+			var args: String = tc.get("function", {}).get("arguments", "")
+			
+			if not salvaged_text.is_empty():
+				salvaged_text += "\n"
+			
+			# 尽量还原模型原本想输出的文本
+			if "<" in raw_name or "tool" in raw_name.to_lower():
+				salvaged_text += raw_name
+			else:
+				salvaged_text += "<tool_call>" + raw_name
+			
+			if not args.is_empty():
+				if not args.begins_with("\n") and not args.begins_with(" "):
+					salvaged_text += "\n"
+				salvaged_text += args
+	
+	# 更新工具列表
+	p_msg.tool_calls = valid_calls
+	
+	# 如果有抢救下来的文本，拼接到正文末尾
+	if not salvaged_text.is_empty():
+		if not p_msg.content.ends_with("\n") and not p_msg.content.is_empty():
+			p_msg.content += "\n"
+		p_msg.content += salvaged_text
+
+
 # --- Private Functions ---
 
 # 内部：实际执行扫描

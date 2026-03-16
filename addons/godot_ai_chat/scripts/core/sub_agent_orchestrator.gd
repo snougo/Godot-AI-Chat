@@ -104,7 +104,7 @@ func run_task() -> String:
 		
 		var content = response.get("content", "")
 		var reasoning = response.get("reasoning_content", "")
-		var tool_calls = response.get("tool_calls",[])
+		var raw_tool_calls = response.get("tool_calls",[])
 		
 		# 打印思考和输出到控制台
 		if not reasoning.is_empty():
@@ -114,19 +114,28 @@ func run_task() -> String:
 		
 		var assistant_msg = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, content)
 		assistant_msg.reasoning_content = reasoning
-		assistant_msg.tool_calls = tool_calls
+		assistant_msg.tool_calls = raw_tool_calls
+		
+		# [终极修复]: 同样为子代理执行抢救与清洗
+		ToolBox.salvage_and_clean_tool_calls(assistant_msg)
+		
+		# 此时 assistant_msg 已经修正完毕，保存到历史
 		_history.add_message(assistant_msg)
 		
-		# 检查是否有工具调用
-		if tool_calls.is_empty():
+		var clean_tool_calls = assistant_msg.tool_calls
+		
+		# 检查清洗后是否还有真正的工具调用
+		if clean_tool_calls.is_empty():
 			_remove_sub_agent_node_from_root()
-			AIChatLogger.warn("[Sub Agent] Stopped without calling tools.")
-			return "Task aborted: Sub Agent stopped reasoning without reporting a result. Last output:\n" + content
+			AIChatLogger.warn("[Sub Agent] Stopped without calling tools. (Salvaged invalid calls to text)")
+			return "Task aborted: Sub Agent stopped reasoning without reporting a result. Last output:\n" + assistant_msg.content
 		
 		# 执行工具
-		for tc in tool_calls:
-			var t_name = tc.get("function", {}).get("name", "")
-			var args_str = tc.get("function", {}).get("arguments", "{}")
+		for tc in clean_tool_calls:
+			var t_name = tc.function.name
+			var args_str = tc.function.get("arguments", "{}")
+			var call_id = tc.id
+			
 			var t_args = JSON.parse_string(JSONRepairHelper.repair_json(args_str))
 			if t_args == null: t_args = {}
 			
@@ -148,7 +157,7 @@ func run_task() -> String:
 				t_result = "[ERROR] Tool not found: " + t_name
 			
 			AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
-			_history.add_tool_message(t_result, tc.get("id", ""), t_name)
+			_history.add_tool_message(t_result, call_id, t_name)
 		
 		# 如果已经汇报，结束主循环
 		if has_reported:

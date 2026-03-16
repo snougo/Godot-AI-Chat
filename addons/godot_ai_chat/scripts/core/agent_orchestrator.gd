@@ -28,7 +28,7 @@ func cancel_workflow() -> void:
 
 ## 运行聊天循环
 ## [param p_base_history]: 基础历史记录
-## [param p_settings]: 插件设置
+##[param p_settings]: 插件设置
 func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsConfig) -> void:
 	_is_cancelled = false
 	
@@ -63,36 +63,31 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		var is_gemini: bool = (network_manager.current_provider is GeminiProvider)
 		if not is_gemini and "<think>" in last_msg.content:
 			last_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(last_msg.content, last_msg.tool_calls)
-			# 如果过滤后发现全都是幻觉（空了），则中止当前 Agent 循环，等待下一次用户输入
-			if last_msg.tool_calls.is_empty():
-				break
 		
-		# 存在工具调用，正式进入执行阶段，切换状态为 Executing Tools...
+		#[终极修复]: 抢救被服务端误拦截的合法文本，并清洗真正的工具调用
+		var old_content_len: int = last_msg.content.length()
+		ToolBox.salvage_and_clean_tool_calls(last_msg)
+		
+		# 如果发生了文本抢救，强制刷新 UI，把隐藏的文字显示出来
+		if last_msg.content.length() > old_content_len:
+			if current_chat_window.has_method("_refresh_display"):
+				current_chat_window._refresh_display()
+		
+		# 如果清洗后发现全都是幻觉/误杀文本（空了），循环自然中止，等待用户的下一次输入
+		if last_msg.tool_calls.is_empty():
+			break
+		
+		# 存在有效工具调用，正式进入执行阶段，切换状态为 Executing Tools...
 		if chat_ui:
 			chat_ui.update_ui_state(ChatUI.UIState.TOOLCALLING)
 		
 		for call in last_msg.tool_calls:
 			if _is_cancelled: break
 			
-			var tool_name: String = call.get("function", {}).get("name", "")
-			
-			# 清洗模型画蛇添足的 XML 标签
-			tool_name = tool_name.replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
-			
-			# 验证工具名称有效性，跳过幻觉/代码片段
-			if not ToolBox.is_valid_tool_name(tool_name):
-				AIChatLogger.warn("[AgentOrchestrator] Invalid tool name detected, skipping: \"%s\"" % tool_name)
-				continue
-			
-			if call.has("function"):
-				call.function["name"] = tool_name
-			
-			var raw_args: String = call.get("function", {}).get("arguments", "{}")
-			var call_id: String = call.get("id", "")
-			
-			if call_id.is_empty():
-				call_id = "call_%d" % Time.get_ticks_msec()
-				call["id"] = call_id
+			# 此时数组里的工具一定是干净、合法且有 ID 的，直接使用
+			var tool_name: String = call.function.name
+			var raw_args: String = call.function.get("arguments", "{}")
+			var call_id: String = call.id
 			
 			var clean_args_str: String = JSONRepairHelper.repair_json(raw_args)
 			if call.has("function"):
@@ -125,7 +120,6 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 						image_data = att.image_data
 						image_mime = att.get("mime", "image/png")
 						
-						#var is_gemini = (network_manager.current_provider is GeminiProvider)
 						if not is_gemini and not image_data.is_empty():
 							_attach_image_to_last_user_message(base_history, image_data, image_mime)
 							if result_str == "Image successfully read and attached to this message.":
