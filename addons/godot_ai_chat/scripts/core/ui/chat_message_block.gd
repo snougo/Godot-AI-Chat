@@ -610,7 +610,7 @@ func _create_code_block(p_lang: String) -> void:
 	code_edit.draw_tabs = true
 	code_edit.gutters_draw_line_numbers = true
 	code_edit.minimap_draw = false
-	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_BOUNDARY
+	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_NONE
 	code_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	code_edit.mouse_filter = CodeEdit.MOUSE_FILTER_PASS
 	
