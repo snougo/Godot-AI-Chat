@@ -77,21 +77,14 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	var result := {"success": false, "error": ""}
 	var state := {"is_finished": false}
 	
-	# 获取设置中的流式输出超时时间
-	var timeout_sec: float = float(ToolBox.get_plugin_settings().network_timeout)
-	var last_active_time: float = Time.get_ticks_msec() / 1000.0
-	
-	# [Fix] 添加总请求超时（作为后备保护）
-	var request_start_time: float = Time.get_ticks_msec() / 1000.0
-	var total_timeout_sec: float = timeout_sec + 30.0  # 比活动超时多30秒
-	
+	# [Fix] 移除冗余的超时检测逻辑，由 StreamRequest 统一处理
 	current_stream_request.chunk_received.connect(func(chunk: Dictionary): 
-		# 每次收到新数据块，重置超时计时器
-		last_active_time = Time.get_ticks_msec() / 1000.0
 		new_stream_chunk_received.emit(chunk)
 	)
 	
-	current_stream_request.usage_received.connect(func(usage: Dictionary): chat_usage_data_received.emit(usage))
+	current_stream_request.usage_received.connect(func(usage: Dictionary): 
+		chat_usage_data_received.emit(usage)
+	)
 	
 	current_stream_request.failed.connect(func(err_msg: String): 
 		result.error = err_msg
@@ -109,15 +102,6 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	# 阻塞协程直到流式接收结束
 	while not state.is_finished and current_stream_request != null:
 		await get_tree().process_frame
-		
-		# 超时看门狗检测
-		var current_time: float = Time.get_ticks_msec() / 1000.0
-		
-		# 无数据活动超时
-		if current_time - last_active_time > timeout_sec:
-			result.error = "Request Timeout: No response for %d seconds." % timeout_sec
-			cancel_stream() # 主动掐断线程
-			break
 	
 	if not state.is_finished and result.error.is_empty():
 		result.success = false

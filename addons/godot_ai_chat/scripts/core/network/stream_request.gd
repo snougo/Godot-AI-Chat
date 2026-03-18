@@ -19,8 +19,8 @@ signal failed(error_message: String)
 
 # --- Enums / Constants ---
 
-const INACTIVITY_TIMEOUT_MS: int = 180000  # 180秒无数据则强制退出
-const CONNECT_TIMEOUT_MS: int = 30000  # 10秒连接超时
+const INACTIVITY_TIMEOUT_MS: int = 180000  # 之所以设置180秒这么长是为了防止随着会话上下文的增长，本地部署的模型预填充上下文所花费的时间会越来越长
+const CONNECT_TIMEOUT_MS: int = 30000  # 30秒连接超时
 const REQUEST_TIMEOUT_MS: int = 30000
 
 # --- Private Vars ---
