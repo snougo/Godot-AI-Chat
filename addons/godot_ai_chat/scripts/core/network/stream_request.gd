@@ -19,7 +19,7 @@ signal failed(error_message: String)
 
 # --- Enums / Constants ---
 
-const INACTIVITY_TIMEOUT_MS: int = 180000  # 之所以设置180秒这么长是为了防止随着会话上下文的增长，本地部署的模型预填充上下文所花费的时间会越来越长
+const INACTIVITY_TIMEOUT_MS: int = 600000  # 之所以设置600秒这么长是为了防止随着会话上下文的增长，本地部署的模型预填充上下文所花费的时间会越来越长
 const CONNECT_TIMEOUT_MS: int = 30000  # 30秒连接超时
 const REQUEST_TIMEOUT_MS: int = 30000
 
@@ -238,7 +238,7 @@ func _thread_task() -> void:
 			# [Fix] 没有收到数据，检查是否超时
 			var elapsed: int = Time.get_ticks_msec() - _last_data_received_time
 			if elapsed > INACTIVITY_TIMEOUT_MS:
-				_emit_failure("Connection timeout: No data received for 30 seconds")
+				_emit_failure("Connection timeout: No data received for 600 seconds")
 				client.close()
 				return
 		

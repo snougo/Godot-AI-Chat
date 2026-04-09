@@ -39,12 +39,10 @@ var _last_ui_node: Control = null
 # 正则匹配：代码块开始 (锚定行首，缩进允许 0-3 个空格)
 # Group 1: Fence (```, ````, etc.)
 # Group 2: Language
-#var _re_code_start: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})\\s*(.*)\\s*$")
 var _re_code_start: RegEx = RegEx.create_from_string("^ {0,8}(`{3,})\\s*(.*)\\s*$")
 
 # 正则匹配：代码块结束 (锚定行首，缩进允许 0-3 个空格，且仅允许水平空白字符)
 # Group 1: Fence
-#var _re_code_end: RegEx = RegEx.create_from_string("^ {0,3}(`{3,})[ \\t]*$")
 var _re_code_end: RegEx = RegEx.create_from_string("^ {0,8}(`{3,})[ \\t]*$")
 
 # 当前代码块使用的围栏字符串 (如 "```" 或 "````")
@@ -391,6 +389,9 @@ func _clear_content() -> void:
 # 核心职责：在流式传输中检测 Markdown 代码块标记（```），解决缩进导致的解析错误
 func _process_smart_chunk(p_incoming_text: String, p_instant: bool) -> void:
 	_pending_buffer += p_incoming_text
+	
+	# [Fix] 每个新 chunk 开始时，重置行首状态
+	_is_line_start = true
 	
 	while true:
 		# 1. 查找缓冲区中是否存在代码块标记
