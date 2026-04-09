@@ -25,7 +25,7 @@ extends Resource
 ## 网络流式输出请求的超时时间（秒）
 @export var network_timeout: int = 180
 
-## AI 模型的“温度”参数，控制生成文本的随机性和创造性
+## AI 模型的"温度"参数，控制生成文本的随机性和创造性
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.8
 
 ## 日志级别开关 (Bitmask: DEBUG=1, INFO=2, WARN=4, ERROR=8)
@@ -34,3 +34,6 @@ extends Resource
 
 ## 系统提示词（System Prompt），用于设定 AI 的角色和行为准则
 @export_multiline var system_prompt: String = "You are a helpful Godot Engine Assistant."
+
+## 当前工作区路径（用户手动设置，持久化到配置文件）
+@export var workspace_path: String = "res://addons/godot_ai_chat/"

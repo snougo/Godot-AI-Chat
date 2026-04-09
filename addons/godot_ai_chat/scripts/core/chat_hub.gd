@@ -28,7 +28,6 @@ func _ready() -> void:
 	
 	_agent_orchestrator.network_manager = _network_manager
 	_agent_orchestrator.current_chat_window = _current_chat_window
-	# 将 ChatUI 注入给 Agent，方便它在执行工具时切换 UI 状态
 	_agent_orchestrator.chat_ui = _chat_ui
 	
 	_current_chat_window.chat_list_container = _chat_ui.get_chat_list_container()
@@ -57,6 +56,8 @@ func _bind_ui_signals() -> void:
 	_chat_ui.send_button_pressed.connect(_on_user_send_message)
 	_chat_ui.stop_button_pressed.connect(_on_stop_requested)
 	
+	_chat_ui.workspace_changed.connect(_on_workspace_changed)
+	
 	_chat_ui.reconnect_button_pressed.connect(_network_manager.get_model_list)
 	
 	_chat_ui.settings_save_button_pressed.connect(func():
@@ -83,7 +84,6 @@ func _run_chat_loop() -> void:
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	
-	# === 控制流收口：协程挂起，直至整个工具链生成结束 ===
 	await _agent_orchestrator.run_chat_cycle(_current_chat_window.chat_history, settings)
 	
 	if _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
@@ -104,7 +104,6 @@ func _load_history_to_ui(history: ChatMessageHistory, filename: String) -> void:
 	_chat_ui.reset_token_usage_display()
 	_current_chat_window.load_session_history_resource(history)
 	
-	# 监听历史记录变化信号，实时更新对话轮数
 	if history.changed.is_connected(_update_turn_info):
 		history.changed.disconnect(_update_turn_info)
 	history.changed.connect(_update_turn_info)
@@ -219,3 +218,10 @@ func _on_chat_ui_mouse_entered() -> void:
 		
 		await get_tree().create_timer(0.5).timeout
 		_network_manager.get_model_list()
+
+
+func _on_workspace_changed(p_new_path: String) -> void:
+	var settings := ToolBox.get_plugin_settings()
+	settings.workspace_path = p_new_path
+	ResourceSaver.save(settings, PluginPaths.SETTINGS_PATH)
+	ToolBox.update_editor_filesystem(PluginPaths.SETTINGS_PATH)

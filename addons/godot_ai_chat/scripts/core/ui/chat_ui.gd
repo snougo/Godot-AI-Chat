@@ -27,6 +27,8 @@ signal save_as_markdown_button_pressed(file_path: String)
 signal load_chat_button_pressed(session_name: String)
 ## 当用户点击删除按钮时发出
 signal delete_chat_button_pressed(session_name: String)
+## 当用户通过 UI 切换工作区时发出
+signal workspace_changed(new_path: String)
 
 # --- Enums / Constants ---
 
@@ -45,6 +47,10 @@ enum UIState {
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
 @onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTurnDisplay
 @onready var _current_token_usage: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenUsage
+
+@onready var _workspace_label: Label = $TabContainer/Chat/VBoxContainer/WorkspaceLabel
+@onready var _workspace_select_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/WorkspaceSelectButton
+@onready var _workspace_file_dialog: FileDialog = $WorkspaceFileDialog
 
 @onready var _session_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/SessionSelector
 @onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/DeleteButton
@@ -83,9 +89,7 @@ var is_first_init: bool = false
 # 标记当前是否在等待删除确认
 var _pending_delete_session_name: String = ""
 # [Feature] Token Usage Tracking
-# _archived_total_usage: Stores the sum of all *previous* finalized requests in this session.
 var _archived_total_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
-# _current_turn_usage: Stores the usage of the *active* request (will be overwritten by API updates).
 var _current_turn_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
 
 
@@ -106,9 +110,16 @@ func _ready() -> void:
 	_save_as_markdown_button.pressed.connect(_on_save_as_markdown_button_pressed)
 	_send_button.pressed.connect(_on_send_button_pressed)
 	
+	_workspace_select_button.pressed.connect(_on_workspace_select_button_pressed)
+	_workspace_file_dialog.dir_selected.connect(_on_workspace_dir_selected)
+	
 	_update_session_selector()
 	reset_token_usage_display()
 	update_ui_state(UIState.IDLE)
+	
+	# 初始化工作区显示
+	var settings := ToolBox.get_plugin_settings()
+	_update_workspace_display(settings.workspace_path)
 
 
 # --- Public Functions ---
@@ -126,15 +137,12 @@ func get_settings_panel() -> SettingsPanel:
 
 
 ## 初始化编辑器依赖
-## [param p_editor_filesystem]: 编辑器文件系统引用
 func initialize_editor_dependencies(p_editor_filesystem: EditorFileSystem) -> void:
 	if not p_editor_filesystem.filesystem_changed.is_connected(_on_filesystem_changed):
 		p_editor_filesystem.filesystem_changed.connect(_on_filesystem_changed)
 
 
 ## 更新 UI 的整体状态
-## [param p_new_state]: 新的 UI 状态
-## [param p_payload]: 附加信息（如错误消息或进度提示）
 func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 	current_state = p_new_state
 	_status_label.text = p_payload if not p_payload.is_empty() else _get_default_status_text(p_new_state)
@@ -220,7 +228,6 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 
 
 ## 更新模型下拉列表的内容
-## [param p_model_names]: 模型名称列表
 func update_model_list(p_model_names: Array[String]) -> void:
 	var current_msg: String = _status_label.text
 	if not ("No Chat" in current_msg):
@@ -231,25 +238,17 @@ func update_model_list(p_model_names: Array[String]) -> void:
 
 
 ## 当获取模型列表请求失败时调用
-## [param p_error_message]: 错误信息
 func get_model_list_request_failed(p_error_message: String) -> void:
 	if is_first_init:
 		update_ui_state(UIState.ERROR, p_error_message)
 	else:
-		# 修复点：显式切换回 ERROR 状态以解锁按钮
-		# 传入空字符串作为 payload 以避免弹出错误对话框（静默失败，仅显示红字）
 		update_ui_state(UIState.ERROR, "")
-		
-		# 手动更新状态栏显示具体错误
 		_status_label.text = p_error_message
 		_status_label.modulate = Color.RED
-		
-		# 标记为已完成过初始化逻辑
 		is_first_init = true
 
 
 ## 根据文件名同步下拉选择框
-## [param p_session_name]: 存档名称
 func select_session_by_name(p_session_name: String) -> void:
 	_update_session_selector()
 	
@@ -269,32 +268,26 @@ func update_turn_display(p_current_turns: int, p_max_turns: int) -> void:
 	if _chat_turn_display:
 		_chat_turn_display.text = "Turns: %d / %d" % [p_current_turns, p_max_turns]
 		
-		# 当达到或超过最大轮数时，改变颜色示警（例如橙色）
 		if p_current_turns >= p_max_turns:
 			_chat_turn_display.modulate = Color(1, 0.6, 0.2)
 		else:
 			_chat_turn_display.modulate = Color.WHITE
 
 
-## [Feature] 准备开始新的请求：结算上一轮
+## 准备开始新的请求：结算上一轮
 func prepare_for_new_request() -> void:
-	# Archive the previous turn's usage
 	_archived_total_usage.prompt += _current_turn_usage.prompt
 	_archived_total_usage.completion += _current_turn_usage.completion
 	_archived_total_usage.total += _current_turn_usage.total
 	
-	# Reset current turn
 	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
 
 
 ## 更新 UI 界面的 Token 数据
-## [param p_usage]: Token 使用量字典
 func update_token_usage_display(p_usage: Dictionary) -> void:
 	var p: int = p_usage.get("prompt_tokens", 0)
 	var c: int = p_usage.get("completion_tokens", 0)
 	
-	# 单调递增检查，防止流式传输中数值闪烁
-	# 依赖 prepare_for_new_request() 在每轮开始前重置 _current_turn_usage
 	if p < _current_turn_usage.prompt:
 		p = _current_turn_usage.prompt
 	if c < _current_turn_usage.completion:
@@ -302,19 +295,16 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 	
 	var t: int = p_usage.get("total_tokens", p + c)
 	
-	# Update Current Turn
 	_current_turn_usage = {
 		"prompt": p,
 		"completion": c,
 		"total": t
 	}
 	
-	# Calculate Display Totals
 	var display_total: int = _archived_total_usage.total + t
 	var display_prompt: int = _archived_total_usage.prompt + p
 	var display_completion: int = _archived_total_usage.completion + c
 	
-	# Update UI
 	_current_token_usage.text = "Cost: %d (Sum: %d) | Prompt: %d | Compl: %d" % [
 		t, 
 		display_total,
@@ -330,7 +320,6 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 
 ## 重置 Token 显示
 func reset_token_usage_display() -> void:
-	# [Feature] 清零所有数据
 	_archived_total_usage = { "prompt": 0, "completion": 0, "total": 0 }
 	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
 	
@@ -343,7 +332,6 @@ func show_confirmation(p_message: String) -> void:
 	_error_dialog.title = "Notification"
 	_error_dialog.dialog_text = p_message
 	
-	# 断开删除确认连接，避免干扰普通通知
 	if _error_dialog.confirmed.is_connected(_on_delete_confirmed):
 		_error_dialog.confirmed.disconnect(_on_delete_confirmed)
 		_pending_delete_session_name = ""
@@ -368,6 +356,15 @@ func _show_error_dialog(p_msg: String) -> void:
 	_error_dialog.title = "Error"
 	_error_dialog.dialog_text = p_msg
 	_error_dialog.popup_centered()
+
+
+func _update_workspace_display(p_path: String) -> void:
+	if p_path.is_empty():
+		_workspace_label.text = "Please Set Workspace"
+		_workspace_label.modulate = Color.GRAY
+	else:
+		_workspace_label.text = "Current Workspace: " + p_path
+		_workspace_label.modulate = Color.WHITE
 
 
 func _apply_model_filter() -> void:
@@ -442,14 +439,11 @@ func _on_delete_chat_button_pressed() -> void:
 	
 	var archive_name: String = _session_selector.get_item_text(selected_index)
 	
-	# 设置确认对话框
 	_error_dialog.title = "Confirm Delete"
 	_error_dialog.dialog_text = "Are you sure you want to delete '%s'?\n\nThis action cannot be undone." % archive_name
 	
-	# 保存待删除的存档名
 	_pending_delete_session_name = archive_name
 	
-	# 连接确认信号（确保只连接一次）
 	if not _error_dialog.confirmed.is_connected(_on_delete_confirmed):
 		_error_dialog.confirmed.connect(_on_delete_confirmed)
 	
@@ -460,9 +454,7 @@ func _on_delete_confirmed() -> void:
 	if _pending_delete_session_name.is_empty():
 		return
 	
-	# 发出删除信号
 	delete_chat_button_pressed.emit(_pending_delete_session_name)
-	# 清空待删除状态
 	_pending_delete_session_name = ""
 
 
@@ -523,3 +515,17 @@ func _on_settings_save_button_pressed() -> void:
 
 func _on_filesystem_changed() -> void:
 	_update_session_selector()
+
+
+func _on_workspace_select_button_pressed() -> void:
+	_workspace_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+	_workspace_file_dialog.title = "Select Workspace Directory"
+	var settings := ToolBox.get_plugin_settings()
+	if not settings.workspace_path.is_empty():
+		_workspace_file_dialog.current_dir = settings.workspace_path
+	_workspace_file_dialog.popup_centered()
+
+
+func _on_workspace_dir_selected(p_dir: String) -> void:
+	workspace_changed.emit(p_dir)
+	_update_workspace_display(p_dir)
