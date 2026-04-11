@@ -32,8 +32,8 @@ extends Resource
 ## 默认 14 (INFO|WARN|ERROR) = 2+4+8
 @export_flags("Debug", "Info", "Warn", "Error") var log_flags: int = 14
 
+## 当前工作区路径（用户手动设置，持久化到配置文件）
+@export var workspace_path: String = PluginPaths.DEFAULT_WORKSPACE
+
 ## 系统提示词（System Prompt），用于设定 AI 的角色和行为准则
 @export_multiline var system_prompt: String = "You are a helpful Godot Engine Assistant."
-
-## 当前工作区路径（用户手动设置，持久化到配置文件）
-@export var workspace_path: String = "res://addons/godot_ai_chat/"

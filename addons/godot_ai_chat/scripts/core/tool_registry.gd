@@ -12,6 +12,7 @@ extends RefCounted
 ## 核心工具路径 (始终加载)
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_context_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/create_markdown_tool.gd",
 	
 	#"res://addons/godot_ai_chat/scripts/tools/skill_tool/list_available_skills_tool.gd",
 	#"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/create_sub_agent_tool.gd",

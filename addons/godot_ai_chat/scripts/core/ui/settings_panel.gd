@@ -50,6 +50,7 @@ enum SaveButtonState {
 
 @onready var _save_button: Button = $Panel/MarginContainer/VBoxContainer/CenterContainer/SaveButton
 
+
 # --- Public Vars ---
 
 ## 持有加载后的设置资源对象
@@ -156,6 +157,9 @@ func _on_save_button_pressed() -> void:
 	# 模拟保存延迟，给用户视觉反馈
 	await get_tree().create_timer(0.2).timeout
 	
+	# 保存前从磁盘重新加载最新资源，避免用过期数据覆盖其他模块的修改（如 workspace_path）
+	settings_resource = ToolBox.get_plugin_settings()
+	
 	settings_resource.api_provider = _api_provider_options.get_item_text(_api_provider_options.selected)
 	settings_resource.api_base_url = _base_url_input.text
 	settings_resource.api_key = _api_key_input.text
@@ -165,7 +169,7 @@ func _on_save_button_pressed() -> void:
 	settings_resource.temperature = _temperature_value.value
 	settings_resource.system_prompt = _system_prompt_input.text
 	
-	# --- 新增：从 CheckBox 构建位掩码 ---
+	# --- 从 CheckBox 构建位掩码 ---
 	var new_flags: int = 0
 	if _check_debug.button_pressed:
 		new_flags |= 1

@@ -221,7 +221,17 @@ func _on_chat_ui_mouse_entered() -> void:
 
 
 func _on_workspace_changed(p_new_path: String) -> void:
-	var settings := ToolBox.get_plugin_settings()
-	settings.workspace_path = p_new_path
-	ResourceSaver.save(settings, PluginPaths.SETTINGS_PATH)
+	# 验证路径有效性
+	if not DirAccess.dir_exists_absolute(p_new_path):
+		AIChatLogger.error("Invalid workspace path: " + p_new_path)
+		return
+	else:
+		AIChatLogger.info("Workspace change to: " + p_new_path)
+	
+	var plugin_settings_res := ToolBox.get_plugin_settings()
+	plugin_settings_res.workspace_path = p_new_path
+	
+	if ResourceSaver.save(plugin_settings_res, PluginPaths.SETTINGS_PATH) == OK:
+		AIChatLogger.info("Plugin Settings Saved.")
+	
 	ToolBox.update_editor_filesystem(PluginPaths.SETTINGS_PATH)

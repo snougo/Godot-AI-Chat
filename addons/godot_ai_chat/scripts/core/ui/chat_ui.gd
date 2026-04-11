@@ -75,6 +75,7 @@ enum UIState {
 @onready var _chat_scroll_container: ScrollContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer
 @onready var _settings_panel_node: SettingsPanel = $TabContainer/Settings/SettingsPanel
 
+
 # --- Public Vars ---
 
 ## 当前 UI 状态
