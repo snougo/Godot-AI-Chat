@@ -21,7 +21,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"category": {
 				"type": "string",
-				"enum": AiNote.get_valid_categories(),  # Use centralized categories
+				"enum": AiNote.get_valid_categories(),
 				"description": "Note category (required)"
 			},
 			"importance": {
