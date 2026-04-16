@@ -25,13 +25,13 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 		final_system_prompt += "======================\n"
 	
 	# 3. 注入技能指令 (Skill Instructions)
-	#var skill_instructions: String = ToolRegistry.get_combined_system_instructions()
+	var skill_instructions: String = ToolRegistry.get_combined_system_instructions()
 	
-	#if not skill_instructions.is_empty():
-		#final_system_prompt += "\n\n===== SKILL INSTRUCTIONS =====\n"
-		#final_system_prompt += "\n"
-		#final_system_prompt += skill_instructions
-		#final_system_prompt += "\n==================================\n"
+	if not skill_instructions.is_empty():
+		final_system_prompt += "\n\n===== SKILL INSTRUCTIONS =====\n"
+		final_system_prompt += "\n"
+		final_system_prompt += skill_instructions
+		final_system_prompt += "\n==================================\n"
 	
 	# 4. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(

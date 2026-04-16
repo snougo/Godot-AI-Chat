@@ -13,18 +13,18 @@ extends RefCounted
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_context_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/skill_tool/list_available_skills_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/create_sub_agent_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/skill_tool/list_available_skills_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/create_sub_agent_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/check_todo_list_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/default_tool/check_todo_list_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_note_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/memory_tool/list_note_categories_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_notes_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/memory_tool/list_note_categories_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_notes_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/get_current_date_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
+	#"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_api_documents_tool.gd"
 ]
 

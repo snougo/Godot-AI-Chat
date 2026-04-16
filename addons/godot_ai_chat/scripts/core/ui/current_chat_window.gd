@@ -40,7 +40,7 @@ func _process(delta: float) -> void:
 	_culling_timer += delta
 	if _culling_timer >= CULLING_INTERVAL:
 		_culling_timer = 0.0
-		await _update_visibility_culling()
+		_update_visibility_culling()
 
 
 # --- Public Functions ---
@@ -107,8 +107,6 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 	
 	if target_msg == null:
 		target_msg = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, "")
-		# [修复] 不要立即添加到历史记录，避免保存空内容消息
-		#chat_history.add_message(target_msg)
 	
 	# 2. 委托 Provider 处理拼装
 	var ui_update: Dictionary = p_provider.process_stream_chunk(target_msg, p_raw_chunk)
@@ -124,6 +122,8 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 		var block: ChatMessageBlock = _create_block()
 		block.start_stream(ChatMessage.ROLE_ASSISTANT, current_model_name)
 		last_block = block
+		# 新消息块被添加时，滚动到底部
+		_scroll_to_bottom()
 	
 	if not content_delta.is_empty():
 		last_block.append_chunk(content_delta)
@@ -141,16 +141,16 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 	if usage is Dictionary and not usage.is_empty():
 		update_token_usage(usage)
 	
-	_scroll_to_bottom()
+	# 移除此处的 _scroll_to_bottom()
+	# 流式追加内容时不再强制滚动，允许用户自由浏览历史消息
 	
 	# [辅助] 如果消息有实际内容，确保它被添加到历史记录
 	if not chat_history.messages.is_empty():
 		var last: ChatMessage = chat_history.messages.back()
 		if last.role != ChatMessage.ROLE_ASSISTANT:
-			# 增加对 reasoning_content 的检查
-			# 只要消息包含思考内容、文本内容或工具调用中的任意一项，就必须保存
 			if not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty():
 				chat_history.add_message(target_msg)
+
 
 
 ## 回滚未完成的消息（用于停止生成时）
@@ -240,7 +240,7 @@ func _update_visibility_culling() -> void:
 	
 	# 2. 设置缓冲区 (Buffer)
 	# 上下各预留 600 像素，确保快速滚动时不会看到空白
-	var buffer: float = 100.0
+	var buffer: float = 400.0
 	var visible_top: float = scroll_offset - buffer
 	var visible_bottom: float = scroll_offset + viewport_height + buffer
 	
@@ -286,7 +286,7 @@ func _refresh_display() -> void:
 	
 	# 2. 分帧加载（关键优化）
 	# 每帧处理1个消息块，避免冻结
-	var batch_size: int = 1
+	var batch_size: int = 10
 	var count: int = 0
 	
 	for msg in chat_history.messages:
