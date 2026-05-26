@@ -130,7 +130,7 @@ func run_task() -> String:
 			else:
 				t_result = "[ERROR] Tool not found: " + t_name
 			
-			AIChatLogger.info("[Sub Agent] Tool Result: " + t_result)
+			AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 			_history.add_tool_message(t_result, call_id, t_name)
 		
 		if has_reported:
