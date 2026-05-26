@@ -37,6 +37,13 @@ func _enter_tree() -> void:
 		chat_ui.initialize_editor_dependencies(editor_file_system)
 	else:
 		AIChatLogger.error("[Godot AI Chat] Could not find 'ChatUI' node in ChatHub scene.")
+	
+	# 预加载 ErrorCaptureBridge（确保类注册）
+	ErrorCaptureBridge.enable_file_logging()
+	ErrorCaptureBridge.disable_file_logging()
+	AIChatLogger.debug("[Godot AI Chat] ErrorCaptureBridge initialized.")
+
+
 
 
 func _exit_tree() -> void:

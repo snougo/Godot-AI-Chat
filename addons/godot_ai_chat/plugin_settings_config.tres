@@ -4,4 +4,4 @@
 
 [resource]
 script = ExtResource("1_40n6l")
-system_prompt = ""
+temperature = 0.5999999999476128
