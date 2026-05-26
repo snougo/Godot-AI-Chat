@@ -21,7 +21,7 @@ const RESTRICTED_FILES: Array[String] = [
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "create_markdown"
+	tool_name = "create_markdown_file"
 	tool_description = "Creates A New Markdown File (.md ONLY)."
 
 

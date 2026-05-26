@@ -20,8 +20,8 @@ signal failed(error_message: String)
 # --- Enums / Constants ---
 
 const INACTIVITY_TIMEOUT_MS: int = 600000  # 之所以设置600秒这么长是为了防止随着会话上下文的增长，本地部署的模型预填充上下文所花费的时间会越来越长
-const CONNECT_TIMEOUT_MS: int = 30000  # 30秒连接超时
-const REQUEST_TIMEOUT_MS: int = 30000
+const CONNECT_TIMEOUT_MS: int = 60000  # 30秒连接超时
+const REQUEST_TIMEOUT_MS: int = 60000
 
 # --- Private Vars ---
 
