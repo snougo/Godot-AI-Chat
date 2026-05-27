@@ -8,10 +8,14 @@ extends AiTool
 
 ## 上下文类型与允许的扩展名映射
 const EXTENSION_MAP: Dictionary = {
-	"scene_file": ["tscn"],
-	"gdscript": ["gd", "gdshader"],
-	"text_file": ["txt", "md", "json", "cfg", "tres", "gdshader"],
-	"image_meta": ["png", "jpg", "jpeg", "bmp", "tga", "exr"]
+	"scene":      ["tscn"],
+	"gdscript":   ["gd"],
+	"shader":     ["gdshader", "glsl"],
+	"resource":   ["tres"],
+	"markdown":   ["md"],
+	"config":     ["json", "cfg"],
+	"plain_text": ["txt"],
+	"image_meta": ["png", "jpg", "jpeg"]
 }
 
 
@@ -30,9 +34,10 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"context_type": {
 				"type": "string",
-				"enum": ["folder_structure", "scene_file", "gdscript", "text_file", "image_meta"],
+				#"enum": ["folder_structure", "scene", "gdscript", "text", "image_meta"],
+				"enum": ["folder_structure", "scene", "gdscript", "shader", "resource", "markdown", "config", "plain_text", "image_meta"],
 				"description": "The type of context to retrieve."
-			},
+				},
 			"path": {
 				"type": "string",
 				"description": "The full path to the file or directory."
@@ -119,11 +124,11 @@ func _handle_folder_structure(p_path: String, p_provider: ContextProvider) -> Di
 ## [return]: 检索结果字典
 func _execute_context_retrieval(p_context_type: String, p_path: String, p_provider: ContextProvider) -> Dictionary:
 	match p_context_type:
-		"scene_file":
+		"scene":
 			return p_provider.get_scene_tree_as_markdown(p_path)
-		"gdscript":
+		"gdscript", "shader":
 			return p_provider.get_script_content_as_markdown(p_path)
-		"text_file":
+		"resource", "markdown", "config", "plain_text":
 			return p_provider.get_text_content_as_markdown(p_path)
 		"image_meta":
 			return p_provider.get_image_metadata_as_markdown(p_path)
