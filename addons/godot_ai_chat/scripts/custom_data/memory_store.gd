@@ -77,7 +77,7 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 	
 	for entry in entries:
 		# 工作区过滤
-		if not p_workspace_path.is_empty() and entry.workspace_path != p_workspace_path:
+		if not p_workspace_path.is_empty() and entry.workspace_path != _normalize_path(p_workspace_path):
 			continue
 		
 		# 模糊关键词搜索
@@ -108,7 +108,7 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	
 	var results: Array[MemoryEntry] = []
 	for entry in entries:
-		if entry.workspace_path == p_workspace_path:
+		if entry.workspace_path == _normalize_path(p_workspace_path):
 			results.append(entry)
 	
 	results.sort_custom(_compare_entries)
@@ -153,13 +153,18 @@ func save() -> Error:
 
 # --- 内部方法 ---
 
+# 路径归一化：去除尾部斜杠，确保路径比较一致性
+static func _normalize_path(p_path: String) -> String:
+	return p_path.trim_suffix("/").trim_suffix("\\")
+
+
 func _compare_entries(a: MemoryEntry, b: MemoryEntry) -> bool:
 	if a.importance != b.importance:
 		return a.importance > b.importance
 	return a.created_at > b.created_at
 
 
-## 词级模糊匹配：查询词中的任意一个词出现在文本中即匹配
+# 词级模糊匹配：查询词中的任意一个词出现在文本中即匹配
 func _fuzzy_match(p_query: String, p_text: String) -> bool:
 	# 按空格分词（适用于英文）
 	var words: PackedStringArray = p_query.split(" ", false)
@@ -177,7 +182,7 @@ func _fuzzy_match(p_query: String, p_text: String) -> bool:
 	return false
 
 
-## 提取中文双字词
+# 提取中文双字词
 func _extract_chinese_bigrams(p_text: String) -> Array[String]:
 	var result: Array[String] = []
 	var chars: Array[String] = []
