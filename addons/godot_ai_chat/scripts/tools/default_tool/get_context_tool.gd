@@ -34,7 +34,6 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"context_type": {
 				"type": "string",
-				#"enum": ["folder_structure", "scene", "gdscript", "text", "image_meta"],
 				"enum": ["folder_structure", "scene", "gdscript", "shader", "resource", "markdown", "config", "plain_text", "image_meta"],
 				"description": "The type of context to retrieve."
 				},

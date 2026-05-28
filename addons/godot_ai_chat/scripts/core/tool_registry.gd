@@ -20,6 +20,12 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_api_documents_tool.gd",
 	
+	"res://addons/godot_ai_chat/scripts/tools/scene_tool/get_edited_scene_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/scene_tool/get_node_properties_tool.gd",
+	
+	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_memories_tool.gd",
+	
 	"res://addons/godot_ai_chat/scripts/tools/skill_tool/list_available_skills_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/create_sub_agent_tool.gd"
 	]

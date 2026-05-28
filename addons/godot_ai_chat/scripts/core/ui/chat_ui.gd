@@ -92,6 +92,7 @@ var _pending_delete_session_name: String = ""
 # [Feature] Token Usage Tracking
 var _archived_total_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
 var _current_turn_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
+var _current_session_name: String = ""
 
 
 # --- Built-in Functions ---
@@ -251,6 +252,8 @@ func get_model_list_request_failed(p_error_message: String) -> void:
 
 ## 根据文件名同步下拉选择框
 func select_session_by_name(p_session_name: String) -> void:
+	# 记录当前会话文件名
+	_current_session_name = p_session_name
 	_update_session_selector()
 	
 	for i in range(_session_selector.get_item_count()):
@@ -491,7 +494,15 @@ func _on_save_as_markdown_button_pressed() -> void:
 	_file_dialog.clear_filters()
 	_file_dialog.add_filter("*.md", "Markdown File")
 	_file_dialog.current_dir = PluginPaths.SESSION_DIR
-	_file_dialog.current_file = _generate_default_filename(".md")
+	
+	#_file_dialog.current_file = _generate_default_filename(".md")
+	
+	# 使用当前会话文件名（去掉.tres后缀，改为.md）
+	if not _current_session_name.is_empty():
+		_file_dialog.current_file = _current_session_name.replace(".tres", ".md")
+	else:
+		_file_dialog.current_file = _generate_default_filename(".md")
+	
 	_file_dialog.popup_centered()
 
 
