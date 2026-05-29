@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "search_memories"
-	tool_description = "Search stored memories by workspace and keywords. When a workspace_path is provided, only memories belonging to that workspace are returned. Keywords use fuzzy matching (any word in the query will match). Supports multiple sort orders via sort_by parameter. workspace_path is required."
+	tool_description = "Search stored memories by workspace, keywords, memory type, and importance range. Keywords use fuzzy matching. Supports filtering by memory_type and importance range. workspace_path is required."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -31,6 +31,26 @@ func get_parameters_schema() -> Dictionary:
 				"enum": ["default", "created_at", "last_accessed", "importance", "access_count"],
 				"default": "default",
 				"description": "Sort order: default (type→importance→time), created_at (newest first), last_accessed (recently viewed first), importance (highest first), access_count (most viewed first)"
+			},
+			"memory_type": {
+				"type": "string",
+				"enum": ["", "session_summary", "user_preference", "project_decision", "lesson_learned", "bug_fix"],
+				"default": "",
+				"description": "Filter by memory type (optional — empty string means no filter)"
+			},
+			"min_importance": {
+				"type": "integer",
+				"minimum": 1,
+				"maximum": 5,
+				"default": 1,
+				"description": "Minimum importance filter (1-5, default 1)"
+			},
+			"max_importance": {
+				"type": "integer",
+				"minimum": 1,
+				"maximum": 5,
+				"default": 5,
+				"description": "Maximum importance filter (1-5, default 5)"
 			}
 		},
 		"required": ["workspace_path", "limit"]
@@ -42,14 +62,21 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var keywords: String = p_args.get("keywords", "").strip_edges()
 	var limit: int = p_args.get("limit", 10)
 	var sort_by: String = p_args.get("sort_by", "default")
+	var memory_type: String = p_args.get("memory_type", "").strip_edges()
+	var min_importance: int = p_args.get("min_importance", 1)
+	var max_importance: int = p_args.get("max_importance", 5)
 	
 	if workspace_path.is_empty():
 		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
 	
 	limit = clampi(limit, 1, 50)
+	min_importance = clampi(min_importance, 1, 5)
+	max_importance = clampi(max_importance, 1, 5)
+	if min_importance > max_importance:
+		return {"success": false, "data": "Error: min_importance cannot be greater than max_importance."}
 	
 	var store := _load_or_create_store()
-	var results := store.search(workspace_path, keywords, limit, sort_by)
+	var results := store.search(workspace_path, keywords, limit, sort_by, memory_type, min_importance, max_importance)
 	
 	if results.is_empty():
 		return {"success": true, "data": "No memories found matching the criteria."}

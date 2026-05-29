@@ -85,8 +85,17 @@ func delete_entry(p_id: int) -> bool:
 ## 多条件搜索（所有参数可选）
 ## 关键词使用词级模糊匹配（任意词命中即匹配）
 ## [param p_sort_by]: 排序方式 — default | created_at | last_accessed | importance | access_count
-func search(p_workspace_path: String = "", p_keywords: String = "",
-		p_limit: int = 10, p_sort_by: String = "default") -> Array[MemoryEntry]:
+## [param p_memory_type]: 按类型过滤（空字符串表示不过滤）
+## [param p_min_importance]: 最小重要性 (1-5)
+## [param p_max_importance]: 最大重要性 (1-5)
+func search(p_workspace_path: String = "", 
+			p_keywords: String = "", 
+			p_limit: int = 10, 
+			p_sort_by: String = "default", 
+			p_memory_type: String = "", 
+			p_min_importance: int = 1, 
+			p_max_importance: int = 5) -> Array[MemoryEntry]:
+	
 	var results: Array[MemoryEntry] = []
 	
 	for entry in entries:
@@ -100,6 +109,14 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 			var text_lower: String = (entry.title + " " + entry.content).to_lower()
 			if not _fuzzy_match(p_keywords.to_lower(), text_lower):
 				continue
+		
+		# 类型过滤
+		if not p_memory_type.is_empty() and entry.memory_type != p_memory_type:
+			continue
+		
+		# 重要性范围过滤
+		if entry.importance < p_min_importance or entry.importance > p_max_importance:
+			continue
 		
 		results.append(entry)
 	
