@@ -31,15 +31,37 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 			var relevant: Array[MemoryEntry] = store.get_relevant(p_settings.workspace_path, 5)
 			if not relevant.is_empty():
 				final_system_prompt += "\n\n===== RELEVANT MEMORIES =====\n"
+				
+				# --- 全局记忆区块 ---
+				var global_memories: Array[MemoryEntry] = []
+				var workspace_memories: Array[MemoryEntry] = []
 				for entry in relevant:
-					final_system_prompt += "- [%s][scope:%s][imp:%d/5] %s\n  %s\n" % [
-						entry.memory_type,
-						entry.scope,
-						entry.importance,
-						entry.title,
-						entry.content
-					]
-				final_system_prompt += "==============================\n"
+					if entry.scope == "global":
+						global_memories.append(entry)
+					else:
+						workspace_memories.append(entry)
+				
+				if not global_memories.is_empty():
+					final_system_prompt += "\n===== GLOBAL MEMORIES =====\n"
+					for entry in global_memories:
+						final_system_prompt += "- [%s][imp:%d/5] %s\n  %s\n" % [
+							entry.memory_type,
+							entry.importance,
+							entry.title,
+							entry.content
+						]
+				
+				if not workspace_memories.is_empty():
+					final_system_prompt += "\n===== WORKSPACE MEMORIES =====\n"
+					for entry in workspace_memories:
+						final_system_prompt += "- [%s][imp:%d/5] %s\n  %s\n" % [
+							entry.memory_type,
+							entry.importance,
+							entry.title,
+							entry.content
+						]
+				
+				final_system_prompt += "\n==============================\n"
 				store.save()
 	
 	# 4. 截断历史记录并组合

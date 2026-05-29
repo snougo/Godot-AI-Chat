@@ -7,6 +7,15 @@ extends Resource
 
 const SAVE_PATH: String = PluginPaths.PLUGIN_DIR + "memory_store.tres"
 
+## 类型排序权重（数值越小越靠前）
+const TYPE_ORDER: Dictionary = {
+	"session_summary": 0,
+	"lesson_learned": 1,
+	"user_preference": 2,
+	"project_decision": 3,
+	"bug_fix": 4
+}
+
 @export var entries: Array[MemoryEntry] = []
 
 
@@ -114,18 +123,27 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	if p_workspace_path.is_empty():
 		return []
 	
-	var results: Array[MemoryEntry] = []
+	var global_results: Array[MemoryEntry] = []
+	var workspace_results: Array[MemoryEntry] = []
+	
 	for entry in entries:
 		if entry.scope == "global":
-			results.append(entry)
+			global_results.append(entry)                    # 全局：全部收集
 		elif entry.workspace_path == _normalize_path(p_workspace_path):
-			results.append(entry)
+			workspace_results.append(entry)                 # 工作区：需路径匹配
 	
-	results.sort_custom(_compare_entries)
+	# 工作区记忆：排序 + 截断（受 limit 限制）
+	workspace_results.sort_custom(_compare_entries)
+	if workspace_results.size() > p_limit:
+		workspace_results = workspace_results.slice(0, p_limit)
 	
-	if results.size() > p_limit:
-		results = results.slice(0, p_limit)
+	# 全局记忆：排序但不截断
+	global_results.sort_custom(_compare_entries)
 	
+	# 合并：全局在前，工作区在后
+	var results: Array[MemoryEntry] = global_results + workspace_results
+	
+	# 更新访问信息
 	for entry in results:
 		entry.access_count += 1
 		entry.last_accessed = Time.get_datetime_string_from_system()
@@ -168,8 +186,17 @@ static func _normalize_path(p_path: String) -> String:
 
 
 func _compare_entries(a: MemoryEntry, b: MemoryEntry) -> bool:
+	# 1 按类型排序
+	var a_order: int = TYPE_ORDER.get(a.memory_type, 99)
+	var b_order: int = TYPE_ORDER.get(b.memory_type, 99)
+	if a_order != b_order:
+		return a_order < b_order
+	
+	# 2 按重要性降序
 	if a.importance != b.importance:
 		return a.importance > b.importance
+	
+	# 3 按时间降序
 	return a.created_at > b.created_at
 
 
