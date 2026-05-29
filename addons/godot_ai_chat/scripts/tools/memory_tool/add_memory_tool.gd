@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "add_memory"
-	tool_description = "Store an important memory that the AI should remember for future conversations. Use this when the user shares preferences, makes project decisions, or discusses key information. Always provide the current workspace path."
+	tool_description = "Store an important memory that the AI should remember for future conversations. Use this when the user shares preferences, makes project decisions, or discusses key information. Always provide the current workspace path. Use 'scope' to indicate whether this memory is workspace-level (only relevant to current module) or global (relevant to the entire project)."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -13,7 +13,12 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"workspace_path": {
 				"type": "string",
-				"description": "The current workspace path"
+				"description": "The current workspace path. For global memories, use 'res://'."
+			},
+			"scope": {
+				"type": "string",
+				"enum": MemoryEntry.get_valid_scopes(),
+				"description": "Memory scope: 'workspace' (only relevant to this module) or 'global' (relevant to the entire project)"
 			},
 			"title": {
 				"type": "string",
@@ -26,7 +31,7 @@ func get_parameters_schema() -> Dictionary:
 			"memory_type": {
 				"type": "string",
 				"enum": MemoryEntry.get_valid_types(),
-				"description": "Type of memory: session_summary, user_preference, project_decision, key_fact"
+				"description": "Type of memory: session_summary, user_preference, project_decision, lesson_learned"
 			},
 			"importance": {
 				"type": "integer",
@@ -36,12 +41,13 @@ func get_parameters_schema() -> Dictionary:
 				"description": "Importance level (%d-%d)" % [MemoryEntry.MIN_IMPORTANCE, MemoryEntry.MAX_IMPORTANCE]
 			}
 		},
-		"required": ["workspace_path", "title", "content", "memory_type", "importance"]
+		"required": ["workspace_path", "scope", "title", "content", "memory_type", "importance"]
 	}
 
 
 func execute(p_args: Dictionary) -> Dictionary:
 	var workspace_path: String = p_args.get("workspace_path", "").strip_edges()
+	var scope: String = p_args.get("scope", "").strip_edges()
 	var title: String = p_args.get("title", "").strip_edges()
 	var content: String = p_args.get("content", "").strip_edges()
 	var memory_type: String = p_args.get("memory_type", "")
@@ -50,6 +56,15 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# Validation
 	if workspace_path.is_empty():
 		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
+	
+	if scope.is_empty():
+		return {"success": false, "data": "Error: scope is required. Use 'workspace' for module-level or 'global' for project-level memories."}
+	
+	if not MemoryEntry.is_valid_scope(scope):
+		return {
+			"success": false,
+			"data": "Error: Invalid scope '%s'. Valid options: %s" % [scope, MemoryEntry.get_valid_scopes()]
+		}
 	
 	if title.is_empty() or content.is_empty() or memory_type.is_empty():
 		return {"success": false, "data": "Error: Title, Content, and Memory Type are required!"}
@@ -63,7 +78,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	importance = MemoryEntry.clamp_importance(importance)
 	
 	var store := _load_or_create_store()
-	var entry := store.add_entry(title, content, memory_type, importance, workspace_path)
+	var entry := store.add_entry(title, content, memory_type, importance, scope, workspace_path)
 	
 	if not entry:
 		return {"success": false, "data": "Error: Failed to add memory entry."}
@@ -73,6 +88,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		return {"success": false, "data": "Error: Failed to save memory store: %s" % error_string(err)}
 	
 	var result: String = "Memory stored successfully.\n"
+	result += "Scope: %s\n" % entry.scope
 	result += "Workspace: %s\n" % entry.workspace_path
 	result += "Title: %s\n" % entry.title
 	result += "Type: %s\n" % entry.memory_type

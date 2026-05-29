@@ -24,16 +24,20 @@ func get_next_id() -> int:
 
 ## 添加记忆条目
 func add_entry(p_title: String, p_content: String, p_type: String,
-		p_importance: int = 3, p_workspace_path: String = "",
-		p_session_source: String = "") -> MemoryEntry:
+		p_importance: int = 3, p_scope: String = "workspace",
+		p_workspace_path: String = "", p_session_source: String = "") -> MemoryEntry:
 	if not MemoryEntry.is_valid_type(p_type):
 		push_error("Invalid memory type: %s" % p_type)
+		return null
+	if not MemoryEntry.is_valid_scope(p_scope):
+		push_error("Invalid scope: %s" % p_scope)
 		return null
 	
 	var entry := MemoryEntry.new()
 	entry.id = get_next_id()
 	entry.title = p_title
 	entry.content = p_content
+	entry.scope = p_scope
 	entry.memory_type = p_type
 	entry.importance = MemoryEntry.clamp_importance(p_importance)
 	entry.workspace_path = p_workspace_path
@@ -76,9 +80,14 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 	var results: Array[MemoryEntry] = []
 	
 	for entry in entries:
-		# 工作区过滤
-		if not p_workspace_path.is_empty() and entry.workspace_path != _normalize_path(p_workspace_path):
-			continue
+		# 工作区过滤：如果传了工作区路径
+		if not p_workspace_path.is_empty():
+			# 全局级记忆始终包含
+			if entry.scope == "global":
+				pass  # 包含
+			# 工作区级记忆需要匹配路径
+			elif entry.workspace_path != _normalize_path(p_workspace_path):
+				continue
 		
 		# 模糊关键词搜索
 		if not p_keywords.is_empty():
@@ -93,7 +102,6 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 	if results.size() > p_limit:
 		results = results.slice(0, p_limit)
 	
-	# 更新访问信息
 	for entry in results:
 		entry.access_count += 1
 		entry.last_accessed = Time.get_datetime_string_from_system()
@@ -108,7 +116,9 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	
 	var results: Array[MemoryEntry] = []
 	for entry in entries:
-		if entry.workspace_path == _normalize_path(p_workspace_path):
+		if entry.scope == "global":
+			results.append(entry)
+		elif entry.workspace_path == _normalize_path(p_workspace_path):
 			results.append(entry)
 	
 	results.sort_custom(_compare_entries)
@@ -116,7 +126,6 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	if results.size() > p_limit:
 		results = results.slice(0, p_limit)
 	
-	# 更新访问信息
 	for entry in results:
 		entry.access_count += 1
 		entry.last_accessed = Time.get_datetime_string_from_system()

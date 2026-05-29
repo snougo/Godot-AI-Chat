@@ -23,7 +23,7 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 		final_system_prompt += "Current Workspace: `%s`\n" % p_settings.workspace_path
 		final_system_prompt += "======================\n"
 	
-	# 3. 注入相关记忆（基于工作区召回）
+	# 3. 注入相关记忆（基于工作区召回 + 全局记忆）
 	var memory_store_path: String = MemoryStore.SAVE_PATH
 	if ResourceLoader.exists(memory_store_path):
 		var store: MemoryStore = load(memory_store_path) as MemoryStore
@@ -32,14 +32,15 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 			if not relevant.is_empty():
 				final_system_prompt += "\n\n===== RELEVANT MEMORIES =====\n"
 				for entry in relevant:
-					final_system_prompt += "- [%s][imp:%d/5] %s\n  %s\n" % [
+					final_system_prompt += "- [%s][scope:%s][imp:%d/5] %s\n  %s\n" % [
 						entry.memory_type,
+						entry.scope,
 						entry.importance,
 						entry.title,
 						entry.content
 					]
 				final_system_prompt += "==============================\n"
-				store.save()  # 保存更新后的访问计数
+				store.save()
 	
 	# 4. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(
