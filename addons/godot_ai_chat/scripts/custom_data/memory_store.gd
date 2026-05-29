@@ -84,8 +84,9 @@ func delete_entry(p_id: int) -> bool:
 
 ## 多条件搜索（所有参数可选）
 ## 关键词使用词级模糊匹配（任意词命中即匹配）
+## [param p_sort_by]: 排序方式 — default | created_at | last_accessed | importance | access_count
 func search(p_workspace_path: String = "", p_keywords: String = "",
-		p_limit: int = 10) -> Array[MemoryEntry]:
+		p_limit: int = 10, p_sort_by: String = "default") -> Array[MemoryEntry]:
 	var results: Array[MemoryEntry] = []
 	
 	for entry in entries:
@@ -106,7 +107,22 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 		
 		results.append(entry)
 	
-	results.sort_custom(_compare_entries)
+	# 根据 sort_by 参数选择排序方式
+	match p_sort_by:
+		"created_at":
+			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+				return a.created_at > b.created_at)
+		"last_accessed":
+			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+				return a.last_accessed > b.last_accessed)
+		"importance":
+			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+				return a.importance > b.importance)
+		"access_count":
+			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+				return a.access_count > b.access_count)
+		_:  # "default"
+			results.sort_custom(_compare_entries)
 	
 	if results.size() > p_limit:
 		results = results.slice(0, p_limit)

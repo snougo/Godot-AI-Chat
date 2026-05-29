@@ -1,7 +1,0 @@
-[gd_resource type="Resource" script_class="PluginSettingsConfig" format=3 uid="uid://cwbpvj4hwg81p"]
-
-[ext_resource type="Script" uid="uid://ry1tgn1u3eiw" path="res://addons/godot_ai_chat/scripts/custom_data/plugin_settings_config.gd" id="1_40n6l"]
-
-[resource]
-script = ExtResource("1_40n6l")
-temperature = 0.5999999999476128

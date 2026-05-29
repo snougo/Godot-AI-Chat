@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "search_memories"
-	tool_description = "Search stored memories by workspace and keywords. When a workspace_path is provided, both workspace-level and global-level memories are searched. Keywords use fuzzy matching (any word in the query will match). workspace_path is required."
+	tool_description = "Search stored memories by workspace and keywords. When a workspace_path is provided, both workspace-level and global-level memories are searched. Keywords use fuzzy matching (any word in the query will match). Supports multiple sort orders via sort_by parameter. workspace_path is required."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -25,6 +25,12 @@ func get_parameters_schema() -> Dictionary:
 				"maximum": 50,
 				"default": 10,
 				"description": "Maximum number of results (default 10, max 50)"
+			},
+			"sort_by": {
+				"type": "string",
+				"enum": ["default", "created_at", "last_accessed", "importance", "access_count"],
+				"default": "default",
+				"description": "Sort order: default (type→importance→time), created_at (newest first), last_accessed (recently viewed first), importance (highest first), access_count (most viewed first)"
 			}
 		},
 		"required": ["workspace_path", "limit"]
@@ -35,6 +41,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var workspace_path: String = p_args.get("workspace_path", "").strip_edges()
 	var keywords: String = p_args.get("keywords", "").strip_edges()
 	var limit: int = p_args.get("limit", 10)
+	var sort_by: String = p_args.get("sort_by", "default")
 	
 	if workspace_path.is_empty():
 		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
@@ -42,7 +49,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	limit = clampi(limit, 1, 50)
 	
 	var store := _load_or_create_store()
-	var results := store.search(workspace_path, keywords, limit)
+	var results := store.search(workspace_path, keywords, limit, sort_by)
 	
 	if results.is_empty():
 		return {"success": true, "data": "No memories found matching the criteria."}
