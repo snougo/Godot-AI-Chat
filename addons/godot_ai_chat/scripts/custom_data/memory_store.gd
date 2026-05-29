@@ -92,11 +92,7 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 	for entry in entries:
 		# 工作区过滤：如果传了工作区路径
 		if not p_workspace_path.is_empty():
-			# 全局级记忆始终包含
-			if entry.scope == "global":
-				pass  # 包含
-			# 工作区级记忆需要匹配路径
-			elif entry.workspace_path != _normalize_path(p_workspace_path):
+			if _normalize_path(entry.workspace_path) != _normalize_path(p_workspace_path):
 				continue
 		
 		# 模糊关键词搜索
@@ -144,9 +140,9 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	
 	for entry in entries:
 		if entry.scope == "global":
-			global_results.append(entry)                    # 全局：全部收集
-		elif entry.workspace_path == _normalize_path(p_workspace_path):
-			workspace_results.append(entry)                 # 工作区：需路径匹配
+			global_results.append(entry) # 全局：全部收集
+		elif _normalize_path(entry.workspace_path) == _normalize_path(p_workspace_path):
+			workspace_results.append(entry) # 工作区：需路径匹配
 	
 	# 工作区记忆：排序 + 截断（受 limit 限制）
 	workspace_results.sort_custom(_compare_entries)

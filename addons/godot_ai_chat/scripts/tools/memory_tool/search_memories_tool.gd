@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "search_memories"
-	tool_description = "Search stored memories by workspace and keywords. When a workspace_path is provided, both workspace-level and global-level memories are searched. Keywords use fuzzy matching (any word in the query will match). Supports multiple sort orders via sort_by parameter. workspace_path is required."
+	tool_description = "Search stored memories by workspace and keywords. When a workspace_path is provided, only memories belonging to that workspace are returned. Keywords use fuzzy matching (any word in the query will match). Supports multiple sort orders via sort_by parameter. workspace_path is required."
 
 
 func get_parameters_schema() -> Dictionary:
