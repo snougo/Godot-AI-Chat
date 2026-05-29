@@ -31,17 +31,10 @@ func get_parameters_schema() -> Dictionary:
 			"memory_type": {
 				"type": "string",
 				"enum": MemoryEntry.get_valid_types(),
-				"description": "Type of memory: session_summary, user_preference, project_decision, lesson_learned"
-			},
-			"importance": {
-				"type": "integer",
-				"minimum": MemoryEntry.MIN_IMPORTANCE,
-				"maximum": MemoryEntry.MAX_IMPORTANCE,
-				"default": 3,
-				"description": "Importance level (%d-%d)" % [MemoryEntry.MIN_IMPORTANCE, MemoryEntry.MAX_IMPORTANCE]
+				"description": "Type of memory: session_summary, user_preference, project_decision, lesson_learned, bug_fix"
 			}
 		},
-		"required": ["workspace_path", "scope", "title", "content", "memory_type", "importance"]
+		"required": ["workspace_path", "scope", "title", "content", "memory_type"]
 	}
 
 
@@ -51,7 +44,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var title: String = p_args.get("title", "").strip_edges()
 	var content: String = p_args.get("content", "").strip_edges()
 	var memory_type: String = p_args.get("memory_type", "")
-	var importance: int = p_args.get("importance", 3)
 	
 	# Validation
 	if workspace_path.is_empty():
@@ -75,10 +67,8 @@ func execute(p_args: Dictionary) -> Dictionary:
 			"data": "Error: Invalid memory type '%s'. Valid options: %s" % [memory_type, MemoryEntry.get_valid_types()]
 		}
 	
-	importance = MemoryEntry.clamp_importance(importance)
-	
 	var store := _load_or_create_store()
-	var entry := store.add_entry(title, content, memory_type, importance, scope, workspace_path)
+	var entry := store.add_entry(title, content, memory_type, scope, workspace_path)
 	
 	if not entry:
 		return {"success": false, "data": "Error: Failed to add memory entry."}
@@ -92,7 +82,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	result += "Workspace: %s\n" % entry.workspace_path
 	result += "Title: %s\n" % entry.title
 	result += "Type: %s\n" % entry.memory_type
-	result += "Importance: %d/5\n" % entry.importance
 	result += "Content: %s" % entry.content
 	
 	return {"success": true, "data": result}

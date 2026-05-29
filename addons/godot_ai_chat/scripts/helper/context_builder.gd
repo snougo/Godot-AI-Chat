@@ -35,13 +35,12 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 			
 			if not global_memories.is_empty():
 				global_memories.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-					return a.importance > b.importance)
+					return a.created_at > b.created_at)
 				
 				final_system_prompt += "\n\n===== GLOBAL MEMORIES =====\n"
 				for entry in global_memories:
-					final_system_prompt += "- [%s][imp:%d/5] %s\n  %s\n" % [
+					final_system_prompt += "- [%s] %s\n  %s\n" % [
 						entry.memory_type,
-						entry.importance,
 						entry.title,
 						entry.content
 					]

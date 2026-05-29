@@ -20,16 +20,12 @@ const VALID_MEMORY_TYPES: Array[String] = [
 	"bug_fix"             # Bug 修复记录（仅限 workspace）
 ]
 
-const MIN_IMPORTANCE: int = 1
-const MAX_IMPORTANCE: int = 5
-
 # --- 导出字段 ---
 @export var id: int = 0
 @export var scope: String = "workspace"        # workspace | global
 @export var memory_type: String = "session_summary"
 @export var title: String = ""
 @export_multiline var content: String = ""
-@export var importance: int = 3
 @export var workspace_path: String = ""        # 所属工作区（global 级可留空或用 "res://"）
 @export var session_source: String = ""        # 来源会话文件名
 @export var created_at: String = ""
@@ -58,7 +54,3 @@ static func get_valid_scopes() -> Array[String]:
 
 static func get_valid_types() -> Array[String]:
 	return VALID_MEMORY_TYPES.duplicate()
-
-
-static func clamp_importance(p_value: int) -> int:
-	return clampi(p_value, MIN_IMPORTANCE, MAX_IMPORTANCE)

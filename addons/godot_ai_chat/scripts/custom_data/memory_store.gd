@@ -33,7 +33,7 @@ func get_next_id() -> int:
 
 ## 添加记忆条目
 func add_entry(p_title: String, p_content: String, p_type: String,
-		p_importance: int = 3, p_scope: String = "workspace",
+		p_scope: String = "workspace",
 		p_workspace_path: String = "", p_session_source: String = "") -> MemoryEntry:
 	if not MemoryEntry.is_valid_type(p_type):
 		push_error("Invalid memory type: %s" % p_type)
@@ -48,7 +48,6 @@ func add_entry(p_title: String, p_content: String, p_type: String,
 	entry.content = p_content
 	entry.scope = p_scope
 	entry.memory_type = p_type
-	entry.importance = MemoryEntry.clamp_importance(p_importance)
 	entry.workspace_path = p_workspace_path
 	entry.session_source = p_session_source
 	
@@ -64,8 +63,6 @@ func update_entry(p_id: int, p_updates: Dictionary) -> bool:
 			if p_updates.has("content"): entry.content = p_updates.content
 			if p_updates.has("memory_type") and MemoryEntry.is_valid_type(p_updates.memory_type):
 				entry.memory_type = p_updates.memory_type
-			if p_updates.has("importance"):
-				entry.importance = MemoryEntry.clamp_importance(p_updates.importance)
 			if p_updates.has("workspace_path"): entry.workspace_path = p_updates.workspace_path
 			return true
 	return false
@@ -82,20 +79,10 @@ func delete_entry(p_id: int) -> bool:
 
 # --- 检索 ---
 
-## 多条件搜索（所有参数可选）
+## 多条件搜索
 ## 关键词使用词级模糊匹配（任意词命中即匹配）
-## [param p_sort_by]: 排序方式 — default | created_at | last_accessed | importance | access_count
-## [param p_memory_type]: 按类型过滤（空字符串表示不过滤）
-## [param p_min_importance]: 最小重要性 (1-5)
-## [param p_max_importance]: 最大重要性 (1-5)
-func search(p_workspace_path: String = "", 
-			p_keywords: String = "", 
-			p_limit: int = 10, 
-			p_sort_by: String = "default", 
-			p_memory_type: String = "", 
-			p_min_importance: int = 1, 
-			p_max_importance: int = 5) -> Array[MemoryEntry]:
-	
+func search(p_workspace_path: String = "", p_keywords: String = "",
+		p_limit: int = 10, p_memory_type: String = "") -> Array[MemoryEntry]:
 	var results: Array[MemoryEntry] = []
 	
 	for entry in entries:
@@ -114,28 +101,10 @@ func search(p_workspace_path: String = "",
 		if not p_memory_type.is_empty() and entry.memory_type != p_memory_type:
 			continue
 		
-		# 重要性范围过滤
-		if entry.importance < p_min_importance or entry.importance > p_max_importance:
-			continue
-		
 		results.append(entry)
 	
-	# 根据 sort_by 参数选择排序方式
-	match p_sort_by:
-		"created_at":
-			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-				return a.created_at > b.created_at)
-		"last_accessed":
-			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-				return a.last_accessed > b.last_accessed)
-		"importance":
-			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-				return a.importance > b.importance)
-		"access_count":
-			results.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-				return a.access_count > b.access_count)
-		_:  # "default"
-			results.sort_custom(_compare_entries)
+	# 按类型 → 创建时间排序
+	results.sort_custom(_compare_entries)
 	
 	if results.size() > p_limit:
 		results = results.slice(0, p_limit)
@@ -157,9 +126,9 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	
 	for entry in entries:
 		if entry.scope == "global":
-			global_results.append(entry) # 全局：全部收集
+			global_results.append(entry)                    # 全局：全部收集
 		elif _normalize_path(entry.workspace_path) == _normalize_path(p_workspace_path):
-			workspace_results.append(entry) # 工作区：需路径匹配
+			workspace_results.append(entry)                 # 工作区：需路径匹配
 	
 	# 工作区记忆：排序 + 截断（受 limit 限制）
 	workspace_results.sort_custom(_compare_entries)
@@ -184,19 +153,11 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 func get_statistics() -> Dictionary:
 	var stats: Dictionary = {}
 	for mtype in MemoryEntry.get_valid_types():
-		stats[mtype] = {"count": 0, "total_importance": 0}
+		stats[mtype] = {"count": 0}
 	
 	for entry in entries:
 		if stats.has(entry.memory_type):
 			stats[entry.memory_type].count += 1
-			stats[entry.memory_type].total_importance += entry.importance
-	
-	for mtype in stats:
-		if stats[mtype].count > 0:
-			stats[mtype].avg_importance = float(stats[mtype].total_importance) / stats[mtype].count
-		else:
-			stats[mtype].avg_importance = 0.0
-		stats[mtype].erase("total_importance")
 	
 	return stats
 
@@ -221,11 +182,7 @@ func _compare_entries(a: MemoryEntry, b: MemoryEntry) -> bool:
 	if a_order != b_order:
 		return a_order < b_order
 	
-	# 2 按重要性降序
-	if a.importance != b.importance:
-		return a.importance > b.importance
-	
-	# 3 按时间降序
+	# 2 按时间降序
 	return a.created_at > b.created_at
 
 
