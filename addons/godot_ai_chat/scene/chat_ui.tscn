@@ -104,7 +104,7 @@ text_overrun_behavior = 1
 [node name="WorkspaceLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=891807978]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_qjs14")
-text = "Current Workspace: res://addons/godot_ai_chat/"
+text = "Current Workspace: res://addons/godot_ai_chat"
 label_settings = SubResource("LabelSettings_ju5xs")
 vertical_alignment = 1
 text_overrun_behavior = 1
