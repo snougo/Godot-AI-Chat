@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "search_memories"
-	tool_description = "Search stored memories by workspace, keywords, memory type, and limit. All parameters are required. Keywords use fuzzy matching. workspace_path is required."
+	tool_description = "Search stored memories by workspace, memory type, and limit. Keywords are optional — when omitted, returns all entries matching the workspace and type. workspace_path is required."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -17,7 +17,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"keywords": {
 				"type": "string",
-				"description": "Keywords to fuzzy search in title and content (required — must not be empty)"
+				"description": "Keywords to fuzzy search in title and content (optional — leave empty to return all entries of the specified type)"
 			},
 			"memory_type": {
 				"type": "string",
@@ -32,7 +32,7 @@ func get_parameters_schema() -> Dictionary:
 				"description": "Maximum number of results (required, default 10, max 50)"
 			}
 		},
-		"required": ["workspace_path", "keywords", "memory_type", "limit"]
+		"required": ["workspace_path", "memory_type", "limit"]
 	}
 
 
@@ -44,9 +44,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	if workspace_path.is_empty():
 		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
-	
-	if keywords.is_empty():
-		return {"success": false, "data": "Error: keywords is required. Provide keywords to search in memory titles and content."}
 	
 	if memory_type.is_empty():
 		return {"success": false, "data": "Error: memory_type is required. Select one type from: %s" % [", ".join(MemoryEntry.get_valid_types())]}
