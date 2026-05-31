@@ -83,8 +83,6 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 							entry.content
 						]
 					final_system_prompt += "==============================\n"
-			
-			store.save()
 	
 	# 4. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(
