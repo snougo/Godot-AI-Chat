@@ -71,6 +71,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		lines.append("[%d] %s" % [i + 1, entry.title])
 		lines.append("    Workspace: %s" % entry.workspace_path)
 		lines.append("    Type: %s" % entry.memory_type)
+		lines.append("    Created: %s" % entry.created_at.replace("T", " "))  # ← 新增
 		lines.append("    Content: %s" % entry.content)
 	
 	# 保存更新后的访问计数
