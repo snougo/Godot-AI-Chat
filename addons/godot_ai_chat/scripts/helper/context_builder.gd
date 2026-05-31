@@ -76,9 +76,10 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					
 					final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
 					for entry in session_summaries:
-						final_system_prompt += "- [%s] %s\n  %s\n" % [
+						final_system_prompt += "- [%s] %s (%s)\n  %s\n" % [
 							entry.memory_type,
 							entry.title,
+							entry.created_at.replace("T", " "),
 							entry.content
 						]
 					final_system_prompt += "==============================\n"
