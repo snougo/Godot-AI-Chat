@@ -304,12 +304,13 @@ func _convert_inline(p_text: String) -> String:
 				if close_paren != -1:
 					var link_text: String = p_text.substr(i + 1, close_bracket - i - 1)
 					var link_url: String = p_text.substr(close_bracket + 2, close_paren - close_bracket - 2)
+					link_url = link_url.replace("[", "[lb]").replace("]", "[rb]")
 					link_text = _convert_inline(link_text)
 					result += "[color=#B39DDB][url=" + link_url + "]" + link_text + "[/url][/color]"
 					i = close_paren + 1
 					continue
-			# 不是链接格式，当作普通字符
-			result += c
+			# 不是链接格式，当作普通字符（转义方括号防止 BBCode 注入）
+			result += "[lb]"
 			i += 1
 			continue
 		
@@ -322,7 +323,14 @@ func _convert_inline(p_text: String) -> String:
 				i = end + 2
 				continue
 		
-		result += c
+		# 转义方括号防止 BBCode 注入
+		match c:
+			"[":
+				result += "[lb]"
+			"]":
+				result += "[rb]"
+			_:
+				result += c
 		i += 1
 	
 	return result
