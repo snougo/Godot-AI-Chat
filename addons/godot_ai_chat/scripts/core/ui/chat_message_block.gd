@@ -69,14 +69,14 @@ func _ready() -> void:
 func set_content(p_role: String, p_content: String, p_model_name: String = "", p_tool_calls: Array = [], p_reasoning: String = "") -> void:
 	_set_title(p_role, p_model_name)
 	_clear_content()
-
+	
 	if not p_reasoning.is_empty():
 		append_reasoning(p_reasoning)
-
+	
 	_streaming = false
 	_parser.feed(p_content)
 	_parser.flush()
-
+	
 	for tc in p_tool_calls:
 		show_tool_call(tc)
 
@@ -104,10 +104,10 @@ func append_chunk(p_text: String) -> void:
 func append_reasoning(p_text: String) -> void:
 	if p_text.is_empty():
 		return
-
+	
 	if not is_instance_valid(_reasoning_container):
 		_create_reasoning_ui()
-
+	
 	# [优化P1] 折叠状态下仅缓存文本，不更新 UI，避免触发布局计算
 	if _reasoning_container.is_folded():
 		_reasoning_text_cache += p_text
@@ -144,27 +144,27 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 		tool_name = p_tool_call.function.get("name", "unknown")
 	else:
 		tool_name = p_tool_call.get("name", "unknown")
-
+	
 	# [UI防御] 清洗并验证。如果是非法名称，直接忽略，不生成任何 UI
 	var clean_name: String = tool_name.replace("", "").replace("tool_call", "").strip_edges()
 	if not ToolBox.is_valid_tool_name(clean_name):
 		return
-
+	
 	var call_id: String = p_tool_call.get("id", "no-id")
 	var safe_node_name: String = ("Tool_" + call_id).validate_node_name()
-
+	
 	var shown_calls: Array = _content_container.get_meta("shown_calls", [])
 	if call_id in shown_calls:
 		_update_tool_call_ui(safe_node_name, p_tool_call)
 		return
-
+	
 	shown_calls.append(call_id)
 	_content_container.set_meta("shown_calls", shown_calls)
-
+	
 	# 1. 创建外观容器
 	var panel: PanelContainer = PanelContainer.new()
 	panel.name = safe_node_name
-
+	
 	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.13, 0.16, 0.9)
 	style.set_corner_radius_all(6)
@@ -172,28 +172,28 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 	style.border_width_left = 4
 	style.border_color = Color.GOLD
 	panel.add_theme_stylebox_override("panel", style)
-
+	
 	var vbox: VBoxContainer = VBoxContainer.new()
 	panel.add_child(vbox)
-
+	
 	# 2. 标题
 	var title_label: RichTextLabel = RichTextLabel.new()
 	title_label.bbcode_enabled = true
 	title_label.fit_content = true
 	title_label.selection_enabled = false
-
+	
 	title_label.append_text("[b][color=cyan]🔧 Tool Call:[/color][/b] [color=yellow]%s[/color]" % clean_name)
 	vbox.add_child(title_label)
-
+	
 	# 3. 参数详情
 	var args_label: RichTextLabel = RichTextLabel.new()
 	args_label.name = "ArgsLabel"
 	args_label.bbcode_enabled = true
 	args_label.fit_content = true
 	vbox.add_child(args_label)
-
+	
 	_update_args_display(args_label, p_tool_call)
-
+	
 	_content_container.add_child(panel)
 	_last_ui_node = null
 
@@ -204,10 +204,10 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 	if p_data.is_empty():
 		return
-
+	
 	var img: Image = Image.new()
 	var err: Error = OK
-
+	
 	match p_mime:
 		"image/png":
 			err = img.load_png_from_buffer(p_data)
@@ -215,7 +215,7 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 			err = img.load_jpg_from_buffer(p_data)
 		_:
 			err = img.load_png_from_buffer(p_data)
-
+	
 	if err == OK:
 		var tex: ImageTexture = ImageTexture.create_from_image(img)
 		var rect: TextureRect = TextureRect.new()
@@ -224,7 +224,7 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
 		rect.custom_minimum_size = Vector2(400, 400)
-
+		
 		_content_container.add_child(rect)
 		_last_ui_node = null
 	else:
@@ -235,7 +235,7 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 func suspend_content() -> void:
 	if _is_suspended or _typing_active:
 		return
-
+	
 	# [优化P2] 无论折叠与否，统一移除内容以彻底释放布局压力
 	custom_minimum_size.y = size.y
 	remove_child(_main_margin_container)
@@ -246,7 +246,7 @@ func suspend_content() -> void:
 func resume_content() -> void:
 	if not _is_suspended:
 		return
-
+	
 	add_child(_main_margin_container)
 	custom_minimum_size.y = 0
 	_is_suspended = false
@@ -259,21 +259,154 @@ func is_suspended() -> bool:
 
 # --- Private Functions ---
 
+# 将一行文本中的内联 Markdown 转换为 BBCode
+## 支持：**bold**  `code`(→斜体)
+func _convert_inline(p_text: String) -> String:
+	var result: String = ""
+	var i: int = 0
+	var len: int = p_text.length()
+	
+	while i < len:
+		var c: String = p_text[i]
+		
+		# **bold**（递归处理内部内容）
+		if c == "*" and i + 1 < len and p_text[i + 1] == "*":
+			var end: int = p_text.find("**", i + 2)
+			if end != -1:
+				var inner: String = p_text.substr(i + 2, end - i - 2)
+				result += "[b]" + _convert_inline(inner) + "[/b]"
+				i = end + 2
+				continue
+		
+		# *italic* → 斜体 + 蓝色（递归处理内部内容，跳过 **...** 对）
+		if c == "*":
+			var end: int = _find_italic_end(p_text, i)
+			if end != -1:
+				var inner: String = p_text.substr(i + 1, end - i - 1)
+				result += "[i][color=#569CD6]" + _convert_inline(inner) + "[/color][/i]"
+				i = end + 1
+				continue
+		
+		# `inline code` → 淡黄色（递归处理内部内容）
+		if c == "`":
+			var end: int = p_text.find("`", i + 1)
+			if end != -1:
+				var inner: String = p_text.substr(i + 1, end - i - 1)
+				result += "[color=#FFFACD]" + _convert_inline(inner) + "[/color]"
+				i = end + 1
+				continue
+		
+		# [text](url) → 淡紫色链接（递归处理内部文本）
+		if c == "[":
+			var close_bracket: int = p_text.find("]", i + 1)
+			if close_bracket != -1 and close_bracket + 1 < len and p_text[close_bracket + 1] == "(":
+				var close_paren: int = p_text.find(")", close_bracket + 2)
+				if close_paren != -1:
+					var link_text: String = p_text.substr(i + 1, close_bracket - i - 1)
+					var link_url: String = p_text.substr(close_bracket + 2, close_paren - close_bracket - 2)
+					link_text = _convert_inline(link_text)
+					result += "[color=#B39DDB][url=" + link_url + "]" + link_text + "[/url][/color]"
+					i = close_paren + 1
+					continue
+			# 不是链接格式，当作普通字符
+			result += c
+			i += 1
+			continue
+		
+		# ~~strikethrough~~（递归处理内部内容）
+		if c == "~" and i + 1 < len and p_text[i + 1] == "~":
+			var end: int = p_text.find("~~", i + 2)
+			if end != -1:
+				var inner: String = p_text.substr(i + 2, end - i - 2)
+				result += "[s]" + _convert_inline(inner) + "[/s]"
+				i = end + 2
+				continue
+		
+		result += c
+		i += 1
+	
+	return result
+
+
+# 查找斜体的闭合 *，跳过中间的 **...** 对
+func _find_italic_end(p_text: String, p_start: int) -> int:
+	var j: int = p_start + 1
+	while j < p_text.length():
+		if p_text[j] == "*":
+			# 遇到 **（粗体开始），跳过到其闭合 **
+			if j + 1 < p_text.length() and p_text[j + 1] == "*":
+				var bold_end: int = p_text.find("**", j + 2)
+				if bold_end != -1:
+					j = bold_end + 2
+					continue
+				else:
+					return -1  # ** 未闭合，斜体也无法闭合
+			else:
+				return j  # 单个 *，就是斜体的闭合标记
+		j += 1
+	return -1
+
+
+# 将一行文本转换为 BBCode（行级结构 + 内联转换）
+## 支持：标题(#~######) 表格(|...|) **bold** `code`
+func _convert_md_to_bbcode(p_text: String) -> String:
+	# 去掉尾部 \n（Parser 在每个 TEXT segment 末尾添加的）
+	var content: String = p_text.trim_suffix("\n")
+	
+	# --- 1. 标题检测 ---
+	var heading_level: int = 0
+	for level in range(1, 7):
+		var prefix: String = "#".repeat(level) + " "
+		if content.begins_with(prefix):
+			heading_level = level
+			break
+	
+	if heading_level > 0:
+		var heading_text: String = content.substr(heading_level + 1).strip_edges()
+		heading_text = _convert_inline(heading_text)
+		var sizes: Array[int] = [28, 24, 20, 18, 16, 14]
+		return "[font_size=%d][b]%s[/b][/font_size]\n" % [sizes[heading_level - 1], heading_text]
+	
+	# --- 2. 表格行检测 ---
+	var trimmed: String = content.strip_edges()
+	if trimmed.begins_with("|"):
+		# 跳过分隔行（|----|）
+		var check: String = trimmed.replace("|", "").replace("-", "").replace(" ", "").replace(":", "")
+		if check.is_empty():
+			return "\n"
+		
+		# 格式化数据行
+		var row: String = trimmed
+		if row.begins_with("|"):
+			row = row.substr(1)
+		if row.ends_with("|"):
+			row = row.left(-1)
+		
+		var cells: Array[String] = []
+		for cell in row.split("|"):
+			cells.append(_convert_inline(cell.strip_edges()))
+		
+		return "  │  ".join(cells) + "\n"
+	
+	# --- 3. 普通文本：内联转换 ---
+	return _convert_inline(content) + "\n"
+
+
 ## 解析器信号回调：将解析段落路由到对应的 UI 渲染方法
 func _on_parser_segment_parsed(p_type: int, p_content: String, p_meta: String) -> void:
 	var instant: bool = not _streaming
-
+	
 	match p_type:
 		MarkdownStreamParser.SegmentType.TEXT:
 			_append_to_text(p_content, instant)
-
+		
 		MarkdownStreamParser.SegmentType.CODE_BLOCK_START:
 			_finish_typing()
 			_create_code_block(p_meta)
-
+		
 		MarkdownStreamParser.SegmentType.CODE_BLOCK_CONTENT:
 			_append_to_code(p_content)
-
+		
 		MarkdownStreamParser.SegmentType.CODE_BLOCK_END:
 			_last_ui_node = null
 
@@ -286,17 +419,17 @@ func _set_title(p_role: String, p_model_name: String) -> void:
 			title = "🧑‍💻 You"
 			if is_folded():
 				expand()
-
+		
 		ChatMessage.ROLE_ASSISTANT:
 			title = "🤖 Assistant" + ("/" + p_model_name if not p_model_name.is_empty() else "")
 			if is_folded():
 				expand()
-
+		
 		ChatMessage.ROLE_TOOL:
 			title = "⚙️ Tool Output"
 			if not is_folded():
 				fold()
-
+		
 		_:
 			title = p_role.capitalize()
 			if is_folded():
@@ -319,21 +452,21 @@ func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> vo
 		args_str = p_tool_call.function.get("arguments", "")
 	else:
 		args_str = str(p_tool_call.get("arguments", ""))
-
+	
 	p_label.clear()
 	p_label.push_color(Color(0.7, 0.7, 0.7))
-
+	
 	if args_str.strip_edges().begins_with("{"):
 		var json_obj: JSON = JSON.new()
 		var err: Error = json_obj.parse(args_str)
-
+		
 		if err == OK:
 			p_label.add_text(JSON.stringify(json_obj.data, "  "))
 		else:
 			p_label.add_text(args_str)
 	else:
 		p_label.add_text(args_str)
-
+	
 	p_label.pop()
 
 
@@ -341,14 +474,14 @@ func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> vo
 func _clear_content() -> void:
 	for c in _content_container.get_children():
 		c.queue_free()
-
+	
 	if is_instance_valid(_current_popup_code_view_window):
 		_current_popup_code_view_window.queue_free()
 		_current_popup_code_view_window = null
-
+	
 	if _content_container.has_meta("shown_calls"):
 		_content_container.set_meta("shown_calls", [])
-
+	
 	_parser.reset()
 	_last_ui_node = null
 	_typing_active = false
@@ -367,17 +500,17 @@ func _create_reasoning_ui() -> void:
 	_reasoning_container.fold()
 	# [优化P1] 监听折叠/展开信号，实现懒加载
 	_reasoning_container.folding_changed.connect(_on_reasoning_fold_changed)
-
+	
 	_content_container.add_child(_reasoning_container)
 	_content_container.move_child(_reasoning_container, 0)
-
+	
 	var margin: MarginContainer = MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 12)
 	margin.add_theme_constant_override("margin_right", 12)
 	margin.add_theme_constant_override("margin_bottom", 12)
-
+	
 	_reasoning_container.add_child(margin)
-
+	
 	# [优化P0] 使用 TextEdit 替代 RichTextLabel
 	# TextEdit 自带行级虚拟化，只渲染可见行，对超长文本性能优异
 	# RichTextLabel + fit_content = true 必须同步计算全部文本高度，长文本会阻塞主线程
@@ -389,7 +522,7 @@ func _create_reasoning_ui() -> void:
 	_reasoning_label.caret_blink = false
 	_reasoning_label.highlight_current_line = false
 	_reasoning_label.modulate = Color(0.6, 0.6, 0.6)
-
+	
 	margin.add_child(_reasoning_label)
 	_last_ui_node = null
 
@@ -412,13 +545,13 @@ func _on_reasoning_fold_changed(is_folded: bool) -> void:
 # 创建文本块 UI
 func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabel:
 	var rtl: RichTextLabel = RichTextLabel.new()
-	rtl.bbcode_enabled = false
+	rtl.bbcode_enabled = true
 	rtl.fit_content = true
 	rtl.selection_enabled = true
 	rtl.focus_mode = Control.FOCUS_CLICK
 	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rtl.text = p_initial_text
-
+	rtl.text = _convert_md_to_bbcode(p_initial_text)
+	
 	if not p_instant:
 		rtl.visible_characters = 0
 	_content_container.add_child(rtl)
@@ -430,22 +563,24 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 	if not _last_ui_node is RichTextLabel:
 		_finish_typing()
 		_last_ui_node = _create_text_block("", p_instant)
-
+	
+	var converted: String = _convert_md_to_bbcode(p_text)
+	
 	if p_instant:
-		_last_ui_node.text += p_text
+		_last_ui_node.text += converted
 	else:
 		var old_total: int = _last_ui_node.get_total_character_count()
 		if _last_ui_node.visible_characters == -1:
 			_last_ui_node.visible_characters = old_total
-
-		_last_ui_node.text += p_text
+		
+		_last_ui_node.text += converted
 		_trigger_typewriter(_last_ui_node)
 
 
 # 创建代码块 UI
 func _create_code_block(p_lang: String) -> void:
 	_finish_typing()
-
+	
 	var code_edit: CodeEdit = CodeEdit.new()
 	code_edit.editable = false
 	code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
@@ -456,43 +591,43 @@ func _create_code_block(p_lang: String) -> void:
 	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_NONE
 	code_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	code_edit.mouse_filter = CodeEdit.MOUSE_FILTER_PASS
-
+	
 	_content_container.add_child(code_edit)
 	_last_ui_node = code_edit
-
+	
 	var header: HBoxContainer = HBoxContainer.new()
 	var lang_label: Label = Label.new()
 	lang_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lang_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_CHAR
 	lang_label.text = p_lang if not p_lang.is_empty() else "Code"
 	lang_label.modulate = Color(0.7, 0.7, 0.7)
-
+	
 	var copy_code_button: Button = Button.new()
 	copy_code_button.text = "Copy"
 	copy_code_button.flat = true
 	copy_code_button.focus_mode = Control.FOCUS_NONE
-
+	
 	copy_code_button.pressed.connect(func():
 		DisplayServer.clipboard_set(code_edit.text)
-
+		
 		if copy_code_button.text != "Copied ✓":
 			var original_text: String = "Copy"
 			copy_code_button.text = "Copied ✓"
 			copy_code_button.modulate = Color.GREEN_YELLOW
-
+			
 			if copy_code_button.is_inside_tree():
 				await copy_code_button.get_tree().create_timer(3.0).timeout
-
+			
 			if is_instance_valid(copy_code_button):
 				copy_code_button.text = original_text
 				copy_code_button.modulate = Color.WHITE
 	)
-
+	
 	header.add_child(lang_label)
 	header.add_child(Control.new())
 	header.get_child(1).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(copy_code_button)
-
+	
 	var popup_code_window_button: Button = Button.new()
 	popup_code_window_button.text = "Popout"
 	popup_code_window_button.flat = true
@@ -503,7 +638,7 @@ func _create_code_block(p_lang: String) -> void:
 		AIChatLogger.debug(code_content)
 		_show_code_in_popup_window(code_content)
 	)
-
+	
 	header.add_child(popup_code_window_button)
 	_content_container.move_child(code_edit, _content_container.get_child_count() - 1)
 	_content_container.add_child(header)
@@ -536,20 +671,20 @@ func _typewriter_loop() -> void:
 	if not _typing_active or not is_instance_valid(_current_typing_node):
 		_typing_active = false
 		return
-
+	
 	var total: int = _current_typing_node.get_total_character_count()
 	var current: int = _current_typing_node.visible_characters
-
+	
 	if current == -1:
 		current = total
-
+	
 	var lag: int = total - current
-
+	
 	if lag <= 0:
 		_current_typing_node.visible_characters = -1
 		_typing_active = false
 		return
-
+	
 	var step: int = 1
 	if lag > 100:
 		step = 20
@@ -561,7 +696,7 @@ func _typewriter_loop() -> void:
 		step = 2
 	else:
 		step = 1
-
+	
 	_current_typing_node.visible_characters += step
 	get_tree().create_timer(0.016).timeout.connect(_typewriter_loop)
 
@@ -571,19 +706,19 @@ func _show_code_in_popup_window(p_code_content: String) -> void:
 	var new_popup_code_viewer_window: PopupCodeViewWindow = CODE_VIEWER_WINDOW_RES.instantiate()
 	_current_popup_code_view_window = new_popup_code_viewer_window
 	add_child(_current_popup_code_view_window)
-
+	
 	_current_popup_code_view_window.get_ok_button().pressed.connect(func():
 		remove_child(_current_popup_code_view_window)
 		_current_popup_code_view_window.queue_free()
 		_current_popup_code_view_window = null
-
+		
 		await get_tree().create_timer(1.0).timeout
 		if is_instance_valid(new_popup_code_viewer_window):
 			AIChatLogger.debug("PopupCodeViewWindow Instance is still in Memory")
 		else:
 			AIChatLogger.debug("PopupCodeViewWindow Instance has been removed from Memory")
 	)
-
+	
 	_current_popup_code_view_window.visible = true
 	var code_edit: CodeEdit = _current_popup_code_view_window.popup_code_edit
 	code_edit.text = p_code_content
