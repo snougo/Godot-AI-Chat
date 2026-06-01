@@ -17,12 +17,6 @@ signal finished
 ## 请求失败时触发
 signal failed(error_message: String)
 
-# --- Enums / Constants ---
-
-const INACTIVITY_TIMEOUT_MS: int = 600000  # 之所以设置600秒这么长是为了防止随着会话上下文的增长，本地部署的模型预填充上下文所花费的时间会越来越长
-const CONNECT_TIMEOUT_MS: int = 60000  # 30秒连接超时
-const REQUEST_TIMEOUT_MS: int = 60000
-
 # --- Private Vars ---
 
 var _provider: BaseLLMProvider
@@ -36,6 +30,10 @@ var _stop_flag: bool = false
 var _stop_flag_lock: Mutex = Mutex.new()
 var _task_id: int = -1
 
+# 超时检测器
+var _timeout_tracker: TimeoutTracker
+var _has_emitted_first_chunk: bool = false
+
 # 双层缓冲机制：字节缓冲
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
 # 双层缓冲机制：文本缓冲
@@ -46,18 +44,18 @@ var _current_sse_event: String = ""
 # 保存 HTTPClient 引用以便强制关闭
 var _http_client: HTTPClient = null
 
-var _last_data_received_time: int = 0
-
 
 # --- Built-in Functions ---
 
-func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringArray, p_body_dict: Dictionary) -> void:
+func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringArray, p_body_dict: Dictionary, p_timeout_tracker: TimeoutTracker = null) -> void:
 	_provider = p_provider
 	_url = p_url
 	_headers = p_headers
 	# [Optimization] Do NOT stringify here (Main Thread), just store the reference.
-	# _body_json = JSON.stringify(p_body_dict) 
 	_body_dict = p_body_dict
+	
+	# 使用传入的 TimeoutTracker，或创建默认
+	_timeout_tracker = p_timeout_tracker if p_timeout_tracker else TimeoutTracker.from_network_timeout(180)
 
 
 # --- Public Functions ---
@@ -65,7 +63,7 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 ## 开始执行流式请求（在线程池中运行）
 func start() -> void:
 	_stop_flag = false
-	_last_data_received_time = Time.get_ticks_msec()
+	_has_emitted_first_chunk = false
 	_task_id = WorkerThreadPool.add_task(self._thread_task, false, "Godot AI Chat Stream Request")
 	AIChatLogger.debug("StreamRequest: Task ID %d started" % _task_id)
 
@@ -90,7 +88,8 @@ func _thread_task() -> void:
 	_body_json = JSON.stringify(_body_dict)
 	
 	var client: HTTPClient = HTTPClient.new()
-	_http_client = client  # 保存引用以便 cancel() 可以强制关闭连接
+	# 保存引用以便 cancel() 可以强制关闭连接
+	_http_client = client
 	var err: Error = OK
 	
 	# 1. 解析 URL
@@ -115,19 +114,15 @@ func _thread_task() -> void:
 		client.close() 
 		return
 	
-	# [Fix] 添加请求发送超时
-	var connect_start_time: int = Time.get_ticks_msec()
-	
-	# 等待连接
+	# 等待连接（WAITING_FIRST_TOKEN 阶段）
 	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
 		client.poll()
 		if _should_stop():
 			client.close() 
 			return
 		
-		# [Fix] 检查请求超时
-		if Time.get_ticks_msec() - connect_start_time > CONNECT_TIMEOUT_MS:
-			_emit_failure("Connection timeout: Could not connect to server within 10 seconds")
+		if _timeout_tracker.check().timed_out:
+			_emit_failure("Connection timeout: Could not connect within %d seconds" % [_timeout_tracker.get_current_timeout_ms() / 1000])
 			client.close()
 			return
 		
@@ -145,18 +140,15 @@ func _thread_task() -> void:
 		client.close() 
 		return
 	
-	var request_start_time: int = Time.get_ticks_msec()
-	
-	# 4. 等待响应
+	# 4. 等待响应（仍在 WAITING_FIRST_TOKEN 阶段）
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
 		if _should_stop():
 			client.close() 
 			return
 		
-		# [Fix] 检查请求超时
-		if Time.get_ticks_msec() - request_start_time > REQUEST_TIMEOUT_MS:
-			_emit_failure("Request timeout: No response received within %d seconds" % (REQUEST_TIMEOUT_MS / 1000))
+		if _timeout_tracker.check().timed_out:
+			_emit_failure("Request timeout: No response received within %d seconds" % [_timeout_tracker.get_current_timeout_ms() / 1000])
 			client.close()
 			return
 		
@@ -170,7 +162,6 @@ func _thread_task() -> void:
 	var response_code: int = client.get_response_code()
 	
 	if response_code != 200:
-		# [调试关键] 捕获错误响应体
 		var error_body: PackedByteArray = PackedByteArray()
 		
 		while client.get_status() == HTTPClient.STATUS_BODY:
@@ -183,13 +174,6 @@ func _thread_task() -> void:
 		
 		var error_text: String = error_body.get_string_from_utf8()
 		
-		# [调试输出] 打印完整的错误响应
-		#print("🔴 HTTP Error ", response_code, " Response Body:")
-		#print(error_text)
-		#print("📋 Request URL: ", _url)
-		#print("📤 Request Body: ", _body_json.left(500))  # 打印请求体前500字符
-		
-		# 尝试解析 JSON 错误
 		var json_err = JSON.parse_string(error_text)
 		if json_err and json_err is Dictionary and json_err.has("error"):
 			var err_msg: String = error_text
@@ -220,9 +204,6 @@ func _thread_task() -> void:
 		var chunk: PackedByteArray = client.read_response_body_chunk()
 		
 		if chunk.size() > 0:
-			# [Fix] 收到数据，重置超时计时器
-			_last_data_received_time = Time.get_ticks_msec()
-			
 			_incoming_byte_buffer.append_array(chunk)
 			
 			if _is_buffer_safe_for_utf8(_incoming_byte_buffer):
@@ -235,10 +216,9 @@ func _thread_task() -> void:
 				elif parser_type == BaseLLMProvider.StreamParserType.JSON_LIST:
 					_process_json_list_buffer()
 		else:
-			# [Fix] 没有收到数据，检查是否超时
-			var elapsed: int = Time.get_ticks_msec() - _last_data_received_time
-			if elapsed > INACTIVITY_TIMEOUT_MS:
-				_emit_failure("Connection timeout: No data received for 600 seconds")
+			# 没有收到数据，检查是否超时
+			if _timeout_tracker.check().timed_out:
+				_emit_failure("Connection timeout: No data received for %d seconds" % [_timeout_tracker.get_current_timeout_ms() / 1000])
 				client.close()
 				return
 		
@@ -265,11 +245,11 @@ func _process_sse_buffer() -> void:
 			# 注意：Anthropic 的 event 和 data 是紧挨着的，不一定有空行分隔
 			continue
 		
-		# 1. 捕获 Event 类型
+		# 捕获 Event 类型
 		if line.begins_with("event:"):
 			_current_sse_event = line.substr(6).strip_edges()
 		
-		# 2. 处理 Data 内容
+		# 处理 Data 内容
 		elif line.begins_with("data:"):
 			var json_raw: String = line.substr(5).strip_edges()
 			
@@ -280,7 +260,6 @@ func _process_sse_buffer() -> void:
 				var result: Dictionary = _try_parse_one_json(json_raw)
 				if result.success:
 					if result.data is Dictionary:
-						# [注入] 将 Event 类型注入到数据中，供上层 Provider 使用
 						if not _current_sse_event.is_empty():
 							result.data["_event_type"] = _current_sse_event
 						_emit_chunk_data(result.data)
@@ -293,13 +272,8 @@ func _process_sse_buffer() -> void:
 								json_obj.data["_event_type"] = _current_sse_event
 							_emit_chunk_data(json_obj.data)
 					else:
-						# 只有当确实解析失败时才警告，忽略空的心跳包
 						if json_raw != "[DONE]":
 							AIChatLogger.warn("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
-	
-	# 处理完 data 后，通常意味着这个 event/data 对结束了
-	# 但为了安全起见，我们不立即清空 event，防止有多行 data 的情况（虽然我们不支持合并）
-	# 在遇到下一个 event: 时会自动覆盖
 
 
 # 处理 JSON List 协议缓冲区 (Gemini)
@@ -316,7 +290,7 @@ func _process_json_list_buffer() -> void:
 		if open_brace > 0:
 			_incoming_text_buffer = _incoming_text_buffer.substr(open_brace)
 			open_brace = 0
-			
+		
 		var brace_level: int = 0
 		var close_brace: int = -1
 		var in_string: bool = false
@@ -357,6 +331,11 @@ func _process_json_list_buffer() -> void:
 
 # 延迟发射 JSON 数据信号
 func _emit_chunk_data(p_json: Dictionary) -> void:
+	if not _has_emitted_first_chunk:
+		_has_emitted_first_chunk = true
+		_timeout_tracker.mark_first_token_received()
+	else:
+		_timeout_tracker.mark_data_received()
 	chunk_received.emit.call_deferred(p_json)
 
 

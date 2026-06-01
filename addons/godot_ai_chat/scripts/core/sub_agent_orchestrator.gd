@@ -73,7 +73,7 @@ func run_task() -> String:
 		var headers = provider.get_request_headers(_config.api_key, true)
 		
 		# 使用 HTTPClient 直接轮询（主线程，避免 StreamRequest 线程问题）
-		var response = await _do_stream_request(url, headers, JSON.stringify(body))
+		var response = await _do_stream_request(url, headers, JSON.stringify(body), _config.network_timeout)
 		
 		if response.has("error"):
 			AIChatLogger.error("[Sub Agent] " + response.error)
@@ -144,7 +144,10 @@ func run_task() -> String:
 
 
 # 使用 HTTPClient 在主线程轮询流式响应
-func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: String) -> Dictionary:
+func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: String, p_timeout_s: int) -> Dictionary:
+	var tracker: TimeoutTracker = TimeoutTracker.from_network_timeout(p_timeout_s)
+	var has_received_first_chunk: bool = false
+	
 	var client = HTTPClient.new()
 	
 	# 解析 URL
@@ -167,12 +170,11 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 	if err != OK:
 		return {"error": "Connection failed: %s" % error_string(err)}
 	
-	var connect_start = Time.get_ticks_msec()
 	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
 		client.poll()
-		if Time.get_ticks_msec() - connect_start > 60000:
+		if tracker.check().timed_out:
 			client.close()
-			return {"error": "Connection timeout (60s)"}
+			return {"error": "Connection timeout (%ds)" % [tracker.get_current_timeout_ms() / 1000]}
 		await get_tree().process_frame
 	
 	if client.get_status() != HTTPClient.STATUS_CONNECTED:
@@ -185,12 +187,11 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 		client.close()
 		return {"error": "Request failed: %s" % error_string(err)}
 	
-	var request_start = Time.get_ticks_msec()
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
-		if Time.get_ticks_msec() - request_start > 60000:
+		if tracker.check().timed_out:
 			client.close()
-			return {"error": "Request timeout (60s)"}
+			return {"error": "Request timeout (%ds)" % [tracker.get_current_timeout_ms() / 1000]}
 		await get_tree().process_frame
 	
 	if not client.has_response():
@@ -199,7 +200,6 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 	
 	var response_code = client.get_response_code()
 	if response_code != 200:
-		# 读取错误响应体
 		var error_body = PackedByteArray()
 		while client.get_status() == HTTPClient.STATUS_BODY:
 			client.poll()
@@ -214,21 +214,35 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 	var result = {"content": "", "reasoning_content": "", "tool_calls": []}
 	var byte_buffer = PackedByteArray()
 	var text_buffer = ""
-	var processed_pos = 0  # ← 新增：追踪已处理位置
+	var processed_pos = 0
 	
 	while client.get_status() == HTTPClient.STATUS_BODY:
 		client.poll()
 		var chunk = client.read_response_body_chunk()
+		
 		if chunk.size() > 0:
 			byte_buffer.append_array(chunk)
 			var text = byte_buffer.get_string_from_utf8()
 			if not text.is_empty():
 				byte_buffer.clear()
 				text_buffer += text
-				# 只解析新增的部分，避免重复
 				var new_text = text_buffer.substr(processed_pos)
 				_parse_sse_lines(new_text, result)
-				processed_pos = text_buffer.length()  # ← 更新已处理位置
+				processed_pos = text_buffer.length()
+				
+				# 首 token 判定：基于实际内容，而非原始 HTTP chunk
+				if not has_received_first_chunk:
+					if not result.content.is_empty() or not result.reasoning_content.is_empty():
+						has_received_first_chunk = true
+						tracker.mark_first_token_received()
+				else:
+					tracker.mark_data_received()
+		else:
+			# 流中停顿检测（仅在已收到实质内容后启用）
+			if has_received_first_chunk and tracker.check().timed_out:
+				client.close()
+				return {"error": "Stream stalled: No data received for %ds" % [tracker.get_current_timeout_ms() / 1000]}
+		
 		await get_tree().process_frame
 	
 	client.close()

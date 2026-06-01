@@ -72,7 +72,8 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	var url: String = current_provider.get_request_url(api_base_url, current_model_name, api_key, true)
 	var headers: PackedStringArray = current_provider.get_request_headers(api_key, true)
 	
-	current_stream_request = StreamRequest.new(current_provider, url, headers, body)
+	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	current_stream_request = StreamRequest.new(current_provider, url, headers, body, TimeoutTracker.from_network_timeout(settings.network_timeout))
 	
 	var result := {"success": false, "error": ""}
 	var state := {"is_finished": false}
