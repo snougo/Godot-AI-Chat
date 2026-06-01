@@ -45,6 +45,11 @@ var _reasoning_text_cache: String = ""
 # 消息块是否被挂起
 var _is_suspended: bool = false
 
+# 标记是否还在消息开头位置（用于跳过开头空白行）
+var _is_first_text: bool = true
+# 标记上一行是否为空白行（用于压缩连续空白行）
+var _previous_line_was_blank: bool = false
+
 # 当前打开的代码查看窗口引用
 var _current_popup_code_view_window: PopupCodeViewWindow = null
 
@@ -498,6 +503,9 @@ func _clear_content() -> void:
 	_reasoning_label = null
 	# [优化P1] 清空思考内容缓存
 	_reasoning_text_cache = ""
+	# 重置时恢复标志位
+	_is_first_text = true
+	_previous_line_was_blank = false
 
 
 # 创建思考内容 UI 结构
@@ -558,7 +566,12 @@ func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabe
 	rtl.selection_enabled = true
 	rtl.focus_mode = Control.FOCUS_CLICK
 	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	rtl.text = _convert_md_to_bbcode(p_initial_text)
+	# 对初始文本去除开头空白行
+	var converted: String = _convert_md_to_bbcode(p_initial_text)
+	rtl.text = converted.lstrip("\n")
+	if not p_initial_text.is_empty():
+		_is_first_text = false
+	_previous_line_was_blank = rtl.text.is_empty() or rtl.text == "\n"
 	
 	if not p_instant:
 		rtl.visible_characters = 0
@@ -573,6 +586,18 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		_last_ui_node = _create_text_block("", p_instant)
 	
 	var converted: String = _convert_md_to_bbcode(p_text)
+	var is_blank: bool = converted == "\n"
+	
+	# 跳过消息开头的所有空白行
+	if _is_first_text and is_blank:
+		return
+	
+	# 压缩连续空白行：超过1行空白行减少至1行
+	if is_blank and _previous_line_was_blank:
+		return
+	
+	_previous_line_was_blank = is_blank
+	_is_first_text = false
 	
 	if p_instant:
 		_last_ui_node.text += converted

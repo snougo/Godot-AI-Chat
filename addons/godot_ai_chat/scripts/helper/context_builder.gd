@@ -71,8 +71,8 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 							return a_priority < b_priority
 							)
 					
-					if session_summaries.size() > 5:
-						session_summaries = session_summaries.slice(0, 5)
+					if session_summaries.size() > 10:
+						session_summaries = session_summaries.slice(0, 10)
 					
 					final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
 					for entry in session_summaries:

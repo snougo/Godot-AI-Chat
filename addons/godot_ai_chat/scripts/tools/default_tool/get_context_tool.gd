@@ -63,6 +63,10 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if not validation_result.is_empty():
 		return {"success": false, "data": validation_result}
 	
+	# 安全拦截：禁止读取本插件目录下的资源文件，防止API密钥等敏感信息泄漏
+	if context_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
+		return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
+	
 	if context_type == "folder_structure":
 		return _handle_folder_structure(path, context_provider)
 	
