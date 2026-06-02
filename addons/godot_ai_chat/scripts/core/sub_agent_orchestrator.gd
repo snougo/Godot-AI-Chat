@@ -104,7 +104,10 @@ func run_task() -> String:
 		if clean_tool_calls.is_empty():
 			_remove_sub_agent_node_from_root()
 			AIChatLogger.warn("[Sub Agent] Stopped without calling tools.")
-			return "Task aborted: Sub Agent stopped reasoning without reporting a result."
+			return "Task aborted: Sub Agent stopped without reporting a result."
+		
+		# 收集本轮工具返回的图片附件
+		var pending_images: Array[Dictionary] = []
 		
 		# 执行工具
 		for tc in clean_tool_calls:
@@ -126,12 +129,35 @@ func run_task() -> String:
 			var t_result = ""
 			if tool_inst:
 				var res = await tool_inst.execute(t_args)
+				
+				# 多模态支持：检测工具返回的图片附件
+				var has_image_attachment: bool = res.has("attachments") \
+					and res.attachments is Dictionary \
+					and res.attachments.has("image_data") \
+					and res.attachments.image_data is PackedByteArray \
+					and not res.attachments.image_data.is_empty()
+				
+				if has_image_attachment:
+					pending_images.append({
+						"data": res.attachments.image_data,
+						"mime": res.attachments.get("mime", "image/png"),
+						"tool_name": t_name
+					})
+				
 				t_result = JSON.stringify(res.get("data", res), "\t")
 			else:
 				t_result = "[ERROR] Tool not found: " + t_name
 			
 			AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 			_history.add_tool_message(t_result, call_id, t_name)
+		
+		# 所有工具结果之后，将图片数据注入为 User 消息
+		if not pending_images.is_empty():
+			var img_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, \
+				"The following images were retrieved from tool execution. Please analyze their content.")
+			for img in pending_images:
+				img_msg.add_image(img.data, img.mime)
+			_history.add_message(img_msg)
 		
 		if has_reported:
 			_remove_sub_agent_node_from_root()

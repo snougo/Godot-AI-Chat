@@ -38,7 +38,7 @@ func _init(p_first_token_timeout_s: float, p_stall_timeout_s: float) -> void:
 ## 从单个 network_timeout 值派生两阶段超时
 static func from_network_timeout(p_timeout_s: int) -> TimeoutTracker:
 	var first_token: float = p_timeout_s
-	var stall: float = maxi(p_timeout_s / 3, 30)
+	var stall: float = maxi(p_timeout_s / 1, 30)
 	return new(first_token, stall)
 
 

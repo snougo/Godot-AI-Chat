@@ -52,56 +52,33 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					]
 				final_system_prompt += "==============================\n"
 			
-			# --- 工作区记忆：按 topic 分组，每个 topic 取最新2条 ---
+			# --- 工作区记忆：仅注入话题概览（话题名称 + 记忆数量） ---
 			if not workspace_memories.is_empty():
-				# 按创建时间降序排序（最新在前）
-				workspace_memories.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-					return a.created_at > b.created_at)
-				
-				# 按 topic 分组
-				var grouped: Dictionary = {}
-				var untopiced: Array[MemoryEntry] = []
+				# 按 topic 统计数量
+				var topic_counts: Dictionary = {}
+				var untopiced_count: int = 0
 				for entry in workspace_memories:
 					if not entry.topic.is_empty():
-						if not grouped.has(entry.topic):
-							grouped[entry.topic] = []
-						grouped[entry.topic].append(entry)
+						if not topic_counts.has(entry.topic):
+							topic_counts[entry.topic] = 0
+						topic_counts[entry.topic] += 1
 					else:
-						untopiced.append(entry)
-				
-				# 每个 topic 只取最新2条
-				for topic_name in grouped.keys():
-					if grouped[topic_name].size() > 2:
-						grouped[topic_name] = grouped[topic_name].slice(0, 2)
+						untopiced_count += 1
 				
 				final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
 				
 				var topic_names: Array[String] = []
-				for key in grouped.keys():
+				for key in topic_counts.keys():
 					topic_names.append(key)
 				topic_names.sort()
 				
 				for topic_name in topic_names:
-					final_system_prompt += "\n--- Topic: %s ---\n" % topic_name
-					for entry in grouped[topic_name]:
-						final_system_prompt += "- [%s] %s (%s)\n  %s\n" % [
-							entry.memory_type,
-							entry.title,
-							entry.created_at.replace("T", " "),
-							entry.content
-						]
+					final_system_prompt += "- **Topic: %s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
 				
-				if not untopiced.is_empty():
-					final_system_prompt += "\n--- 未分组 ---\n"
-					for entry in untopiced:
-						final_system_prompt += "- [%s] %s (%s)\n  %s\n" % [
-							entry.memory_type,
-							entry.title,
-							entry.created_at.replace("T", " "),
-							entry.content
-						]
+				if untopiced_count > 0:
+					final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
 				
-				final_system_prompt += "\n💡 Tip: Use search_memories with a specific topic to retrieve all memories under that topic.\n"
+				final_system_prompt += "\n💡 Tip: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
 				
 				final_system_prompt += "==============================\n"
 	
