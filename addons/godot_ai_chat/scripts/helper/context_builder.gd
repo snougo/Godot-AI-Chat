@@ -38,18 +38,49 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 				elif entry.scope == "workspace" and _normalize_path(entry.workspace_path) == normalized_workspace:
 					workspace_memories.append(entry)
 			
-			# --- 全局记忆：全部注入，按创建时间降序 ---
+			# --- 全局记忆：按话题分组，但全部注入完整内容 ---
 			if not global_memories.is_empty():
-				global_memories.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+				# 按 topic 分组
+				var topic_groups: Dictionary = {}
+				var untopiced_entries: Array[MemoryEntry] = []
+				for entry in global_memories:
+					if not entry.topic.is_empty():
+						if not topic_groups.has(entry.topic):
+							topic_groups[entry.topic] = []
+						topic_groups[entry.topic].append(entry)
+					else:
+						untopiced_entries.append(entry)
+				
+				# 各组内按创建时间降序
+				for topic in topic_groups.keys():
+					topic_groups[topic].sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+						return a.created_at > b.created_at)
+				untopiced_entries.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
 					return a.created_at > b.created_at)
 				
 				final_system_prompt += "\n\n===== GLOBAL MEMORIES =====\n"
-				for entry in global_memories:
-					final_system_prompt += "- [%s] %s\n  %s\n" % [
-						entry.memory_type,
-						entry.title,
-						entry.content
-					]
+				var topic_names: Array[String] = []
+				for key in topic_groups.keys():
+					topic_names.append(key)
+				topic_names.sort()
+				
+				for topic_name in topic_names:
+					final_system_prompt += "- **Topic: %s**\n" % topic_name
+					for entry in topic_groups[topic_name]:
+						final_system_prompt += "  - [%s] %s\n    %s\n" % [
+							entry.memory_type,
+							entry.title,
+							entry.content
+						]
+				
+				if not untopiced_entries.is_empty():
+					final_system_prompt += "- **未分组**\n"
+					for entry in untopiced_entries:
+						final_system_prompt += "  - [%s] %s\n    %s\n" % [
+							entry.memory_type,
+							entry.title,
+							entry.content
+						]
 				final_system_prompt += "==============================\n"
 			
 			# --- 工作区记忆：仅注入话题概览（话题名称 + 记忆数量） ---
