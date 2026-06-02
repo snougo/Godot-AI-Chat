@@ -23,7 +23,7 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 		final_system_prompt += "Current Workspace: `%s`\n" % p_settings.workspace_path
 		final_system_prompt += "======================\n"
 	
-	# 3. 注入记忆（全局记忆全部 + 当前工作区 session_summary 前5条）
+	# 3. 注入记忆
 	var memory_store_path: String = MemoryStore.SAVE_PATH
 	if ResourceLoader.exists(memory_store_path):
 		var store: MemoryStore = load(memory_store_path) as MemoryStore
@@ -52,43 +52,67 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					]
 				final_system_prompt += "==============================\n"
 			
-			# --- 工作区记忆：只筛选 session_summary，取最新10条 ---
+			# --- 工作区记忆：按 topic 分组，每个 topic 取最新2条 ---
 			if not workspace_memories.is_empty():
-				var session_summaries: Array[MemoryEntry] = []
-				for entry in workspace_memories:
-					if entry.memory_type == "session_summary":
-						session_summaries.append(entry)
+				# 按创建时间降序排序（最新在前）
+				workspace_memories.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
+					return a.created_at > b.created_at)
 				
-				if not session_summaries.is_empty():
-					session_summaries.sort_custom(
-						func(a: MemoryEntry, b: MemoryEntry) -> bool:
-							# 主排序：创建时间降序（最新优先）
-							if a.created_at != b.created_at:
-								return a.created_at > b.created_at
-							# 次排序：session_summary 优先（保留结构，虽已全是此类型）
-							var a_priority: int = 0 if a.memory_type == "session_summary" else 1
-							var b_priority: int = 0 if b.memory_type == "session_summary" else 1
-							return a_priority < b_priority
-							)
-					
-					if session_summaries.size() > 10:
-						session_summaries = session_summaries.slice(0, 10)
-					
-					final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
-					for entry in session_summaries:
+				# 按 topic 分组
+				var grouped: Dictionary = {}
+				var untopiced: Array[MemoryEntry] = []
+				for entry in workspace_memories:
+					if not entry.topic.is_empty():
+						if not grouped.has(entry.topic):
+							grouped[entry.topic] = []
+						grouped[entry.topic].append(entry)
+					else:
+						untopiced.append(entry)
+				
+				# 每个 topic 只取最新2条
+				for topic_name in grouped.keys():
+					if grouped[topic_name].size() > 2:
+						grouped[topic_name] = grouped[topic_name].slice(0, 2)
+				
+				final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
+				
+				var topic_names: Array[String] = []
+				for key in grouped.keys():
+					topic_names.append(key)
+				topic_names.sort()
+				
+				for topic_name in topic_names:
+					final_system_prompt += "\n--- Topic: %s ---\n" % topic_name
+					for entry in grouped[topic_name]:
 						final_system_prompt += "- [%s] %s (%s)\n  %s\n" % [
 							entry.memory_type,
 							entry.title,
 							entry.created_at.replace("T", " "),
 							entry.content
 						]
-					final_system_prompt += "==============================\n"
+				
+				if not untopiced.is_empty():
+					final_system_prompt += "\n--- 未分组 ---\n"
+					for entry in untopiced:
+						final_system_prompt += "- [%s] %s (%s)\n  %s\n" % [
+							entry.memory_type,
+							entry.title,
+							entry.created_at.replace("T", " "),
+							entry.content
+						]
+				
+				final_system_prompt += "\n💡 Tip: Use search_memories with a specific topic to retrieve all memories under that topic.\n"
+				
+				final_system_prompt += "==============================\n"
 	
 	# 4. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(
 		p_settings.max_chat_turns,
 		final_system_prompt
 	)
+	
+	# 5. Debug：输出完整系统提示词
+	AIChatLogger.debug("=== System Prompt ===\n%s" % final_system_prompt, "ContextBuilder")
 	
 	return context_messages
 

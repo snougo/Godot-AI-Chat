@@ -24,6 +24,7 @@ const VALID_MEMORY_TYPES: Array[String] = [
 @export var id: int = 0
 @export var scope: String = "workspace"        # workspace | global
 @export var memory_type: String = "session_summary"
+@export var topic: String = ""                 # 话题分组（模型动态命名，必填）
 @export var title: String = ""
 @export_multiline var content: String = ""
 @export var workspace_path: String = ""        # 所属工作区（global 级可留空或用 "res://"）

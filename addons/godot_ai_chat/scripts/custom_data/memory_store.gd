@@ -32,9 +32,7 @@ func get_next_id() -> int:
 
 
 ## 添加记忆条目
-func add_entry(p_title: String, p_content: String, p_type: String,
-		p_scope: String = "workspace",
-		p_workspace_path: String = "", p_session_source: String = "") -> MemoryEntry:
+func add_entry(p_title: String, p_content: String, p_type: String, p_scope: String = "workspace", p_workspace_path: String = "", p_session_source: String = "", p_topic: String = "") -> MemoryEntry:
 	if not MemoryEntry.is_valid_type(p_type):
 		push_error("Invalid memory type: %s" % p_type)
 		return null
@@ -48,6 +46,7 @@ func add_entry(p_title: String, p_content: String, p_type: String,
 	entry.content = p_content
 	entry.scope = p_scope
 	entry.memory_type = p_type
+	entry.topic = p_topic
 	entry.workspace_path = p_workspace_path
 	entry.session_source = p_session_source
 	
@@ -63,6 +62,7 @@ func update_entry(p_id: int, p_updates: Dictionary) -> bool:
 			if p_updates.has("content"): entry.content = p_updates.content
 			if p_updates.has("memory_type") and MemoryEntry.is_valid_type(p_updates.memory_type):
 				entry.memory_type = p_updates.memory_type
+			if p_updates.has("topic"): entry.topic = p_updates.topic
 			if p_updates.has("workspace_path"): entry.workspace_path = p_updates.workspace_path
 			return true
 	return false
@@ -81,8 +81,7 @@ func delete_entry(p_id: int) -> bool:
 
 ## 多条件搜索
 ## 关键词使用词级模糊匹配（任意词命中即匹配）
-func search(p_workspace_path: String = "", p_keywords: String = "",
-		p_limit: int = 10, p_memory_type: String = "") -> Array[MemoryEntry]:
+func search(p_workspace_path: String = "", p_keywords: String = "", p_limit: int = 10, p_memory_type: String = "", p_topic: String = "") -> Array[MemoryEntry]:
 	var results: Array[MemoryEntry] = []
 	
 	for entry in entries:
@@ -99,6 +98,10 @@ func search(p_workspace_path: String = "", p_keywords: String = "",
 		
 		# 类型过滤
 		if not p_memory_type.is_empty() and entry.memory_type != p_memory_type:
+			continue
+		
+		# 话题过滤
+		if not p_topic.is_empty() and entry.topic != p_topic:
 			continue
 		
 		results.append(entry)
@@ -126,9 +129,9 @@ func get_relevant(p_workspace_path: String, p_limit: int = 5) -> Array[MemoryEnt
 	
 	for entry in entries:
 		if entry.scope == "global":
-			global_results.append(entry)                    # 全局：全部收集
+			global_results.append(entry)
 		elif _normalize_path(entry.workspace_path) == _normalize_path(p_workspace_path):
-			workspace_results.append(entry)                 # 工作区：需路径匹配
+			workspace_results.append(entry)
 	
 	# 工作区记忆：排序 + 截断（受 limit 限制）
 	workspace_results.sort_custom(_compare_entries)
@@ -160,6 +163,19 @@ func get_statistics() -> Dictionary:
 			stats[entry.memory_type].count += 1
 	
 	return stats
+
+
+## 获取指定工作区所有已存在的话题列表（动态收集）
+func get_topics(p_workspace_path: String = "") -> Array[String]:
+	var topics: Array[String] = []
+	for entry in entries:
+		if not p_workspace_path.is_empty():
+			if _normalize_path(entry.workspace_path) != _normalize_path(p_workspace_path):
+				continue
+		if not entry.topic.is_empty() and not entry.topic in topics:
+			topics.append(entry.topic)
+	topics.sort()
+	return topics
 
 
 # --- 持久化 ---
@@ -194,7 +210,6 @@ func _fuzzy_match(p_query: String, p_text: String) -> bool:
 		word = word.strip_edges()
 		if word.length() >= 2 and p_text.contains(word):
 			return true
-	
 	# 提取中文双字词进行匹配
 	var bigrams: Array[String] = _extract_chinese_bigrams(p_query)
 	for bigram in bigrams:

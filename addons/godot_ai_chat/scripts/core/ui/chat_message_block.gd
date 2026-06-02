@@ -297,7 +297,7 @@ func _convert_inline(p_text: String) -> String:
 			var end: int = p_text.find("`", i + 1)
 			if end != -1:
 				var inner: String = p_text.substr(i + 1, end - i - 1)
-				result += "[color=#FFFACD]" + _convert_inline(inner) + "[/color]"
+				result += "[color=#d2cf95]" + _convert_inline(inner) + "[/color]"
 				i = end + 1
 				continue
 		

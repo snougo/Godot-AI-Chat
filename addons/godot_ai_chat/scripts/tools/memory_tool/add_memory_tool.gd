@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "add_memory"
-	tool_description = "Store an important memory that the AI should remember for future conversations. Use this when the user shares preferences, makes project decisions, or discusses key information. Always provide the current workspace path. Use 'scope' to indicate whether this memory is workspace-level (only relevant to current module) or global (relevant to the entire project)."
+	tool_description = "Store an important memory that the AI should remember for future conversations. Use 'topic' to group related memories under a common topic name."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -32,9 +32,13 @@ func get_parameters_schema() -> Dictionary:
 				"type": "string",
 				"enum": MemoryEntry.get_valid_types(),
 				"description": "Type of memory: session_summary, user_preference, project_decision, lesson_learned, bug_fix"
+			},
+			"topic": {
+				"type": "string",
+				"description": "Topic group for this memory (required). Use `get_memory_topics` to get existing topics."
 			}
 		},
-		"required": ["workspace_path", "scope", "title", "content", "memory_type"]
+		"required": ["workspace_path", "scope", "title", "content", "memory_type", "topic"]
 	}
 
 
@@ -44,6 +48,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var title: String = p_args.get("title", "").strip_edges()
 	var content: String = p_args.get("content", "").strip_edges()
 	var memory_type: String = p_args.get("memory_type", "")
+	var topic: String = p_args.get("topic", "").strip_edges()
 	
 	# Validation
 	if workspace_path.is_empty():
@@ -67,8 +72,11 @@ func execute(p_args: Dictionary) -> Dictionary:
 			"data": "Error: Invalid memory type '%s'. Valid options: %s" % [memory_type, MemoryEntry.get_valid_types()]
 		}
 	
+	if topic.is_empty():
+		return {"success": false, "data": "Error: topic is required. Use get_memory_topics to see existing topics or create a new one."}
+	
 	var store := _load_or_create_store()
-	var entry := store.add_entry(title, content, memory_type, scope, workspace_path)
+	var entry := store.add_entry(title, content, memory_type, scope, workspace_path, "", topic)
 	
 	if not entry:
 		return {"success": false, "data": "Error: Failed to add memory entry."}
@@ -80,6 +88,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var result: String = "Memory stored successfully.\n"
 	result += "Scope: %s\n" % entry.scope
 	result += "Workspace: %s\n" % entry.workspace_path
+	result += "Topic: %s\n" % entry.topic
 	result += "Title: %s\n" % entry.title
 	result += "Type: %s\n" % entry.memory_type
 	result += "Content: %s" % entry.content
