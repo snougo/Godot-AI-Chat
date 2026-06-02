@@ -13,6 +13,9 @@ extends RefCounted
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_context_tool.gd",
 	
+	"res://addons/godot_ai_chat/scripts/tools/debug_tool/capture_runtime_errors_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/debug_tool/run_scene_tool.gd",
+	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/check_todo_list_tool.gd",
 	
