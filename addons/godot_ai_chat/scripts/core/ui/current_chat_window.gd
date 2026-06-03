@@ -32,6 +32,7 @@ var is_plugin_init: bool = false
 # --- Private Vars ---
 
 var _culling_timer: float = 0.0
+var _is_loading: bool = false
 
 
 # --- Built-in Functions ---
@@ -198,7 +199,7 @@ func rollback_incomplete_message() -> void:
 		safety_count += 1
 	
 	# 2. 强制重绘 UI
-	# 这会消除所有“游离”的、未入库的 UI Block，保证视图与数据绝对一致
+	# 这会消除所有"游离"的、未入库的 UI Block，保证视图与数据绝对一致
 	_refresh_display()
 
 
@@ -225,6 +226,8 @@ func flush_stream_buffer() -> void:
 
 # 执行可视性剔除逻辑
 func _update_visibility_culling() -> void:
+	if _is_loading:
+		return
 	if not is_instance_valid(chat_scroll_container) or not is_instance_valid(chat_list_container):
 		return
 	
@@ -280,34 +283,24 @@ func _update_visibility_culling() -> void:
 
 # 刷新整个消息列表显示
 func _refresh_display() -> void:
-	# 1. 先清空现有内容
+	_is_loading = true
+	
 	for c in chat_list_container.get_children():
 		c.queue_free()
-	
-	# 2. 分帧加载（关键优化）
-	# 每帧处理1个消息块，避免冻结
-	var batch_size: int = 10
-	var count: int = 0
+	await get_tree().process_frame
 	
 	for msg in chat_history.messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM: 
 			continue
 		
-		# 直接使用 images 数组
 		var display_images: Array = msg.images
-		
-		# 调用更新后的 _add_block (注意参数顺序需与修改后的定义一致)
-		# _add_block(p_role, p_content, p_instant, p_tool_calls, p_images, p_reasoning)
 		_add_block(msg.role, msg.content, true, msg.tool_calls, display_images, msg.reasoning_content)
-		
-		count += 1
-		
-		# 每加载 batch_size 个，就暂停一帧
-		if count % batch_size == 0:
-			await get_tree().process_frame
+		await get_tree().process_frame
 	
-	# 3. 加载完毕后，强制执行一次剔除并滚到底部
+	_is_loading = false
 	await get_tree().process_frame
+	await get_tree().process_frame
+	_scroll_to_bottom()
 	_update_visibility_culling()
 
 
@@ -316,12 +309,9 @@ func _add_block(p_role: String, p_content: String, p_instant: bool, p_tool_calls
 	var block: ChatMessageBlock = _create_block()
 	block.set_content(p_role, p_content, current_model_name if p_role == ChatMessage.ROLE_ASSISTANT else "", p_tool_calls, p_reasoning)
 	
-	# 支持多图循环渲染
 	for img in p_images:
 		if img is Dictionary and img.has("data"):
 			block.display_image(img.data, img.get("mime", "image/png"))
-	
-	_scroll_to_bottom()
 
 
 # 实例化一个新的消息块
