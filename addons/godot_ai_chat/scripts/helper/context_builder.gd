@@ -38,7 +38,7 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 				elif entry.scope == "workspace" and _normalize_path(entry.workspace_path) == normalized_workspace:
 					workspace_memories.append(entry)
 			
-			# --- 全局记忆：按话题分组，但全部注入完整内容 ---
+			# --- 全局记忆：按话题分组注入完整内容 ---
 			if not global_memories.is_empty():
 				# 按 topic 分组
 				var topic_groups: Dictionary = {}
@@ -64,23 +64,39 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					topic_names.append(key)
 				topic_names.sort()
 				
+				# 收集所有待显示的区块（有话题 + 未分组）
+				var sections: Array[Dictionary] = []
 				for topic_name in topic_names:
-					final_system_prompt += "- **Topic: %s**\n" % topic_name
-					for entry in topic_groups[topic_name]:
-						final_system_prompt += "  - [%s] %s\n    %s\n" % [
-							entry.memory_type,
-							entry.title,
-							entry.content
-						]
-				
+					sections.append({
+						"type": "topic",
+						"name": topic_name,
+						"entries": topic_groups[topic_name]
+					})
 				if not untopiced_entries.is_empty():
-					final_system_prompt += "- **未分组**\n"
-					for entry in untopiced_entries:
+					sections.append({
+						"type": "untopiced",
+						"name": "未分组",
+						"entries": untopiced_entries
+					})
+				
+				# 逐区块输出，区块间用 --- 隔开（上下各留一空行）
+				for i in sections.size():
+					var section: Dictionary = sections[i]
+					if section["type"] == "topic":
+						final_system_prompt += "- **Topic: %s**\n" % section["name"]
+					else:
+						final_system_prompt += "- **未分组**\n"
+					
+					for entry in section["entries"]:
 						final_system_prompt += "  - [%s] %s\n    %s\n" % [
 							entry.memory_type,
 							entry.title,
 							entry.content
 						]
+					
+					if i < sections.size() - 1:
+						final_system_prompt += "\n---\n\n"
+				
 				final_system_prompt += "==============================\n"
 			
 			# --- 工作区记忆：仅注入话题概览（话题名称 + 记忆数量） ---
@@ -103,11 +119,18 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					topic_names.append(key)
 				topic_names.sort()
 				
+				# 收集所有显示项
+				var display_items: Array[Dictionary] = []
 				for topic_name in topic_names:
-					final_system_prompt += "- **Topic: %s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
-				
+					display_items.append({"label": "Topic: %s" % topic_name, "count": topic_counts[topic_name]})
 				if untopiced_count > 0:
-					final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
+					display_items.append({"label": "未分组", "count": untopiced_count})
+				
+				# 逐项输出，项间用 --- 隔开（上下各留一空行）
+				for i in display_items.size():
+					final_system_prompt += "- **%s** (%d 条记忆)\n" % [display_items[i]["label"], display_items[i]["count"]]
+					if i < display_items.size() - 1:
+						final_system_prompt += "\n---\n\n"
 				
 				final_system_prompt += "\n💡 Tip: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
 				

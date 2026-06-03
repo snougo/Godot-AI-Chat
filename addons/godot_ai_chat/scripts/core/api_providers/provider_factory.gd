@@ -12,10 +12,10 @@ extends RefCounted
 ## [param p_provider_type]: Provider 类型名称
 static func create_provider(p_provider_type: String) -> BaseLLMProvider:
 	match p_provider_type:
-		"LM Studio Stateful":
-			return LMStudioStatefulProvider.new()
-		"OpenAI-Compatible":
-			return OpenAICompatibleProvider.new()
+		"OpenAI-ChatCompletions":
+			return OpenAIChatCompletionsProvider.new()
+		"OpenAI-Responses":
+			return OpenAIResponsesProvider.new()
 		"ZhipuAI":
 			return ZhipuAIProvider.new()
 		"Google Gemini":

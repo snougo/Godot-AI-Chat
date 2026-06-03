@@ -42,6 +42,11 @@ func get_model_list() -> void:
 		get_model_list_request_succeeded.emit(model_list)
 		return
 	
+	if current_provider is AnthropicCompatibleProvider and ToolBox.get_plugin_settings().api_base_url == "https://api.deepseek.com/anthropic":
+		var models: Array[String] = ["deepseek-v4-flash"]
+		get_model_list_request_succeeded.emit(models)
+		return
+	
 	var url: String = current_provider.get_request_url(api_base_url, "", api_key, false)
 	var headers: PackedStringArray = current_provider.get_request_headers(api_key, false)
 	

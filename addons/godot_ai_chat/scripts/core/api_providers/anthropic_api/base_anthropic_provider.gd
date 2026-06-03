@@ -53,11 +53,28 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 	if not system_prompt.is_empty():
 		body["system"] = system_prompt
 	
+	#if not p_tool_definitions.is_empty():
+		#var anthropic_tools: Array = []
+		#for tool_def in p_tool_definitions:
+			#anthropic_tools.append(_convert_tool_definition(tool_def))
+		#body["tools"] = anthropic_tools
+	
+	# 工具定义：仅在工具结果回传时跳过，其他情况正常发送
 	if not p_tool_definitions.is_empty():
-		var anthropic_tools: Array = []
-		for tool_def in p_tool_definitions:
-			anthropic_tools.append(_convert_tool_definition(tool_def))
-		body["tools"] = anthropic_tools
+		# 检查最后一条非 system 消息是否为 tool（工具结果待回传）
+		var skip_tools: bool = false
+		for i in range(p_messages.size() - 1, -1, -1):
+			var msg: ChatMessage = p_messages[i]
+			if msg.role == ChatMessage.ROLE_SYSTEM:
+				continue
+			skip_tools = (msg.role == ChatMessage.ROLE_TOOL)
+			break
+		
+		if not skip_tools:
+			var anthropic_tools: Array = []
+			for tool_def in p_tool_definitions:
+				anthropic_tools.append(_convert_tool_definition(tool_def))
+			body["tools"] = anthropic_tools
 	
 	return body
 

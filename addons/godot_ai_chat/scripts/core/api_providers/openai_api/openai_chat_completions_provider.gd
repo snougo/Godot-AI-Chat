@@ -1,32 +1,13 @@
 @tool
-class_name OpenAICompatibleProvider
-extends BaseLLMProvider
+class_name OpenAIChatCompletionsProvider
+extends BaseOpenAIProvider
 
-## OpenAI 兼容接口的基类实现
+## OpenAI Chat Completions API Provider (/v1/chat/completions)
 ##
-## 处理标准的 OpenAI 格式请求，包括 SSE 解析、Tool Calls 拼装等。
+## 处理标准的 OpenAI Chat Completions 格式请求，包括 SSE 解析、Tool Calls 拼装等。
 
 
 # --- Public Functions ---
-
-## 返回该 Provider 使用的流式解析协议
-func get_stream_parser_type() -> StreamParserType:
-	return StreamParserType.SSE
-
-
-## 获取 HTTP 请求头
-func get_request_headers(p_api_key: String, p_stream: bool) -> PackedStringArray:
-	var headers: PackedStringArray = ["Content-Type: application/json"]
-	headers.append("Accept-Encoding: identity")
-	
-	if p_stream:
-		headers.append("Accept: text/event-stream")
-	
-	if not p_api_key.is_empty():
-		headers.append("Authorization: Bearer " + p_api_key)
-	
-	return headers
-
 
 ## 获取请求的 URL
 func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: String, _p_stream: bool) -> String:
@@ -64,8 +45,8 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		var msg_dict: Dictionary = _convert_message_to_api_format(msg)
 		api_messages.append(msg_dict)
 	
-	# Kimi-K2.5必须温度值为1，否则会返回400错误代码
-	var final_temperature: float = 1.0 if p_model_name == "kimi-k2.5" else p_temperature
+	# Kimi-K2.6必须温度值为1，否则会返回400错误代码
+	var final_temperature: float = 1.0 if p_model_name == "kimi-k2.6" else p_temperature
 	
 	var body: Dictionary = {
 		"model": p_model_name,
@@ -75,8 +56,6 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 	}
 	
 	if not p_tool_definitions.is_empty():
-		# 直接使用 ToolRegistry 传来的标准格式，不再二次包装
-		# ToolRegistry 现在返回的是 [{"type": "function", "function": ...}]
 		body["tools"] = p_tool_definitions
 		body["tool_choice"] = "auto"
 	
@@ -84,19 +63,6 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		body["stream_options"] = {"include_usage": true}
 	
 	return body
-
-
-## 解析模型列表响应
-func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
-	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
-	var list: Array[String] = []
-	
-	if json is Dictionary and json.has("data"):
-		for item in json.data:
-			if item.has("id"):
-				list.append(item.id)
-	
-	return list
 
 
 ## 解析非流式响应 (完整 Body)
@@ -109,7 +75,7 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 			var msg: Dictionary = json.choices[0].get("message", {})
 			var result: Dictionary = {
 				"content": msg.get("content", ""),
-				"tool_calls": msg.get("tool_calls",[]),
+				"tool_calls": msg.get("tool_calls", []),
 				"role": msg.get("role", "assistant")
 			}
 			
@@ -118,10 +84,8 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 			
 			return result
 		elif json.has("error"):
-			# 捕获 API 明确返回的错误对象 (比如上下文超限等)
 			return {"error": str(json.error), "raw": json_str}
 	
-	# 如果找不到 choices 也没有 error，连同原始文本一起返回方便调试
 	return {"error": "Unknown response format", "raw": json_str}
 
 
@@ -180,7 +144,6 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 # --- Private Functions ---
 
 # 将 ChatMessage 转换为 OpenAI 格式的字典
-# 统一了普通文本、多模态和工具调用的处理逻辑
 func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	var dict: Dictionary = { "role": p_msg.role }
 	
@@ -209,9 +172,9 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	else:
 		var final_content: String = p_msg.content
 		
-		# [防御性修复] Tool 类型的消息内容绝对不能为空，否则会导致对话链断裂
+		# [防御性修复] Tool 类型的消息内容绝对不能为空
 		if p_msg.role == "tool" and final_content.is_empty():
-			final_content = "SUCCESS" 
+			final_content = "SUCCESS"
 		
 		# [兼容性策略] Assistant 消息如果有 ToolCall，content 必须存在
 		elif p_msg.role == "assistant" and not p_msg.tool_calls.is_empty() and final_content.is_empty():
@@ -224,12 +187,10 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 		dict["name"] = p_msg.name
 	
 	# 4. Tool Calls
-	# [防御性修复] 过滤掉可能存在的格式错误的 Tool Call (例如 id 为空的)
 	if not p_msg.tool_calls.is_empty():
 		var valid_calls: Array = []
 		for tc in p_msg.tool_calls:
-			if tc.get("id", "") != "": # 确保 id 存在
-				# 确保 type 字段存在，OpenAI 规范必需
+			if tc.get("id", "") != "":
 				if not tc.has("type"): tc["type"] = "function"
 				valid_calls.append(tc)
 		
@@ -240,8 +201,7 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 	if not p_msg.tool_call_id.is_empty():
 		dict["tool_call_id"] = p_msg.tool_call_id
 	
-	# [修复] 6. Reasoning Content (Kimi/DeepSeek)
-	# 如果 Assistant 消息包含思考过程，必须回传，否则 API 会报错
+	# 6. Reasoning Content (Kimi/DeepSeek)
 	if p_msg.role == "assistant" and not p_msg.reasoning_content.is_empty():
 		dict["reasoning_content"] = p_msg.reasoning_content
 	

@@ -165,17 +165,26 @@ func get_statistics() -> Dictionary:
 	return stats
 
 
-## 获取指定工作区所有已存在的话题列表（动态收集）
-func get_topics(p_workspace_path: String = "") -> Array[String]:
-	var topics: Array[String] = []
+## 获取指定工作区所有已存在的话题及对应记忆数量（字典：话题名 → 条数）
+func get_topics(p_workspace_path: String = "") -> Dictionary:
+	var topic_counts: Dictionary = {}
 	for entry in entries:
 		if not p_workspace_path.is_empty():
 			if _normalize_path(entry.workspace_path) != _normalize_path(p_workspace_path):
 				continue
-		if not entry.topic.is_empty() and not entry.topic in topics:
-			topics.append(entry.topic)
-	topics.sort()
-	return topics
+		if not entry.topic.is_empty():
+			if not topic_counts.has(entry.topic):
+				topic_counts[entry.topic] = 0
+			topic_counts[entry.topic] += 1
+	# 按键名排序
+	var sorted: Dictionary = {}
+	var keys: Array[String] = []
+	for key in topic_counts.keys():
+		keys.append(key)
+	keys.sort()
+	for key in keys:
+		sorted[key] = topic_counts[key]
+	return sorted
 
 
 # --- 持久化 ---

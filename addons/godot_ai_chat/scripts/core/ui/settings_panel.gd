@@ -78,12 +78,12 @@ func _ready() -> void:
 	_save_button.pressed.connect(_on_save_button_pressed)
 	
 	_api_provider_options.clear()
-	_api_provider_options.add_item("OpenAI-Compatible")
-	_api_provider_options.add_item("LM Studio Stateful")
+	_api_provider_options.add_item("OpenAI-ChatCompletions")
+	_api_provider_options.add_item("OpenAI-Responses")
 	_api_provider_options.add_item("ZhipuAI")
 	_api_provider_options.add_item("Google Gemini")
 	_api_provider_options.add_item("Anthropic-Compatible")
-
+	
 	_load_and_display_settings()
 	_update_ui(SaveButtonState.IDLE)
 
@@ -108,7 +108,7 @@ func _load_and_display_settings() -> void:
 	else:
 		settings_resource = PluginSettingsConfig.new()
 		ResourceSaver.save(settings_resource, PluginPaths.SETTINGS_PATH)
-
+	
 	_populate_ui_from_resource()
 	_update_ui(SaveButtonState.IDLE)
 

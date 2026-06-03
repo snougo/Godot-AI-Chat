@@ -1,6 +1,6 @@
 @tool
 class_name ZhipuAIProvider
-extends OpenAICompatibleProvider
+extends OpenAIChatCompletionsProvider
 
 ## 智谱 AI (ZhipuAI) 的服务提供商实现
 

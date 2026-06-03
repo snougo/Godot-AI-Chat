@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "get_memory_topics"
-	tool_description = "Get all existing memory topic groups in the current workspace. Use this before adding a memory to see what topics already exist, or before searching to pick a topic."
+	tool_description = "Get all existing memory topic groups in the current workspace. Use this before adding a memory or searching memory."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -27,15 +27,16 @@ func execute(p_args: Dictionary) -> Dictionary:
 		return {"success": false, "data": "Error: workspace_path is required."}
 	
 	var store := _load_or_create_store()
-	var topics := store.get_topics(workspace_path)
+	var topics := store.get_topics(workspace_path) as Dictionary
 	
 	if topics.is_empty():
 		return {"success": true, "data": "No topics found in this workspace."}
 	
 	var lines: PackedStringArray = []
 	lines.append("Found %d topic(s) in workspace '%s':" % [topics.size(), workspace_path])
-	for t in topics:
-		lines.append("  - %s" % t)
+	for topic_name in topics:
+		var count: int = topics[topic_name]
+		lines.append("  - **%s** (%d 条记忆)" % [topic_name, count])
 	
 	return {"success": true, "data": "\n".join(lines)}
 
