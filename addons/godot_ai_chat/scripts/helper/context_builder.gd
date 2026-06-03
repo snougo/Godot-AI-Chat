@@ -38,63 +38,34 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 				elif entry.scope == "workspace" and _normalize_path(entry.workspace_path) == normalized_workspace:
 					workspace_memories.append(entry)
 			
-			# --- 全局记忆：按话题分组注入完整内容 ---
+			# --- 全局记忆：仅注入话题概览（话题名称 + 记忆数量） ---
 			if not global_memories.is_empty():
-				# 按 topic 分组
-				var topic_groups: Dictionary = {}
-				var untopiced_entries: Array[MemoryEntry] = []
+				var topic_counts: Dictionary = {}
+				var untopiced_count: int = 0
 				for entry in global_memories:
 					if not entry.topic.is_empty():
-						if not topic_groups.has(entry.topic):
-							topic_groups[entry.topic] = []
-						topic_groups[entry.topic].append(entry)
+						if not topic_counts.has(entry.topic):
+							topic_counts[entry.topic] = 0
+						topic_counts[entry.topic] += 1
 					else:
-						untopiced_entries.append(entry)
-				
-				# 各组内按创建时间降序
-				for topic in topic_groups.keys():
-					topic_groups[topic].sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-						return a.created_at > b.created_at)
-				untopiced_entries.sort_custom(func(a: MemoryEntry, b: MemoryEntry) -> bool:
-					return a.created_at > b.created_at)
+						untopiced_count += 1
 				
 				final_system_prompt += "\n\n===== GLOBAL MEMORIES =====\n"
+				
 				var topic_names: Array[String] = []
-				for key in topic_groups.keys():
+				for key in topic_counts.keys():
 					topic_names.append(key)
 				topic_names.sort()
 				
-				# 收集所有待显示的区块（有话题 + 未分组）
-				var sections: Array[Dictionary] = []
+				var display_items: Array[Dictionary] = []
 				for topic_name in topic_names:
-					sections.append({
-						"type": "topic",
-						"name": topic_name,
-						"entries": topic_groups[topic_name]
-					})
-				if not untopiced_entries.is_empty():
-					sections.append({
-						"type": "untopiced",
-						"name": "未分组",
-						"entries": untopiced_entries
-					})
+					display_items.append({"label": "Topic: %s" % topic_name, "count": topic_counts[topic_name]})
+				if untopiced_count > 0:
+					display_items.append({"label": "未分组", "count": untopiced_count})
 				
-				# 逐区块输出，区块间用 --- 隔开（上下各留一空行）
-				for i in sections.size():
-					var section: Dictionary = sections[i]
-					if section["type"] == "topic":
-						final_system_prompt += "- **Topic: %s**\n" % section["name"]
-					else:
-						final_system_prompt += "- **未分组**\n"
-					
-					for entry in section["entries"]:
-						final_system_prompt += "  - [%s] %s\n    %s\n" % [
-							entry.memory_type,
-							entry.title,
-							entry.content
-						]
-					
-					if i < sections.size() - 1:
+				for i in display_items.size():
+					final_system_prompt += "- **%s** (%d 条记忆)\n" % [display_items[i]["label"], display_items[i]["count"]]
+					if i < display_items.size() - 1:
 						final_system_prompt += "\n---\n\n"
 				
 				final_system_prompt += "==============================\n"
@@ -132,9 +103,10 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					if i < display_items.size() - 1:
 						final_system_prompt += "\n---\n\n"
 				
-				final_system_prompt += "\n💡 Tip: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
-				
 				final_system_prompt += "==============================\n"
+			
+			final_system_prompt += "\n"
+			final_system_prompt += "\n💡 > **Tip**: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
 	
 	# 4. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(

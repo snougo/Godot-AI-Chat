@@ -6,6 +6,7 @@ extends AiTool
 ##
 ## 使用 HTTPClient（无需场景树）+ Godot DOMParser 的 HTMLParser 实现。
 ## 支持 CSS 选择器定位内容和自动内容检测。
+## 本工具依赖第三方 Godot 插件 Godot DOM Parser 运行。
 
 # --- Enums / Constants ---
 

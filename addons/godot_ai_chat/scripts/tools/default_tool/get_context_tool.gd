@@ -3,6 +3,7 @@ extends AiTool
 
 ## 检索当前工作区的上下文信息。
 ## 支持获取文件夹结构、场景树、脚本文件、文本文件和图片元数据。
+## 本工具依赖第三方 Godot 插件 Context Toolkit 运行
 
 # --- Enums / Constants ---
 
