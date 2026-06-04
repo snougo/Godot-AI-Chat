@@ -53,6 +53,10 @@ var _previous_line_was_blank: bool = false
 # 当前打开的代码查看窗口引用
 var _current_popup_code_view_window: PopupCodeViewWindow = null
 
+# 表格渲染状态
+var _in_table: bool = false
+var _table_column_count: int = 0
+
 
 # --- Built-in Functions ---
 
@@ -81,6 +85,7 @@ func set_content(p_role: String, p_content: String, p_model_name: String = "", p
 	_streaming = false
 	_parser.feed(p_content)
 	_parser.flush()
+	_close_table_if_open()
 	
 	for tc in p_tool_calls:
 		show_tool_call(tc)
@@ -123,6 +128,7 @@ func append_reasoning(p_text: String) -> void:
 ## 结束流式接收，刷新解析器缓冲区
 func finish_stream() -> void:
 	_parser.flush()
+	_close_table_if_open()
 	_finish_typing()
 
 
@@ -265,7 +271,7 @@ func is_suspended() -> bool:
 # --- Private Functions ---
 
 # 将一行文本中的内联 Markdown 转换为 BBCode
-## 支持：**bold**  `code`(→斜体)
+# 支持：**bold**  `code`(→斜体)
 func _convert_inline(p_text: String) -> String:
 	var result: String = ""
 	var i: int = 0
@@ -274,12 +280,21 @@ func _convert_inline(p_text: String) -> String:
 	while i < len:
 		var c: String = p_text[i]
 		
+		# ***bold-italic***（先于 ** 检测，防止 *** 被拆分为 ** + *）
+		if c == "*" and i + 2 < len and p_text[i + 1] == "*" and p_text[i + 2] == "*":
+			var end: int = p_text.find("***", i + 3)
+			if end != -1:
+				var inner: String = p_text.substr(i + 3, end - i - 3)
+				result += "[b][i][color=#c792ea]" + _convert_inline(inner) + "[/color][/i][/b]"
+				i = end + 3
+				continue
+		
 		# **bold**（递归处理内部内容）
 		if c == "*" and i + 1 < len and p_text[i + 1] == "*":
 			var end: int = p_text.find("**", i + 2)
 			if end != -1:
 				var inner: String = p_text.substr(i + 2, end - i - 2)
-				result += "[b]" + _convert_inline(inner) + "[/b]"
+				result += "[b][color=#94bcff]" + _convert_inline(inner) + "[/color][/b]"
 				i = end + 2
 				continue
 		
@@ -328,6 +343,24 @@ func _convert_inline(p_text: String) -> String:
 				i = end + 2
 				continue
 		
+		# <自动链接> → 淡紫色链接（与内联链接同色）
+		if c == "<":
+			var end: int = p_text.find(">", i + 1)
+			if end != -1:
+				var url: String = p_text.substr(i + 1, end - i - 1)
+				# 仅匹配 URL 和 email 格式
+				if url.begins_with("http://") or url.begins_with("https://") \
+						or url.begins_with("ftp://") or url.begins_with("www.") \
+						or ("@" in url and "." in url):
+					url = url.replace("[", "[lb]").replace("]", "[rb]")
+					result += "[color=#B39DDB][url=" + url + "]" + url + "[/url][/color]"
+					i = end + 1
+					continue
+			# 不是有效自动链接，当作普通字符输出
+			result += c
+			i += 1
+			continue
+		
 		# 转义方括号防止 BBCode 注入
 		match c:
 			"[":
@@ -339,6 +372,72 @@ func _convert_inline(p_text: String) -> String:
 		i += 1
 	
 	return result
+
+
+# 将一行 Markdown 表格数据转为 BBCode 表格行
+# 首行自动作为表头（带背景色+粗体）
+func _make_table_row(p_line: String) -> String:
+	var row: String = p_line
+	if row.begins_with("|"):
+		row = row.substr(1)
+	if row.ends_with("|"):
+		row = row.left(-1)
+	
+	# 手动解析单元格，跳过反引号内的内容
+	var cells: Array[String] = []
+	var current_cell: String = ""
+	var in_backtick: bool = false
+	var i: int = 0
+	while i < row.length():
+		var ch: String = row[i]
+		
+		# 遇到反引号，切换状态
+		if ch == "`":
+			in_backtick = not in_backtick
+			current_cell += ch
+			i += 1
+			continue
+		
+		# 在反引号外遇到 `\|` → 当作普通字符
+		if not in_backtick and ch == "\\" and i + 1 < row.length() and row[i + 1] == "|":
+			current_cell += "|"
+			i += 2
+			continue
+		
+		# 在反引号外遇到 `|` → 分隔单元格
+		if not in_backtick and ch == "|":
+			cells.append(_convert_inline(current_cell.strip_edges()))
+			current_cell = ""
+			i += 1
+			continue
+		
+		current_cell += ch
+		i += 1
+	
+	# 最后一个单元格
+	cells.append(_convert_inline(current_cell.strip_edges()))
+	
+	if not _in_table:
+		_in_table = true
+		_table_column_count = cells.size()
+		var header_cells: PackedStringArray = []
+		for c in cells:
+			header_cells.append("[cell bg=#2d2d5e][b]%s[/b][/cell]" % c)
+		return "[table=%d]" % _table_column_count + "".join(header_cells) + "\n"
+	else:
+		var data_cells: PackedStringArray = []
+		for c in cells:
+			data_cells.append("[cell]%s[/cell]" % c)
+		return "".join(data_cells) + "\n"
+
+
+
+# 闭合未关闭的表格（流结束或静态加载结束时调用）
+func _close_table_if_open() -> void:
+	if _in_table:
+		_in_table = false
+		if is_instance_valid(_last_ui_node) and _last_ui_node is RichTextLabel:
+			_last_ui_node.text += "[/table]\n\n"
 
 
 # 查找斜体的闭合 *，跳过中间的 **...** 对
@@ -361,7 +460,7 @@ func _find_italic_end(p_text: String, p_start: int) -> int:
 
 
 # 将一行文本转换为 BBCode（行级结构 + 内联转换）
-## 支持：标题(#~######) 表格(|...|) **bold** `code`
+# 支持：标题(#~######) **bold** `code`
 func _convert_md_to_bbcode(p_text: String) -> String:
 	# 去掉尾部 \n（Parser 在每个 TEXT segment 末尾添加的）
 	var content: String = p_text.trim_suffix("\n")
@@ -378,34 +477,13 @@ func _convert_md_to_bbcode(p_text: String) -> String:
 		var heading_text: String = content.substr(heading_level + 1).strip_edges()
 		heading_text = _convert_inline(heading_text)
 		var sizes: Array[int] = [28, 24, 20, 18, 16, 14]
-		return "[font_size=%d][b]%s[/b][/font_size]\n" % [sizes[heading_level - 1], heading_text]
-	
-	# --- 2. 表格行检测 ---
-	var trimmed: String = content.strip_edges()
-	if trimmed.begins_with("|"):
-		# 跳过分隔行（|----|）
-		var check: String = trimmed.replace("|", "").replace("-", "").replace(" ", "").replace(":", "")
-		if check.is_empty():
-			return "\n"
-		
-		# 格式化数据行
-		var row: String = trimmed
-		if row.begins_with("|"):
-			row = row.substr(1)
-		if row.ends_with("|"):
-			row = row.left(-1)
-		
-		var cells: Array[String] = []
-		for cell in row.split("|"):
-			cells.append(_convert_inline(cell.strip_edges()))
-		
-		return "  │  ".join(cells) + "\n"
+		return "[font_size=%d][b][color=#ff729c]%s[/color][/b][/font_size]\n" % [sizes[heading_level - 1], heading_text]
 	
 	# --- 3. 普通文本：内联转换 ---
 	return _convert_inline(content) + "\n"
 
 
-## 解析器信号回调：将解析段落路由到对应的 UI 渲染方法
+# 解析器信号回调：将解析段落路由到对应的 UI 渲染方法
 func _on_parser_segment_parsed(p_type: int, p_content: String, p_meta: String) -> void:
 	var instant: bool = not _streaming
 	
@@ -506,6 +584,9 @@ func _clear_content() -> void:
 	# 重置时恢复标志位
 	_is_first_text = true
 	_previous_line_was_blank = false
+	# 重置表格状态
+	_in_table = false
+	_table_column_count = 0
 
 
 # 创建思考内容 UI 结构
@@ -585,6 +666,25 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		_finish_typing()
 		_last_ui_node = _create_text_block("", p_instant)
 	
+	# --- 表格行检测（优先处理） ---
+	var line: String = p_text.trim_suffix("\n").strip_edges()
+	var is_table_row: bool = line.begins_with("|")
+	
+	if is_table_row:
+		# 跳过分隔行（| --- |）
+		var check: String = line.replace("|", "").replace("-", "").replace(" ", "").replace(":", "")
+		if check.is_empty():
+			return
+		
+		var bb: String = _make_table_row(line)
+		_last_ui_node.text += bb
+		return
+	
+	# 非表格行：先闭合未关闭的表格
+	if _in_table:
+		_in_table = false
+		_last_ui_node.text += "[/table]\n\n"
+	
 	var converted: String = _convert_md_to_bbcode(p_text)
 	var is_blank: bool = converted == "\n"
 	
@@ -592,7 +692,7 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 	if _is_first_text and is_blank:
 		return
 	
-	# 压缩连续空白行：超过1行空白行减少至1行
+	# 压缩连续空白行
 	if is_blank and _previous_line_was_blank:
 		return
 	

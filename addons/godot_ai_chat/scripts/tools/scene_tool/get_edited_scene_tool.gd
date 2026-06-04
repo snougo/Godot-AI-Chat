@@ -4,7 +4,7 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "get_edited_scene"
-	tool_description = "Retrieves the hierarchy of the currently edited scene in the Godot Editor."
+	tool_description = "Retrieves the hierarchy of the currently edited scene in the Godot Editor. Use `open_file` first to open target scene"
 
 
 func get_parameters_schema() -> Dictionary:

@@ -1,9 +1,10 @@
 @tool
 extends AiTool
 
-## 检索当前工作区的上下文信息。
-## 支持获取文件夹结构、场景树、脚本文件、文本文件和图片元数据。
-## 本工具依赖第三方 Godot 插件 Context Toolkit 运行
+## 读取指定文件的内容（支持场景、脚本、资源、文本、图片元数据等）。
+## 不包含文件夹结构读取功能（该功能已移至 manage_folder_tool）。
+## 本AI工具功能依赖第三方Godot插件 Context Toolkit
+
 
 # --- Enums / Constants ---
 
@@ -23,8 +24,9 @@ const EXTENSION_MAP: Dictionary = {
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "get_context"
-	tool_description = "Retrieves context information in current WorkSpace."
+	tool_name = "read_file"
+	tool_description = "Reads the content of a file."
+
 
 # --- Public Functions ---
 
@@ -35,26 +37,25 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"context_type": {
 				"type": "string",
-				"enum": ["folder_structure", "scene", "gdscript", "shader", "resource", "markdown", "config", "plain_text", "image_meta"],
-				"description": "The type of context to retrieve."
-				},
+				"enum": ["scene", "gdscript", "shader", "resource", "markdown", "config", "plain_text", "image_meta"],
+				"description": "The type of file to read."
+			},
 			"path": {
 				"type": "string",
-				"description": "The full path to the file or directory."
+				"description": "The full path to the file."
 			}
 		},
 		"required": ["context_type", "path"]
 	}
 
 
-## 执行上下文检索
+## 执行文件读取
 ## [param p_args]: 包含 context_type 和 path 的参数字典
-## [return]: 包含成功状态和检索结果的字典
+## [return]: 包含成功状态和文件内容的字典
 func execute(p_args: Dictionary) -> Dictionary:
 	var context_type: String = p_args.get("context_type", "")
 	var path: String = p_args.get("path", "")
 	
-	# ContextProvider为另外一个Godot插件提供的API接口
 	var context_provider := ContextProvider.new()
 	
 	if context_type.is_empty() or path.is_empty():
@@ -68,9 +69,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if context_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
 		return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
 	
-	if context_type == "folder_structure":
-		return _handle_folder_structure(path, context_provider)
-	
 	if not EXTENSION_MAP.has(context_type):
 		return {"success": false, "data": "Error: Unknown context_type: " + context_type}
 	
@@ -78,7 +76,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if not extension_validation.is_empty():
 		return extension_validation
 	
-	return _execute_context_retrieval(context_type, path, context_provider)
+	return _read_file_content(context_type, path, context_provider)
 
 
 # --- Private Functions ---
@@ -104,29 +102,18 @@ func _validate_file_extension(p_path: String, p_context_type: String) -> Diction
 	
 	if ext not in allowed_extensions:
 		return {
-			"success": false, 
+			"success": false,
 			"data": "Error: Extension '%s' is not allowed for context_type '%s'. Allowed: %s" % [ext, p_context_type, allowed_extensions]
 		}
 	return {}
 
 
-## 处理文件夹结构检索
-## [param p_path]: 文件夹路径
-## [param p_provider]: 上下文提供者实例
-## [return]: 检索结果字典
-func _handle_folder_structure(p_path: String, p_provider: ContextProvider) -> Dictionary:
-	var dir = DirAccess.open("res://")
-	if not dir.dir_exists(p_path):
-		return {"success": false, "data": "Error: Directory not found: " + p_path}
-	return p_provider.get_folder_structure_as_markdown(p_path)
-
-
-## 执行具体的上下文检索
+## 执行文件内容读取
 ## [param p_context_type]: 上下文类型
 ## [param p_path]: 文件路径
 ## [param p_provider]: 上下文提供者实例
-## [return]: 检索结果字典
-func _execute_context_retrieval(p_context_type: String, p_path: String, p_provider: ContextProvider) -> Dictionary:
+## [return]: 读取结果字典
+func _read_file_content(p_context_type: String, p_path: String, p_provider: ContextProvider) -> Dictionary:
 	match p_context_type:
 		"scene":
 			return p_provider.get_scene_tree_as_markdown(p_path)

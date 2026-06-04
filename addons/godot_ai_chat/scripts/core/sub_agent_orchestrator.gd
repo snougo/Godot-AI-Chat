@@ -27,25 +27,25 @@ func run_task() -> String:
 	_load_isolated_tools()
 	
 	# 2. 组装提示词
-	var skill_instruction = ""
+	var skill_instruction := ""
 	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
 	if skill_res and "instruction_file" in skill_res:
-		var path = skill_res.instruction_file
+		var path: String = skill_res.instruction_file
 		if FileAccess.file_exists(path):
 			skill_instruction = FileAccess.get_file_as_string(path)
 	
-	var final_sys_prompt = _config.base_system_prompt
+	var final_sys_prompt: String = _config.base_system_prompt
 	if not skill_instruction.is_empty():
-		final_sys_prompt += "\n\n=== SKILL INSTRUCTION ===\n" + skill_instruction
+		final_sys_prompt += "\n\n==== SKILL INSTRUCTION ====\n" + skill_instruction
 	
 	_history.add_message(ChatMessage.new(ChatMessage.ROLE_SYSTEM, final_sys_prompt))
 	
-	var final_user_prompt = "Please execute the following task using your tools:\n\n=== TASK DESCRIPTION ===\n" + task_description
+	var final_user_prompt := "Please execute the following task using your tools:\n\n==== TASK DESCRIPTION ====\n" + task_description
 	_history.add_message(ChatMessage.new(ChatMessage.ROLE_USER, final_user_prompt))
 	
 	# 3. 准备 Provider
 	if _config.model_name.is_empty():
-		var err = "Sub Agent 启动失败：模型名称 (model_name) 为空！"
+		var err := "Sub Agent 启动失败：模型名称 (model_name) 为空！"
 		AIChatLogger.error(err)
 		_remove_sub_agent_node_from_root()
 		return err

@@ -3,8 +3,8 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "manage_scene_structure"
-	tool_description = "Adds, deletes, moves node to modify the SceneTree hierarchy."
+	tool_name = "edit_scene"
+	tool_description = "Adds, deletes, moves node to modify the SceneTree hierarchy. Use `open_file` first to open target scene"
 
 
 func get_parameters_schema() -> Dictionary:

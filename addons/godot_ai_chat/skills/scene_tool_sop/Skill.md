@@ -3,9 +3,6 @@
 ### 概览
 本技能旨在规范 Godot 场景与节点操作工具的使用流程。由于场景数据的复杂性和状态依赖性，必须严格遵循"观察-决策-行动"的单步循环模式，严禁盲目操作或批量执行。
 
-### 触发条件
-当用户请求创建场景文件、修改节点层级结构（添加/删除/移动）、或编辑节点属性时。
-
 ### 指令
 
 #### 1. 核心原则：单步执行 (One Step at a Time)
@@ -15,9 +12,8 @@
 #### 2. 标准工作流
 
 ##### 阶段一：场景接入 (Access)
-- **动作**：调用 `manage_scene_file` (action="open" 或 "create")。
+- **动作**：如果场景不存在，先 `create_file` 再 `open_file`。
 - **目的**：确保编辑器当前激活的是目标场景。
-- **注意**：如果是 create，需要提供 `root_node_type`。
 
 ##### 阶段二：结构分析 (Analyze)
 - **动作**：调用 `get_edited_scene` 。
@@ -27,7 +23,7 @@
 ##### 阶段三：执行修改 (Modify)
 
 ###### 结构修改
-- 调用 `manage_scene_structure` (action="add_node" / "delete_node" / "move_node")。
+- 调用 `edit_scene` (action="add_node" / "delete_node" / "move_node")。
 - **参数**：`node_path` 和 `parent_path` 必须是基于根节点的相对路径（如 "Player/Sprite"），不要包含 "/root/"。
 
 ###### 属性查看
@@ -77,18 +73,15 @@
 - `CapsuleMesh` / `SphereMesh`：使用 `radius` 和 `height`
 - 使用 `get_node_properties` 查看实际可用属性
 
-### 拓展知识
-如过程中遇到问题，请查阅 `res://addons/godot_ai_chat/skills/scene_tool_sop/reference/` 文件夹中的相关文档。
-
 ### 示例
 
 #### 示例 1：添加节点流程
 1. 用户："给 Player 场景加一个 Sprite"
-2. AI 调用 `manage_scene_file(action="open", scene_path="res://player.tscn")`
+2. AI 调用 `open_file(file_path="res://player.tscn")`
 3. (等待工具返回) -> 工具返回场景已打开
 4. AI 调用 `get_edited_scene`
 5. (等待工具返回) -> 工具返回树结构，确认根节点为 `Player`
-6. AI 调用 `manage_scene_structure(action="add_node", parent_path=".", node_class="Sprite2D", node_name="Sprite")`
+6. AI 调用 `edit_scene(action="add_node", parent_path=".", node_class="Sprite2D", node_name="Sprite")`
 
 #### 示例 2：修改基础属性流程
 1. 用户："把 Sprite 变红"

@@ -20,11 +20,11 @@ extends Resource
 
 ## 获取单例配置（如果不存在则自动创建）
 static func get_config() -> SubAgentConfig:
-	var path = PluginPaths.PLUGIN_DIR + "sub_agent_config.tres"
+	var path: String = PluginPaths.PLUGIN_DIR + "sub_agent_config.tres"
 	if ResourceLoader.exists(path):
 		return ResourceLoader.load(path, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:
-		var config = SubAgentConfig.new()
+		var config := SubAgentConfig.new()
 		ResourceSaver.save(config, path)
 		ToolBox.update_editor_filesystem(path)
 		return config

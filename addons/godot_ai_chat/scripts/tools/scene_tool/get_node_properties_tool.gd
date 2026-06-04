@@ -4,7 +4,7 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "get_node_properties"
-	tool_description = "Gets detailed information about a node in the current edited scene, including its properties and children (with Resource details)."
+	tool_description = "Gets detailed information about a node in the current edited scene, Use `open_file` first to open target scene."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -13,7 +13,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"node_path": {
 				"type": "string",
-				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')\n\nTip: Use get_edited_scene first to see the current scene structure."
+				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')"
 			}
 		},
 		"required": []

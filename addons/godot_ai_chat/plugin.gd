@@ -6,22 +6,12 @@ const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.t
 
 # 插件主实例
 var chat_hub_instance: Control = null
-var runtime_error_debugger = null
 
 
 func _enter_tree() -> void:
 	# 优先初始化文件系统环境
 	# 这必须在实例化任何 UI 或逻辑脚本之前完成，以确保路径有效
 	self._initialize_plugin_file_environment()
-	
-	# 添加运行时错误捕获调试器
-	var DebuggerScript: GDScript = load("res://addons/godot_ai_chat/scripts/tools/debug_tool/runtime_error_debugger.gd")
-	if DebuggerScript:
-		runtime_error_debugger = DebuggerScript.new()
-		add_debugger_plugin(runtime_error_debugger)
-	
-	# 注入游戏端的错误捕获 Autoload
-	add_autoload_singleton("RuntimeErrorCatcher", "res://addons/godot_ai_chat/scripts/tools/debug_tool/error_catcher.gd")
 	
 	# 加载并实例化主界面
 	var scene: Resource = load(CHAT_HUB_SCENE_PATH)
@@ -50,12 +40,6 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
-	# 移除运行时错误捕获
-	remove_autoload_singleton("RuntimeErrorCatcher")
-	if is_instance_valid(runtime_error_debugger):
-		remove_debugger_plugin(runtime_error_debugger)
-		runtime_error_debugger = null
-	
 	if is_instance_valid(chat_hub_instance):
 		# 安全清理：强制停止所有正在进行的网络流和 Agent 工作流
 		# 直接调用 ChatHub 的停止逻辑，它会级联取消 NetworkManager 和 ChatBackend
