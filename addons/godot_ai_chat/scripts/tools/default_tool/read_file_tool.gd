@@ -66,7 +66,14 @@ func execute(p_args: Dictionary) -> Dictionary:
 		return {"success": false, "data": validation_result}
 	
 	# 安全拦截：禁止读取本插件目录下的资源文件，防止API密钥等敏感信息泄漏
-	if context_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
+	#if context_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
+		#return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
+	
+	# 安全拦截：禁止读取指定的敏感资源文件
+	if context_type == "resource" and (
+		path == PluginPaths.PLUGIN_DIR + "plugin_settings_config.tres" or
+		path == PluginPaths.PLUGIN_DIR + "sub_agent_config.tres"
+	):
 		return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
 	
 	if not EXTENSION_MAP.has(context_type):

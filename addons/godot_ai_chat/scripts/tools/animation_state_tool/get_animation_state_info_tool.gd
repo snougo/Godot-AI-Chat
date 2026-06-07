@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "get_animation_state_info"
-	tool_description = "Returns a text summary of the StateMachine (Nodes & Transitions)."
+	tool_description = "Returns a text summary of the AnimationStateMachine Resource (Nodes & Transitions)."
 
 
 func get_parameters_schema() -> Dictionary:

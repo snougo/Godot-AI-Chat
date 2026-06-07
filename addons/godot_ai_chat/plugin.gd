@@ -3,10 +3,13 @@ extends EditorPlugin
 
 # 主场景路径
 const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
+# 插件图标
+const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/plugin_icon.svg")
 
 # 插件主实例
 var chat_hub_instance: Control = null
-
+# EditorDock 容器
+var dock: EditorDock = null
 
 func _enter_tree() -> void:
 	# 优先初始化文件系统环境
@@ -20,8 +23,17 @@ func _enter_tree() -> void:
 		return
 	
 	chat_hub_instance = scene.instantiate()
-	# 将界面添加到编辑器停靠栏 (右侧左上区域)
-	add_control_to_dock(DOCK_SLOT_LEFT_UL, chat_hub_instance)
+	
+	# 将界面添加到编辑器停靠栏(旧版API方法)
+	#add_control_to_dock(DOCK_SLOT_LEFT_UL, chat_hub_instance)
+	
+	# 创建 EditorDock 容器并配置(新版API方法)
+	dock = EditorDock.new()
+	dock.title = "Godot AI Chat"
+	dock.dock_icon = PLUGIN_ICON
+	dock.default_slot = EditorDock.DOCK_SLOT_RIGHT_UL
+	dock.add_child(chat_hub_instance)
+	add_dock(dock)
 	
 	# 注入编辑器依赖
 	# 获取 ChatUI 节点并传递文件系统引用，用于文件选择器等功能
@@ -46,14 +58,20 @@ func _exit_tree() -> void:
 		if chat_hub_instance.has_method("_on_stop_requested"):
 			chat_hub_instance._on_stop_requested()
 		
-		# 移除 UI
-		remove_control_from_docks(chat_hub_instance)
-		chat_hub_instance.queue_free()
+		# 移除 UI(旧版API方法)
+		#remove_control_from_docks(chat_hub_instance)
+		#chat_hub_instance.queue_free()
+		
+		# 移除 Dock(新版API方法)
+		if is_instance_valid(dock):
+			remove_dock(dock)
+			dock.queue_free()
+			dock = null
 	
 	# 注意：ToolRegistry 是静态的，不需要显式清理，
 	# 重新启用插件时会覆盖注册，这是安全的。
 	
-	AIChatLogger.debug("[Godot AI Chat] Plugin disabled.")
+	AIChatLogger.info("[Godot AI Chat] Plugin disabled.")
 
 
 # --- 内部辅助函数 ---
@@ -72,7 +90,7 @@ func _initialize_plugin_file_environment() -> void:
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
 	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
 	if not FileAccess.file_exists(PluginPaths.SETTINGS_PATH):
-		AIChatLogger.debug("[Godot AI Chat] Settings file not found, creating default...")
+		AIChatLogger.info("[Godot AI Chat] Settings file not found, creating default...")
 		ToolBox.get_plugin_settings() # 这会创建默认文件
 		need_scan = true
 	

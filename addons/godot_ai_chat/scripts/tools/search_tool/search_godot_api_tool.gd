@@ -12,8 +12,8 @@ const LOCAL_DOC_PATH: String = "res://godot_doc"
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "search_api_documents"
-	tool_description = "Searches Godot ClassDB and local API docs. Supports searching for classes, methods, signals, and properties with inheritance chain search and smart suggestions."
+	tool_name = "search_godot_api"
+	tool_description = "Searches Godot ClassDB and local API docs. Support `ClassName` to search."
 
 
 # --- Public Functions ---
@@ -24,7 +24,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"keywords": {
 				"type": "string",
-				"description": "Search keywords. Only support Class Name to search.\n> Do not search for multiple keywords at the same time."
+				"description": "Search keywords.\n > **Warning: ** Do not search for multiple keywords at the same time."
 			}
 		},
 		"required": ["keywords"]
@@ -117,6 +117,16 @@ func _search_builtin_api_multi(p_keywords: PackedStringArray) -> String:
 					found_class = true
 					break
 		
+		# --- Variant 内置类型回退：ClassDB 找不到时检查本地文档 ---
+		if not found_class:
+			var variant_doc_path: String = LOCAL_DOC_PATH.path_join("classes/class_%s.md" % kw_lower)
+			var f: FileAccess = FileAccess.open(variant_doc_path, FileAccess.READ)
+			if f:
+				f.close()
+				class_exact.append(kw_lower.capitalize())  # 首字母大写显示类名
+				found_class = true
+		# ---------------------------------------------------------
+		
 		# 不是类名，尝试成员搜索
 		if not found_class:
 			var member_search: Dictionary = _search_member_across_classes(kw, all_classes)
@@ -130,21 +140,21 @@ func _search_builtin_api_multi(p_keywords: PackedStringArray) -> String:
 					class_fuzzy.append(cls)
 	
 	# 构建结果
-	var sb: Array[String] = []
+	var lines: Array[String] = []
 	
 	# 类搜索结果（详细显示）
 	if not class_exact.is_empty() or not class_fuzzy.is_empty():
-		sb.append(_format_class_results_detailed(class_exact, class_fuzzy))
+		lines.append(_format_class_results_detailed(class_exact, class_fuzzy))
 	
 	# 成员搜索结果
 	if not member_results.is_empty():
-		sb.append(_format_member_results(member_results))
+		lines.append(_format_member_results(member_results))
 	
 	# 失败搜索的智能提示
 	if not failed_searches.is_empty():
-		sb.append(_format_failed_searches(failed_searches))
+		lines.append(_format_failed_searches(failed_searches))
 	
-	return "\n\n".join(sb)
+	return "\n\n".join(lines)
 
 
 # --- Private Functions: Inheritance Chain Search ---
@@ -392,57 +402,68 @@ func _find_similar_members(p_class: String, p_member_lower: String) -> Array[Dic
 # --- Private Functions: Class Formatting (Detailed) ---
 
 func _format_class_results_detailed(p_exact: Array[String], p_fuzzy: Array[String]) -> String:
-	var sb: Array[String] = []
+	var lines: Array[String] = []
 	
 	for cls in p_exact:
-		sb.append(_format_class_detailed(cls))
+		lines.append(_format_class_detailed(cls))
 	
 	if not p_fuzzy.is_empty():
 		if p_exact.is_empty():
-			sb.append("## Related Classes\n")
-			sb.append("No exact match. Related classes:\n")
+			lines.append("## Related Classes\n")
+			lines.append("No exact match. Related classes:\n")
 			var count := 0
 			for cls in p_fuzzy:
 				if count < 3:
-					sb.append(_format_class_detailed(cls))
+					lines.append(_format_class_detailed(cls))
 				else:
 					break
 				count += 1
 			
 			if p_fuzzy.size() > 3:
-				sb.append("\n**Other related:** " + ", ".join(p_fuzzy.slice(3, 10)))
+				var other_lines: Array[String] = ["\n**Other related:**"]
+				for cls in p_fuzzy.slice(3, 10):
+					other_lines.append("- `%s`" % cls)
 				if p_fuzzy.size() > 10:
-					sb[-1] += " ... (%d more)" % (p_fuzzy.size() - 10)
+					other_lines.append("- ... (%d more)" % (p_fuzzy.size() - 10))
+				lines.append("\n".join(other_lines))
 		else:
-			sb.append("\n**Also found:** " + ", ".join(p_fuzzy.slice(0, 5)))
-			if p_fuzzy.size() > 5:
-				sb[-1] += " ... (%d more)" % (p_fuzzy.size() - 5)
+			var fuzzy_lines: Array[String] = ["\n**Also found:**"]
+			for cls in p_fuzzy.slice(0, 10):
+				fuzzy_lines.append("- `%s`" % cls)
+			if p_fuzzy.size() > 10:
+				fuzzy_lines.append("- ... (%d more)" % (p_fuzzy.size() - 10))
+			lines.append("\n".join(fuzzy_lines))
 	
-	return "\n\n".join(sb)
+	return "\n\n".join(lines)
 
 
 func _format_class_detailed(p_class: String) -> String:
-	var sb: Array[String] = []
-	sb.append("## Class: `%s`" % p_class)
+	var lines: Array[String] = []
+	lines.append("## Class: `%s`" % p_class)
+	
+	# --- Variant 内置类型降级显示 ---
+	var is_variant_type: bool = not ClassDB.class_exists(p_class)
 	
 	# 继承
 	var parent: String = ClassDB.get_parent_class(p_class)
 	if not parent.is_empty():
-		sb.append("**Inherits:** `%s`" % parent)
+		lines.append("**Inherits:** `%s`" % parent)
+	elif is_variant_type:
+		lines.append("**Type:** Built-in Variant type")
 	
 	# 常量
 	var constants: PackedStringArray = ClassDB.class_get_integer_constant_list(p_class, true)
 	if not constants.is_empty():
-		sb.append("\n**Constants:**")
+		lines.append("\n**Constants:**")
 		var limit := min(constants.size(), 8)
 		for i in range(limit):
 			var c_name: String = constants[i]
 			var val: int = ClassDB.class_get_integer_constant(p_class, c_name)
-			sb.append("- `%s` = %d" % [c_name, val])
+			lines.append("- `%s` = %d" % [c_name, val])
 		if constants.size() > limit:
-			sb.append("- ... (%d more)" % (constants.size() - limit))
+			lines.append("- ... (%d more)" % (constants.size() - limit))
 	
-	# 属性（详细显示）
+	# 属性
 	var props: Array[Dictionary] = ClassDB.class_get_property_list(p_class, true)
 	var prop_list: Array[String] = []
 	for p in props:
@@ -450,54 +471,60 @@ func _format_class_detailed(p_class: String) -> String:
 			prop_list.append("- `%s`: %s" % [p["name"], _type_to_string(p["type"])])
 	
 	if not prop_list.is_empty():
-		sb.append("\n**Properties:**")
+		lines.append("\n**Properties:**")
 		if prop_list.size() > 15:
-			sb.append_array(prop_list.slice(0, 15))
-			sb.append("- ... (%d more)" % (prop_list.size() - 15))
+			lines.append_array(prop_list.slice(0, 15))
+			lines.append("- ... (%d more)" % (prop_list.size() - 15))
 		else:
-			sb.append_array(prop_list)
+			lines.append_array(prop_list)
 	
-	# 信号（详细显示）
+	# 信号
 	var signals: Array[Dictionary] = ClassDB.class_get_signal_list(p_class, true)
 	if not signals.is_empty():
-		sb.append("\n**Signals:**")
+		lines.append("\n**Signals:**")
 		var limit := min(signals.size(), 10)
 		for i in range(limit):
-			sb.append(_format_signal_signature(signals[i]))
+			lines.append(_format_signal_signature(signals[i]))
 		if signals.size() > limit:
-			sb.append("- ... (%d more)" % (signals.size() - limit))
+			lines.append("- ... (%d more)" % (signals.size() - limit))
 	
-	# 方法（详细显示）
+	# 方法
 	var methods: Array[Dictionary] = ClassDB.class_get_method_list(p_class, true)
 	if not methods.is_empty():
-		sb.append("\n**Methods:**")
+		lines.append("\n**Methods:**")
 		var limit := min(methods.size(), 20)
 		for i in range(limit):
-			sb.append(_format_method_signature(methods[i]))
+			lines.append(_format_method_signature(methods[i]))
 		if methods.size() > limit:
-			sb.append("- ... (%d more)" % (methods.size() - limit))
+			lines.append("- ... (%d more)" % (methods.size() - limit))
 	
-	return "\n".join(sb)
+	# --- Variant 类型尾部提示 ---
+	if is_variant_type and constants.is_empty() and prop_list.is_empty() \
+		and signals.is_empty() and methods.is_empty():
+		lines.append("\n💡 This is a built-in Variant type. Use `read_file` to view full docs from the local documentation.")
+	# ---------------------------
+	
+	return "\n".join(lines)
 
 
 # --- Private Functions: Member Formatting ---
 
 func _format_member_results(p_results: Array[Dictionary]) -> String:
-	var sb: Array[String] = []
+	var lines: Array[String] = []
 	
 	for result in p_results:
 		if result.has("found_in_class"):
 			# 精确搜索结果（带继承信息）
-			sb.append(_format_inheritance_search_result(result))
+			lines.append(_format_inheritance_search_result(result))
 		elif result.get("search_type") == "cross_class":
 			# 跨类搜索结果
-			sb.append(_format_cross_class_result(result))
+			lines.append(_format_cross_class_result(result))
 	
-	return "\n\n".join(sb)
+	return "\n\n".join(lines)
 
 
 func _format_inheritance_search_result(p_result: Dictionary) -> String:
-	var sb: Array[String] = []
+	var lines: Array[String] = []
 	var searched_class: String = p_result["searched_class"]
 	var found_in: String = p_result["found_in_class"]
 	var inheritance_chain: Array = p_result["inheritance_chain"]
@@ -523,55 +550,67 @@ func _format_inheritance_search_result(p_result: Dictionary) -> String:
 			member_name = p_result["properties"][0]["name"]
 	
 	# 标题
-	sb.append("## `%s.%s`" % [searched_class, member_name])
+	lines.append("## `%s.%s`" % [searched_class, member_name])
 	
-	# 继承信息
+	# 位置信息
 	if searched_class != found_in:
-		sb.append("📍 **Defined in:** `%s` (parent class)" % found_in)
-		sb.append("**Inheritance:** `%s`" % " → ".join(inheritance_chain))
+		lines.append("**Defined in:** `%s`" % found_in)
+		lines.append("**Inheritance:** `%s`" % " → ".join(inheritance_chain))
+	else:
+		lines.append("**Defined in:** `%s`" % found_in)
 	
-	# 方法
+	# 精确匹配 - 方法
 	if not exact_methods.is_empty():
-		sb.append("\n### 🔹 Method")
+		lines.append("\n**Method:**")
 		for m in exact_methods:
-			sb.append(_format_method_signature(m["data"]))
+			lines.append(_format_method_signature(m["data"]))
 	
-	# 信号
+	# 精确匹配 - 信号
 	if not exact_signals.is_empty():
-		sb.append("\n### 🔹 Signal")
+		lines.append("\n**Signal:**")
 		for s in exact_signals:
-			sb.append(_format_signal_signature(s["data"]))
+			lines.append(_format_signal_signature(s["data"]))
 	
-	# 属性
+	# 精确匹配 - 属性
 	if not exact_properties.is_empty():
-		sb.append("\n### 🔹 Property")
+		lines.append("\n**Property:**")
 		for p in exact_properties:
-			sb.append(_format_property_info(p["data"], found_in))
+			lines.append(_format_property_info(p["data"], found_in))
 	
-	# 相关成员（模糊匹配）
+	# 模糊匹配 - 按类型分组
 	var fuzzy_methods: Array = p_result["methods"].filter(func(m): return not m["exact"])
 	var fuzzy_signals: Array = p_result["signals"].filter(func(s): return not s["exact"])
 	var fuzzy_properties: Array = p_result["properties"].filter(func(p): return not p["exact"])
 	
-	if not fuzzy_methods.is_empty() or not fuzzy_signals.is_empty() or not fuzzy_properties.is_empty():
-		sb.append("\n**Related members:**")
-		var related: Array[String] = []
-		for m in fuzzy_methods.slice(0, 3):
-			related.append("`%s()` (method)" % m["name"])
-		for s in fuzzy_signals.slice(0, 2):
-			related.append("`%s` (signal)" % s["name"])
-		for p in fuzzy_properties.slice(0, 2):
-			related.append("`%s` (property)" % p["name"])
-		sb.append(", ".join(related))
+	if not fuzzy_methods.is_empty():
+		lines.append("\n**Related methods:**")
+		for m in fuzzy_methods.slice(0, 5):
+			lines.append("- `%s()`" % m["name"])
+		if fuzzy_methods.size() > 5:
+			lines.append("- ... (%d more)" % (fuzzy_methods.size() - 5))
 	
-	return "\n".join(sb)
+	if not fuzzy_signals.is_empty():
+		lines.append("\n**Related signals:**")
+		for s in fuzzy_signals.slice(0, 5):
+			lines.append("- `%s`" % s["name"])
+		if fuzzy_signals.size() > 5:
+			lines.append("- ... (%d more)" % (fuzzy_signals.size() - 5))
+	
+	if not fuzzy_properties.is_empty():
+		lines.append("\n**Related properties:**")
+		for p in fuzzy_properties.slice(0, 5):
+			lines.append("- `%s`" % p["name"])
+		if fuzzy_properties.size() > 5:
+			lines.append("- ... (%d more)" % (fuzzy_properties.size() - 5))
+	
+	return "\n".join(lines)
 
 
 func _format_cross_class_result(p_result: Dictionary) -> String:
-	var sb: Array[String] = []
+	var lines: Array[String] = []
 	var member_name: String = p_result["member_name"]
 	
-	sb.append("## Search: `%s`" % member_name)
+	lines.append("## Cross-class Results: `%s`" % member_name)
 	
 	var exact_m: Array = p_result.get("exact_methods", [])
 	var exact_s: Array = p_result.get("exact_signals", [])
@@ -582,84 +621,87 @@ func _format_cross_class_result(p_result: Dictionary) -> String:
 	
 	# 精确匹配 - 方法
 	if not exact_m.is_empty():
-		sb.append("\n### 🔹 Methods (exact match)")
+		lines.append("\n**Methods (exact):**")
 		for m in exact_m.slice(0, 10):
-			sb.append("- **`%s.%s`** %s" % [m["class"], m["name"], _get_method_short_info(m["data"])])
+			lines.append("- `%s.%s` — %s" % [m["class"], m["name"], _get_method_short_info(m["data"])])
 		if exact_m.size() > 10:
-			sb.append("- ... (%d more classes)" % (exact_m.size() - 10))
+			lines.append("- ... (%d more)" % (exact_m.size() - 10))
 	
 	# 精确匹配 - 信号
 	if not exact_s.is_empty():
-		sb.append("\n### 🔹 Signals (exact match)")
+		lines.append("\n**Signals (exact):**")
 		for s in exact_s.slice(0, 10):
-			sb.append("- **`%s.%s`** %s" % [s["class"], s["name"], _get_signal_short_info(s["data"])])
+			lines.append("- `%s.%s` — %s" % [s["class"], s["name"], _get_signal_short_info(s["data"])])
 		if exact_s.size() > 10:
-			sb.append("- ... (%d more classes)" % (exact_s.size() - 10))
+			lines.append("- ... (%d more)" % (exact_s.size() - 10))
 	
 	# 精确匹配 - 属性
 	if not exact_p.is_empty():
-		sb.append("\n### 🔹 Properties (exact match)")
+		lines.append("\n**Properties (exact):**")
 		for p in exact_p.slice(0, 10):
-			sb.append("- **`%s.%s`**: %s" % [p["class"], p["name"], _type_to_string(p["data"]["type"])])
+			lines.append("- `%s.%s` → %s" % [p["class"], p["name"], _type_to_string(p["data"]["type"])])
 		if exact_p.size() > 10:
-			sb.append("- ... (%d more classes)" % (exact_p.size() - 10))
+			lines.append("- ... (%d more)" % (exact_p.size() - 10))
 	
-	# 模糊匹配
-	if not fuzzy_m.is_empty() or not fuzzy_s.is_empty() or not fuzzy_p.is_empty():
-		sb.append("\n**Related members:**")
-		var related: Array[String] = []
-		for m in fuzzy_m.slice(0, 3):
-			related.append("`%s.%s()`" % [m["class"], m["name"]])
-		for s in fuzzy_s.slice(0, 2):
-			related.append("`%s.%s` (signal)" % [s["class"], s["name"]])
-		for p in fuzzy_p.slice(0, 2):
-			related.append("`%s.%s` (property)" % [p["class"], p["name"]])
-		sb.append(", ".join(related))
-		if fuzzy_m.size() + fuzzy_s.size() + fuzzy_p.size() > 7:
-			sb[-1] += " ..."
+	# 模糊匹配 - 按类型分组
+	if not fuzzy_m.is_empty():
+		lines.append("\n**Methods (fuzzy):**")
+		for m in fuzzy_m.slice(0, 5):
+			lines.append("- `%s.%s()`" % [m["class"], m["name"]])
+		if fuzzy_m.size() > 5:
+			lines.append("- ... (%d more)" % (fuzzy_m.size() - 5))
 	
-	# 提示
-	sb.append("\n💡 Use `ClassName.member_name` for detailed signature")
+	if not fuzzy_s.is_empty():
+		lines.append("\n**Signals (fuzzy):**")
+		for s in fuzzy_s.slice(0, 5):
+			lines.append("- `%s.%s`" % [s["class"], s["name"]])
+		if fuzzy_s.size() > 5:
+			lines.append("- ... (%d more)" % (fuzzy_s.size() - 5))
 	
-	return "\n".join(sb)
+	if not fuzzy_p.is_empty():
+		lines.append("\n**Properties (fuzzy):**")
+		for p in fuzzy_p.slice(0, 5):
+			lines.append("- `%s.%s`" % [p["class"], p["name"]])
+		if fuzzy_p.size() > 5:
+			lines.append("- ... (%d more)" % (fuzzy_p.size() - 5))
+	
+	lines.append("\n💡 Search `ClassName.member_name` for full signature and inheritance info.")
+	
+	return "\n".join(lines)
 
 
 func _format_failed_searches(p_failed: Array[Dictionary]) -> String:
-	var sb: Array[String] = []
+	var lines: Array[String] = []
 	
 	for fail in p_failed:
-		sb.append("## ❌ `%s.%s` not found" % [fail["class"], fail["member"]])
-		sb.append("No member named `%s` in class `%s` or its parent classes.\n" % [fail["member"], fail["class"]])
+		lines.append("## `%s.%s` — not found" % [fail["class"], fail["member"]])
+		lines.append("No member named `%s` in class `%s` or its parent classes.\n" % [fail["member"], fail["class"]])
 		
 		var suggestions: Dictionary = fail["suggestions"]
 		var has_suggestions: bool = false
 		
 		if suggestions.has("in_parent"):
 			has_suggestions = true
-			sb.append("💡 **Found in parent class:**")
+			lines.append("**Found in parent class:**")
 			for item in suggestions["in_parent"]:
-				sb.append("- **`%s.%s`** (%s)" % [item["class"], item["name"], item["type"]])
+				lines.append("- `%s.%s` — %s" % [item["class"], item["name"], item["type"]])
 		
 		if suggestions.has("in_child"):
 			has_suggestions = true
-			if suggestions.has("in_parent"):
-				sb.append("")
-			sb.append("💡 **Found in subclasses:**")
+			lines.append("**Found in subclasses:**")
 			for item in suggestions["in_child"]:
-				sb.append("- **`%s.%s`** (%s)" % [item["class"], item["name"], item["type"]])
+				lines.append("- `%s.%s` — %s" % [item["class"], item["name"], item["type"]])
 		
 		if suggestions.has("similar"):
 			has_suggestions = true
-			if suggestions.has("in_parent") or suggestions.has("in_child"):
-				sb.append("")
-			sb.append("💡 **Similar names in this class:**")
+			lines.append("**Similar names in `%s`:**" % fail["class"])
 			for item in suggestions["similar"]:
-				sb.append("- `%s` (%s)" % [item["name"], item["type"]])
+				lines.append("- `%s` — %s" % [item["name"], item["type"]])
 		
 		if not has_suggestions:
-			sb.append("💡 Try searching `%s` across all classes (without class prefix)" % fail["member"])
+			lines.append("💡 Try searching `%s` across all classes (without class prefix)" % fail["member"])
 	
-	return "\n".join(sb)
+	return "\n".join(lines)
 
 
 # --- Private Functions: Formatting Helpers ---
@@ -742,12 +784,20 @@ func _search_local_files_multi(p_path: String, p_keywords: PackedStringArray) ->
 	for k in p_keywords:
 		keywords_lower.append(k.to_lower())
 	
+	# --- 扩展关键词：对 @xxx 格式，额外添加去掉 @ 的变体 ---
+	var expanded_keywords: Array[String] = []
+	for k in keywords_lower:
+		expanded_keywords.append(k)
+		if k.begins_with("@"):
+			expanded_keywords.append(k.trim_prefix("@"))
+	# ----------------------------------------------------
+	
 	for f in files:
 		var fname_lower: String = f.get_file().to_lower()
-		for k in keywords_lower:
+		for k in expanded_keywords:  # 使用 expanded_keywords 替代 keywords_lower
 			if k in fname_lower:
 				var basename: String = f.get_file().get_basename().to_lower()
-				if basename in keywords_lower:
+				if basename in expanded_keywords:  # 使用 expanded_keywords
 					matches.push_front(f)
 				else:
 					matches.append(f)
@@ -756,12 +806,20 @@ func _search_local_files_multi(p_path: String, p_keywords: PackedStringArray) ->
 	if matches.is_empty():
 		return ""
 	
-	var sb: Array[String] = []
-	sb.append("📁 **Local Docs:** `%s`" % "`, `".join(matches.slice(0, 5)))
-	if matches.size() > 5:
-		sb[-1] += " ... (%d more)" % (matches.size() - 5)
+	var lines: Array[String] = []
+	lines.append("📁 **Local Docs Available (read for full API details):**")
 	
-	return "\n".join(sb)
+	var limit := 10
+	var display_count := min(matches.size(), limit)
+	for i in range(display_count):
+		lines.append("- `%s`" % matches[i])
+	
+	if matches.size() > limit:
+		lines.append("- ... (%d more)" % (matches.size() - limit))
+	
+	lines.append("\n💡 **Tip:** Use `read_file` to open matched docs above — they contain descriptions, code examples, and parameter details beyond the ClassDB summary.")
+	
+	return "\n".join(lines)
 
 
 func _get_files_recursive(p_dir_path: String) -> Array:
