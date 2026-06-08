@@ -35,7 +35,7 @@ func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
-			"context_type": {
+			"file_type": {
 				"type": "string",
 				"enum": ["scene", "gdscript", "shader", "resource", "markdown", "config", "plain_text", "image_meta"],
 				"description": "The type of file to read."
@@ -45,45 +45,45 @@ func get_parameters_schema() -> Dictionary:
 				"description": "The full path to the file."
 			}
 		},
-		"required": ["context_type", "path"]
+		"required": ["file_type", "path"]
 	}
 
 
 ## 执行文件读取
-## [param p_args]: 包含 context_type 和 path 的参数字典
+## [param p_args]: 包含 file_type 和 path 的参数字典
 ## [return]: 包含成功状态和文件内容的字典
 func execute(p_args: Dictionary) -> Dictionary:
-	var context_type: String = p_args.get("context_type", "")
+	var file_type: String = p_args.get("file_type", "")
 	var path: String = p_args.get("path", "")
 	
 	var context_provider := ContextProvider.new()
 	
-	if context_type.is_empty() or path.is_empty():
-		return {"success": false, "data": "Missing parameters: context_type or path"}
+	if file_type.is_empty() or path.is_empty():
+		return {"success": false, "data": "Missing parameters: file_type or path"}
 	
 	var validation_result: String = _validate_path(path)
 	if not validation_result.is_empty():
 		return {"success": false, "data": validation_result}
 	
 	# 安全拦截：禁止读取本插件目录下的资源文件，防止API密钥等敏感信息泄漏
-	#if context_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
+	#if file_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
 		#return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
 	
 	# 安全拦截：禁止读取指定的敏感资源文件
-	if context_type == "resource" and (
+	if file_type == "resource" and (
 		path == PluginPaths.PLUGIN_DIR + "plugin_settings_config.tres" or
 		path == PluginPaths.PLUGIN_DIR + "sub_agent_config.tres"
 	):
 		return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
 	
-	if not EXTENSION_MAP.has(context_type):
-		return {"success": false, "data": "Error: Unknown context_type: " + context_type}
+	if not EXTENSION_MAP.has(file_type):
+		return {"success": false, "data": "Error: Unknown file_type: " + file_type}
 	
-	var extension_validation: Dictionary = _validate_file_extension(path, context_type)
+	var extension_validation: Dictionary = _validate_file_extension(path, file_type)
 	if not extension_validation.is_empty():
 		return extension_validation
 	
-	return _read_file_content(context_type, path, context_provider)
+	return _read_file_content(file_type, path, context_provider)
 
 
 # --- Private Functions ---
@@ -110,7 +110,7 @@ func _validate_file_extension(p_path: String, p_context_type: String) -> Diction
 	if ext not in allowed_extensions:
 		return {
 			"success": false,
-			"data": "Error: Extension '%s' is not allowed for context_type '%s'. Allowed: %s" % [ext, p_context_type, allowed_extensions]
+			"data": "Error: Extension '%s' is not allowed for file_type '%s'. Allowed: %s" % [ext, p_context_type, allowed_extensions]
 		}
 	return {}
 
