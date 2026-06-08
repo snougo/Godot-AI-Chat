@@ -1,3 +1,7 @@
+# Godot AI Chat
+
+<img width="1920" height="1080" alt="godot_ai_chat" src="https://github.com/user-attachments/assets/57df923b-1099-4862-938a-5b072038ae22" />
+
 ## 这是一款什么插件
 简单来说，这是一款直接嵌入进Godot编辑器的全功能AI Agent插件，能对项目上下文自动进行感知，不需要第三方Agent，也不需要MCP。
 
@@ -27,6 +31,9 @@
 > **注意**：模型厂商提供的 `Coding Plan` 服务通常只能用于它们指定的客户端，无法在本插件中使用，因此推荐直接使用Deepseek官方提供的API服务，目前该服务价格在命中缓存的情况下，已经非常便宜。或者你也可以使用本地部署的模型服务，比如LM Studio和ollama，
 
 ## 如何使用
+
+<img width="349" height="100" alt="截屏2026-06-08 17 59 36" src="https://github.com/user-attachments/assets/14215aa4-cfff-4b41-8d81-d02b3aebf5a5" />
+
 假设你成功进行了设置，那么你应该可以看到插件状态栏显示为蓝底白字的`Ready`状态，并且在模型切换框中看到多个模型可供选择。此时可以发送一个`你好` 作为测试，如果你已经充值了API，那么模型应该会马上回复你。
 
 至于之后，你可以直接向模型询问本插件如何使用的问题，因为插件的默认工作区就位于本插件自身。
