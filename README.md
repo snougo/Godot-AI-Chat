@@ -1,4 +1,8 @@
-# Godot AI Chat.md
+# Godot AI Chat
+
+<img width="1920" height="1080" alt="godot_ai_chat" src="https://github.com/user-attachments/assets/57df923b-1099-4862-938a-5b072038ae22" />
+
+[中文](https://github.com/snougo/Godot-AI-Chat/blob/main/README_zh-CN.md)
 
 ## What is this plugin?
 
@@ -33,6 +37,8 @@ When first enabled, you need to locate the plugin's settings page and fill in th
 > **Note:** The `Coding Plan` services provided by model vendors can usually only be used in their designated clients and cannot be used in this plugin. Therefore, it is recommended to use the official DeepSeek API service directly. Currently, this service is very inexpensive when the cache is hit. Alternatively, you can use a locally deployed model service such as LM Studio or Ollama.
 
 ## How to Use
+
+<img width="349" height="100" alt="截屏2026-06-08 17 59 36" src="https://github.com/user-attachments/assets/14215aa4-cfff-4b41-8d81-d02b3aebf5a5" />
 
 Assuming you have configured it successfully, you should see the plugin status bar display a blue-background, white-text `Ready` status, and see multiple models available in the model selection dropdown. At this point, you can send a `Hello` as a test. If you have topped up your API account, the model should reply immediately.
 
