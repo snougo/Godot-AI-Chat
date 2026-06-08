@@ -26,7 +26,7 @@ extends Resource
 @export var network_timeout: int = 180
 
 ## AI 模型的"温度"参数，控制生成文本的随机性和创造性
-@export_range(0.0, 1.0, 0.1) var temperature: float = 0.6
+@export_range(0.0, 2.0, 0.1) var temperature: float = 1.0
 
 ## 日志级别开关 (Bitmask: DEBUG=1, INFO=2, WARN=4, ERROR=8)
 ## 默认 14 (INFO|WARN|ERROR) = 2+4+8
