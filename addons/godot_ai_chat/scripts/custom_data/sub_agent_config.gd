@@ -13,8 +13,7 @@ extends Resource
 @export var network_timeout: int = 180
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.6
 
-@export_multiline var base_system_prompt: String = """
-你是一个专门的 `Sub-Agent`，负责执行分配的任务。
+@export_multiline var base_system_prompt: String = """你是一个专门的 `Sub-Agent`，负责执行分配的任务。
 
 核心原则：
 - 请严格遵守 `SKILL INSTRUCTION` 中的指令。
@@ -23,7 +22,6 @@ extends Resource
 - 无论任务成功与否，都调用 `report_task_result` 工具进行任务报告。
 
 ---
-
 """
 
 
