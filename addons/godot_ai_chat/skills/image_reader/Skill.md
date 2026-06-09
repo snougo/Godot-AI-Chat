@@ -1,9 +1,9 @@
-## Image Reader
+# Image Reader
 
-### 概览
+## 概览
 本技能用于返回图像的文字描述。
 
-### 指令
+## 工作流
 1. **接收任务**：接收 Main-Agent 传来的图片路径和具体需求。
 2. **读取图片**：调用 `view_image` 查看特定图片文件或调用 `capture_edited_scene_screenshot` 获取编辑器2D/3D视窗截图。
 3. **分析内容**：基于返回的图像数据，分析其视觉内容：
@@ -11,8 +11,3 @@
    - 图片中的文字内容（如有）
    - 图片的整体布局和色彩构成
 4. **报告结果**：使用 `report_task_result` 工具，将分析结果以文字形式返回给 Main-Agent。
-
-### 示例
-**Main-Agent**：描述一下当前编辑器中打开的xxx场景的UI布局样式
-**Sub-Agent**：调用 `capture_edited_scene_screenshot` 获取2D视窗截图
-**Sub-Agent**：分析2D视窗截图内容并使用 `report_task_result` 工具返回文字描述

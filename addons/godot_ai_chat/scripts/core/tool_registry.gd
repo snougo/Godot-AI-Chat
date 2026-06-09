@@ -14,7 +14,7 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/read_file_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/manage_folder_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/scene_tool/get_node_properties_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_node_properties_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/check_todo_list_tool.gd",

@@ -2,7 +2,7 @@
 class_name SubAgentOrchestrator
 extends Node
 
-const REPORT_TASK_TOOL_SCRIPT = preload("res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/report_task_result_tool.gd")
+const REPORT_TASK_TOOL_SCRIPT: Resource = preload("res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/report_task_result_tool.gd")
 
 var skill_name: String = ""
 var task_description: String = ""

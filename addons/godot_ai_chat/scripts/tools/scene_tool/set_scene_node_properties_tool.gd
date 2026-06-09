@@ -3,8 +3,8 @@ extends BaseSceneTool
 
 
 func _init() -> void:
-	tool_name = "set_node_properties"
-	tool_description = "Sets a property value on a node in the current edited scene. Use `get_node_properties` first to get target node properties."
+	tool_name = "set_scene_node_properties"
+	tool_description = "Sets a property on a node with type coercion and UndoRedo support."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -13,23 +13,15 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"node_path": {
 				"type": "string",
-				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')"
+				"description": "Target node path."
 			},
 			"property_name": {
 				"type": "string",
-				"description": """Target node path. CRITICAL DISTINCTION:
-								- For NODE paths (finding the target node): Use 'Parent/Child' with SLASH '/'
-								  Example: 'Player/Body' to find the Body node
-								
-								- For RESOURCE properties (setting sub-resource properties): Use 'node:resource:property' with COLON ':'
-								  Example: 'TestCapsule:mesh:height' to set CapsuleMesh height
-								  Example: 'TestCapsule:mesh:material:albedo_color' for nested resources
-								
-								NEVER use 'Node/resource/property' with slashes for resource properties!"""
+				"description": "Property name. Supports ':' for nested resource properties."
 			},
 			"value": {
 				"type": "string",
-				"description": "Value to set. Supported formats:\n- Bool: 'true' or 'false'\n- Number: '100' or '3.14'\n- Vec2/3: '[x, y]' or '[x, y, z]'\n- Color: '[r, g, b]' or '[r, g, b, a]'\n- String: 'hello'\n- Resource: 'res://path' or 'new:ClassName'"
+				"description": "Value to set. Auto-converts to the target type."
 			}
 		},
 		"required": ["node_path", "property_name", "value"]

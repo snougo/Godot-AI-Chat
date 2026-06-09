@@ -32,12 +32,6 @@ static func process_input(p_raw_text: String) -> Dictionary:
 					result.images.append(img_info)
 					continue # 路径已提取，不保留在文本
 			
-			# 2. 处理场景文件
-			#elif ext == "tscn":
-				#var scene_md: String = _parse_scene_to_markdown(trimmed)
-				#processed_lines.append(scene_md)
-				#continue
-			
 			# 2. 处理场景文件（.tscn / .scn）
 			elif ext in ["tscn", "scn"]:
 				var scene_md: String = _parse_scene_to_markdown(trimmed)
@@ -45,22 +39,22 @@ static func process_input(p_raw_text: String) -> Dictionary:
 				continue
 			
 			# 3. 处理脚本文件
-			elif ext == "gd":
-				var script_content: String = _read_script_content(trimmed)
-				processed_lines.append(script_content)
-				continue
+			#elif ext == "gd":
+				#var script_content: String = _read_script_content(trimmed)
+				#processed_lines.append(script_content)
+				#continue
 			
 			# 4. 处理着色器文件
-			elif ext == "gdshader":
-				var shader_content: String = _read_shader_content(trimmed)
-				processed_lines.append(shader_content)
-				continue
+			#elif ext == "gdshader":
+				#var shader_content: String = _read_shader_content(trimmed)
+				#processed_lines.append(shader_content)
+				#continue
 			
 			# 5. 处理资源文件（.tres 读取原始文本，.res 读取属性摘要）
-			elif ext in ["tres", "res"]:
-				var resource_content: String = _read_resource_content(trimmed)
-				processed_lines.append(resource_content)
-				continue
+			#elif ext in ["tres", "res"]:
+				#var resource_content: String = _read_resource_content(trimmed)
+				#processed_lines.append(resource_content)
+				#continue
 		
 		processed_lines.append(line)
 	

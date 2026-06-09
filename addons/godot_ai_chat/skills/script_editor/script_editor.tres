@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://ck25a2rsye4k4"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_je3d2"]
+
+[resource]
+script = ExtResource("1_je3d2")
+skill_name = "Script Editor"
+description = "读取和修改编辑器当前打开的脚本文件。支持单处编辑和批量编辑操作。"
+instruction_file = "res://addons/godot_ai_chat/skills/script_editor/Skill.md"
+tools = Array[String](["uid://j5410tdoskcr", "uid://moj7l2cie3cq", "uid://ho4l00iitlui", "uid://6b135025xm7j", "uid://cucpsja3qnma7", "uid://d1svxbjuoea3g", "uid://kxfihdynhleh", "uid://cw5xgoi1irsaw"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"
