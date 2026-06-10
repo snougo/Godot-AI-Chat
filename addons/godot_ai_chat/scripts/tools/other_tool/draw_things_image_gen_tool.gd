@@ -1,0 +1,236 @@
+@tool
+extends AiTool
+
+## 通过 Draw Things HTTP API 进行本地文生图。
+##
+## 调用本地运行的 Draw Things app 的 HTTP API Server，发送提示词并生成图像。
+## 生成的图像以 PNG 格式保存到项目目录中。
+##
+## [b]前置条件：[/b]
+## 1. Draw Things app 已启动
+## 2. Draw Things 设置中已开启 "API Server"（默认端口 7860）
+##
+## [b]验证服务是否运行：[/b]
+## curl http://127.0.0.1:7860/sdapi/v1/sdapi
+## Draw Things 是一款提供本地文生图功能的 Mac App
+
+
+# --- Enums / Constants ---
+
+## 默认主机地址
+const DEFAULT_HOST: String = "127.0.0.1"
+## 默认端口
+const DEFAULT_PORT: int = 7860
+## API 端点路径
+const TXT2IMG_ENDPOINT: String = "/sdapi/v1/txt2img"
+## 默认图片保存目录
+const DEFAULT_OUTPUT_DIR: String = "res://"
+## HTTP 请求超时时间（秒）
+const REQUEST_TIMEOUT: float = 120.0
+## 轮询间隔（秒）
+const POLL_DELAY: float = 0.05
+
+
+# --- Built-in Functions ---
+
+func _init() -> void:
+	tool_name = "draw_things_generate_image"
+	tool_description = "Generates an image using the local `Draw Things` app via its HTTP API. "
+
+
+# --- Public Functions ---
+
+func get_parameters_schema() -> Dictionary:
+	return {
+		"type": "object",
+		"properties": {
+			"prompt": {
+				"type": "string",
+				"description": "Text description of the image to generate. Be as detailed as possible for better results."
+			},
+			"negative_prompt": {
+				"type": "string",
+				"description": "Elements or qualities to exclude from the generated image (e.g., 'blurry, low quality, deformed hands')."
+			},
+			"width": {
+				"type": "integer",
+				"description": "Image width in pixels. Common values: 512, 768, 1024. Default: 1024.",
+				"default": 1024
+			},
+			"height": {
+				"type": "integer",
+				"description": "Image height in pixels. Common values: 512, 768, 1024. Default: 1024.",
+				"default": 1024
+			},
+			"steps": {
+				"type": "integer",
+				"description": "Number of inference (denoising) steps. Default: 8.",
+				"default": 8
+			},
+			"cfg_scale": {
+				"type": "number",
+				"description": "Classifier-Free Guidance scale. Default: 1.0.",
+				"default": 1.0
+			},
+			"seed": {
+				"type": "integer",
+				"description": "Random seed. Use -1 for random. Default: -1.",
+				"default": -1
+			}
+		},
+		"required": ["prompt", "negative_prompt"]
+	}
+
+
+func execute(p_args: Dictionary) -> Dictionary:
+	# --- 提取参数 ---
+	var prompt: String = p_args.get("prompt", "").strip_edges()
+	if prompt.is_empty():
+		return {"success": false, "data": "Error: 'prompt' parameter is required and cannot be empty."}
+
+	var negative_prompt: String = p_args.get("negative_prompt", "")
+	var width: int = p_args.get("width", 1024)
+	var height: int = p_args.get("height", 1024)
+	var steps: int = p_args.get("steps", 8)
+	var cfg_scale: float = p_args.get("cfg_scale", 1.0)
+	var seed: int = p_args.get("seed", -1)
+
+	# --- 参数校验 ---
+	if width < 64 or width > 4096:
+		return {"success": false, "data": "Error: 'width' must be between 64 and 4096."}
+	if height < 64 or height > 4096:
+		return {"success": false, "data": "Error: 'height' must be between 64 and 4096."}
+	if steps < 1 or steps > 150:
+		return {"success": false, "data": "Error: 'steps' must be between 1 and 150."}
+	if cfg_scale < 1.0 or cfg_scale > 30.0:
+		return {"success": false, "data": "Error: 'cfg_scale' must be between 1.0 and 30.0."}
+
+	# --- 构建请求 Payload ---
+	var payload: Dictionary = {
+		"prompt": prompt,
+		"negative_prompt": negative_prompt,
+		"width": width,
+		"height": height,
+		"steps": steps,
+		"cfg_scale": cfg_scale,
+		"seed": seed
+	}
+
+	return await _send_request(payload)
+
+
+# --- Private Functions ---
+
+## 异步发送 HTTP POST 请求到 Draw Things API
+## 使用 await 协程，不阻塞编辑器主线程
+func _send_request(p_payload: Dictionary) -> Dictionary:
+	var client := HTTPClient.new()
+	var err := client.connect_to_host(DEFAULT_HOST, DEFAULT_PORT)
+
+	if err != OK:
+		return {
+			"success": false,
+			"data": "Error: Cannot connect to Draw Things at %s:%d — %s. Make sure Draw Things is running and API Server is enabled." % [DEFAULT_HOST, DEFAULT_PORT, error_string(err)]
+		}
+
+	# --- 等待连接完成（异步）---
+	var timer: float = 0.0
+	while client.get_status() in [HTTPClient.STATUS_CONNECTING, HTTPClient.STATUS_RESOLVING]:
+		client.poll()
+		await Engine.get_main_loop().create_timer(POLL_DELAY).timeout
+		timer += POLL_DELAY
+		if timer >= 10.0:
+			client.close()
+			return {"success": false, "data": "Error: Connection to Draw Things timed out after 10 seconds."}
+
+	if client.get_status() != HTTPClient.STATUS_CONNECTED:
+		client.close()
+		return {"success": false, "data": "Error: Failed to connect to Draw Things. Status: %d. Is the app running?" % client.get_status()}
+
+	# --- 发送请求 ---
+	var body: String = JSON.stringify(p_payload)
+	var headers: PackedStringArray = ["Content-Type: application/json"]
+
+	err = client.request(HTTPClient.METHOD_POST, TXT2IMG_ENDPOINT, headers, body)
+	if err != OK:
+		client.close()
+		return {"success": false, "data": "Error: HTTP request failed — %s." % error_string(err)}
+
+	# --- 等待响应（异步）---
+	timer = 0.0
+	while client.get_status() == HTTPClient.STATUS_REQUESTING:
+		client.poll()
+		await Engine.get_main_loop().create_timer(POLL_DELAY).timeout
+		timer += POLL_DELAY
+		if timer >= REQUEST_TIMEOUT:
+			client.close()
+			return {"success": false, "data": "Error: Image generation timed out after %.0f seconds. The model may be taking too long." % REQUEST_TIMEOUT}
+
+	# --- 读取响应体 ---
+	var response_code: int = client.get_response_code()
+	var response_body := PackedByteArray()
+
+	while client.get_status() == HTTPClient.STATUS_BODY:
+		client.poll()
+		var chunk: PackedByteArray = client.read_response_body_chunk()
+		if chunk.size() > 0:
+			response_body.append_array(chunk)
+		if client.get_status() == HTTPClient.STATUS_BODY:
+			await Engine.get_main_loop().create_timer(POLL_DELAY).timeout
+
+	client.close()
+
+	if response_code != 200:
+		var error_body: String = response_body.get_string_from_utf8()
+		return {"success": false, "data": "Error: Draw Things API returned HTTP %d — %s" % [response_code, error_body]}
+
+	# --- 解析 JSON ---
+	var json := JSON.new()
+	var parse_err: Error = json.parse(response_body.get_string_from_utf8())
+	if parse_err != OK:
+		return {"success": false, "data": "Error: Failed to parse API response JSON — %s." % error_string(parse_err)}
+
+	return _save_image(json.data)
+
+
+## 解码 Base64 图片并保存到文件
+func _save_image(p_response_data: Variant) -> Dictionary:
+	var images_raw = p_response_data.get("images", [])
+	if images_raw.is_empty():
+		return {"success": false, "data": "Error: API returned no images in response."}
+
+	var base64_str: String = images_raw[0]
+	var raw_data: PackedByteArray = Marshalls.base64_to_raw(base64_str)
+	if raw_data.is_empty():
+		return {"success": false, "data": "Error: Failed to decode base64 image data."}
+
+	# 自动生成保存路径
+	var prompt: String = ""  # 直接从调用方传更干净，但为了简化用空值做fallback
+	var timestamp: String = Time.get_datetime_string_from_system().replace(":", "-").replace(" ", "_")
+	var save_path: String = "%sdrawthings_%s.png" % [DEFAULT_OUTPUT_DIR, timestamp]
+
+	# 直接将原始 PNG 数据写入文件
+	var file := FileAccess.open(save_path, FileAccess.WRITE)
+	if not file:
+		return {"success": false, "data": "Error: Cannot open file for writing: %s" % save_path}
+	file.store_buffer(raw_data)
+	file.close()
+
+	# 刷新编辑器文件系统 — 用 scan() 让编辑器发现新文件
+	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+	editor_filesystem.scan()
+
+	# 验证文件可加载
+	var check := Image.new()
+	var load_err: Error = check.load(save_path)
+	if load_err != OK:
+		return {"success": false, "data": "Error: Saved file at %s failed validation." % save_path}
+
+	return {
+		"success": true,
+		"data": "Image generated and saved successfully: %s" % save_path,
+		"attachments": {
+			"image_data": raw_data,
+			"mime": "image/png"
+		}
+	}
