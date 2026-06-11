@@ -15,6 +15,7 @@
 
 ## 工具使用解释
 `batch_edit` 的详细使用说明见前置文档 `res://addons/godot_ai_chat/primers/batch_edit_tool_guide.md`
+
 ## 注意事项
 
 - 所有编辑操作仅对当前脚本编辑器中的文件生效

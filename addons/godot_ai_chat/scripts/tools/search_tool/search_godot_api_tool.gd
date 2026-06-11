@@ -13,7 +13,7 @@ const LOCAL_DOC_PATH: String = "res://godot_doc"
 
 func _init() -> void:
 	tool_name = "search_godot_api"
-	tool_description = "Searches Godot ClassDB and local API docs. Support `ClassName` to search."
+	tool_description = "Searches Godot ClassDB and local API docs."
 
 
 # --- Public Functions ---
@@ -22,17 +22,17 @@ func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
-			"keywords": {
+			"keyword": {
 				"type": "string",
-				"description": "Search keywords.\n > **Warning: ** Do not search for multiple keywords at the same time."
+				"description": "Search keyword. Only support `ClassName` (Node2D, Control, etc). \n > **Warning: ** Do not search for multiple keywords at the same time."
 			}
 		},
-		"required": ["keywords"]
+		"required": ["keyword"]
 	}
 
 
 func execute(p_args: Dictionary) -> Dictionary:
-	var raw_keywords: Variant = p_args.get("keywords", "")
+	var raw_keywords: Variant = p_args.get("keyword", "")
 	var keywords_list: PackedStringArray = _parse_keywords(raw_keywords)
 	
 	if keywords_list.is_empty():
