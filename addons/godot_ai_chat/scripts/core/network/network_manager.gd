@@ -79,6 +79,7 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	current_stream_request = StreamRequest.new(current_provider, url, headers, body, TimeoutTracker.from_network_timeout(settings.network_timeout))
+	var _local_request_ref: StreamRequest = current_stream_request
 	
 	var result := {"success": false, "error": ""}
 	var state := {"is_finished": false}
@@ -112,6 +113,10 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	if not state.is_finished and result.error.is_empty():
 		result.success = false
 		result.error = "Cancelled by User"
+	
+	# [Fix] 等待 WorkerThreadPool 任务完成，清理内部资源
+	if _local_request_ref != null:
+		_local_request_ref.wait_for_cleanup()
 	
 	_clear_current_stream_request()
 	return result

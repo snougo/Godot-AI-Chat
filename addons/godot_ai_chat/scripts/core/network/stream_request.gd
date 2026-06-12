@@ -80,6 +80,15 @@ func cancel() -> void:
 		_http_client.close()
 
 
+
+## 等待工作线程任务完成并清理 WorkerThreadPool 内部资源
+## 必须在任务结束后调用（finished/failed 信号触发后，或 cancel 后）
+func wait_for_cleanup() -> void:
+	if _task_id >= 0:
+		WorkerThreadPool.wait_for_task_completion(_task_id)
+		_task_id = -1
+
+
 # --- Private Functions ---
 
 # 线程任务主循环
