@@ -4,7 +4,7 @@
 [ext_resource type="Script" uid="uid://kyrmkryttqbf" path="res://addons/godot_ai_chat/scripts/core/chat_hub.gd" id="1_ue3k2"]
 [ext_resource type="PackedScene" uid="uid://25giq62fx0to" path="res://addons/godot_ai_chat/scene/network_manager.tscn" id="4_62xqn"]
 [ext_resource type="Script" uid="uid://b6rojjawry0ky" path="res://addons/godot_ai_chat/scripts/core/agent_orchestrator.gd" id="5_c2guu"]
-[ext_resource type="Script" uid="uid://dr3rrump555v0" path="res://addons/godot_ai_chat/scripts/core/ui/current_chat_window.gd" id="5_rbecq"]
+[ext_resource type="Script" uid="uid://dr3rrump555v0" path="res://addons/godot_ai_chat/scripts/ui/current_chat_window.gd" id="5_rbecq"]
 
 [node name="ChatHub" type="Control" unique_id=839420379]
 custom_minimum_size = Vector2(700, 800)

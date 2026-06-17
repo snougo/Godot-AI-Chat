@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://csp5ftvyxqlra"
-path="res://.godot/imported/document.svg-f9252faa427617fde0f52e75ad84da63.ctex"
+uid="uid://boc6f5o8bklo2"
+path="res://.godot/imported/streamline-ultimate-color--filter-text.svg-93a82d281d5585fb6ca7fc14ea12dd15.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/godot_ai_chat/assets/document.svg"
-dest_files=["res://.godot/imported/document.svg-f9252faa427617fde0f52e75ad84da63.ctex"]
+source_file="res://addons/godot_ai_chat/assets/icons/streamline-ultimate-color--filter-text.svg"
+dest_files=["res://.godot/imported/streamline-ultimate-color--filter-text.svg-93a82d281d5585fb6ca7fc14ea12dd15.ctex"]
 
 [params]
 

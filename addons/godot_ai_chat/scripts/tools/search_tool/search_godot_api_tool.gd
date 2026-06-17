@@ -46,7 +46,16 @@ func execute(p_args: Dictionary) -> Dictionary:
 		found_any = true
 		output.append(api_result)
 	
-	var file_result: String = _search_local_files_multi(LOCAL_DOC_PATH, keywords_list)
+	# --- 扩展关键词：对 "Class.member" 格式，提取类名用于本地文档搜索 ---
+	var doc_keywords: PackedStringArray = []
+	for kw in keywords_list:
+		doc_keywords.append(kw)
+		if "." in kw:
+			var parts: PackedStringArray = kw.split(".", false, 1)
+			if parts.size() == 2 and not parts[0].is_empty():
+				doc_keywords.append(parts[0])
+	
+	var file_result: String = _search_local_files_multi(LOCAL_DOC_PATH, doc_keywords)
 	if not file_result.is_empty():
 		found_any = true
 		output.append("\n---\n" + file_result)
@@ -125,7 +134,6 @@ func _search_builtin_api_multi(p_keywords: PackedStringArray) -> String:
 				f.close()
 				class_exact.append(kw_lower.capitalize())  # 首字母大写显示类名
 				found_class = true
-		# ---------------------------------------------------------
 		
 		# 不是类名，尝试成员搜索
 		if not found_class:
@@ -441,15 +449,25 @@ func _format_class_detailed(p_class: String) -> String:
 	var lines: Array[String] = []
 	lines.append("## Class: `%s`" % p_class)
 	
-	# --- Variant 内置类型降级显示 ---
+	# --- Variant 内置类型：提前短路，避免 ClassDB 报错 ---
 	var is_variant_type: bool = not ClassDB.class_exists(p_class)
+	if is_variant_type:
+		lines.append("**Type:** Built-in Variant type")
+		# 检查本地文档是否存在
+		var variant_doc_path: String = LOCAL_DOC_PATH.path_join("classes/class_%s.md" % p_class.to_lower())
+		var f: FileAccess = FileAccess.open(variant_doc_path, FileAccess.READ)
+		if f:
+			f.close()
+			lines.append("\n💡 This is a built-in Variant type. Use `read_file` to view full docs from the local documentation.")
+		else:
+			lines.append("\n💡 This is a built-in Variant type.")
+		return "\n".join(lines)
+	# -----------------------------------------------------
 	
 	# 继承
 	var parent: String = ClassDB.get_parent_class(p_class)
 	if not parent.is_empty():
 		lines.append("**Inherits:** `%s`" % parent)
-	elif is_variant_type:
-		lines.append("**Type:** Built-in Variant type")
 	
 	# 常量
 	var constants: PackedStringArray = ClassDB.class_get_integer_constant_list(p_class, true)

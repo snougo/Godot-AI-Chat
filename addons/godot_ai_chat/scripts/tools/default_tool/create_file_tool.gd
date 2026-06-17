@@ -24,7 +24,7 @@ const RESTRICTED_MARKDOWN_FILES: Array[String] = [
 
 func _init() -> void:
 	tool_name = "create_file"
-	tool_description = "Creates a new file. Supports: scene (.tscn), script (.gd), shader (.gdshader), markdown (.md)."
+	tool_description = "Creates a new file."
 
 
 # --- Public Functions ---
@@ -36,7 +36,7 @@ func get_parameters_schema() -> Dictionary:
 			"file_type": {
 				"type": "string",
 				"enum": ["scene", "script", "shader", "markdown"],
-				"description": "The type of file to create."
+				"description": "The type of file to create. Supports: scene (.tscn), script (.gd), shader (.gdshader), markdown (.md)."
 			},
 			"path": {
 				"type": "string",
@@ -52,7 +52,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"root_node_type": {
 				"type": "string",
-				"description": "Root node class name (e.g., 'Node2D', 'Node3D', 'Control' etc). Only for 'scene'. Default: 'Node'."
+				"description": "Root node class name (e.g., 'Node2D', 'Control' etc). Only for 'scene'. Default: 'Node'."
 			},
 			"root_node_name": {
 				"type": "string",

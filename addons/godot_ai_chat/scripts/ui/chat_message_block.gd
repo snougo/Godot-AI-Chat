@@ -14,6 +14,13 @@ const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIG
 ## 预加载代码查看器窗口
 const CODE_VIEWER_WINDOW_RES: PackedScene = preload("res://addons/godot_ai_chat/scene/popup_code_viewer_window.tscn")
 
+## 角色标题样式资源
+const TITLE_STYLE_ASSISTANT: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/assistant_title.tres")
+const TITLE_STYLE_USER: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/user_title.tres")
+const TITLE_STYLE_TOOL: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/tool_title.tres")
+## 统一背景样式资源
+const BG_STYLE: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/message_background.tres")
+
 # --- @onready Vars ---
 
 @onready var _content_container: VBoxContainer = $MarginContainer/VBoxContainer
@@ -118,11 +125,14 @@ func append_reasoning(p_text: String) -> void:
 	if not is_instance_valid(_reasoning_container):
 		_create_reasoning_ui()
 	
-	# [优化P1] 折叠状态下仅缓存文本，不更新 UI，避免触发布局计算
+	# [优化] 折叠状态下仅缓存文本，不更新 UI，避免触发布局计算
 	if _reasoning_container.is_folded():
 		_reasoning_text_cache += p_text
 	elif is_instance_valid(_reasoning_label):
+		# 保存滚动位置，避免 text += 重置 scroll_vertical 到顶部
+		var old_scroll: int = _reasoning_label.scroll_vertical
 		_reasoning_label.text += p_text
+		_reasoning_label.scroll_vertical = old_scroll
 
 
 ## 结束流式接收，刷新解析器缓冲区
@@ -505,26 +515,43 @@ func _on_parser_segment_parsed(p_type: int, p_content: String, p_meta: String) -
 # 设置标题和角色元数据
 func _set_title(p_role: String, p_model_name: String) -> void:
 	set_meta("role", p_role)
+	
+	# 根据角色选择对应的标题样式
+	var title_style: StyleBoxFlat
 	match p_role:
 		ChatMessage.ROLE_USER:
 			title = "🧑‍💻 You"
+			title_style = TITLE_STYLE_USER
 			if is_folded():
 				expand()
 		
 		ChatMessage.ROLE_ASSISTANT:
 			title = "🤖 Assistant" + ("/" + p_model_name if not p_model_name.is_empty() else "")
+			title_style = TITLE_STYLE_ASSISTANT
 			if is_folded():
 				expand()
 		
 		ChatMessage.ROLE_TOOL:
 			title = "⚙️ Tool Output"
+			title_style = TITLE_STYLE_TOOL
 			if not is_folded():
 				fold()
 		
 		_:
 			title = p_role.capitalize()
+			title_style = TITLE_STYLE_ASSISTANT
 			if is_folded():
 				expand()
+	
+	# 设置标题区域样式（4个状态统一使用角色样式）
+	add_theme_stylebox_override("title_panel", title_style)
+	add_theme_stylebox_override("title_hover_panel", title_style)
+	add_theme_stylebox_override("title_collapsed_panel", title_style)
+	add_theme_stylebox_override("title_collapsed_hover_panel", title_style)
+	
+	# 设置统一背景样式
+	add_theme_stylebox_override("focus", BG_STYLE)
+	add_theme_stylebox_override("panel", BG_STYLE)
 
 
 # 更新流式工具调用参数 UI
@@ -615,7 +642,9 @@ func _create_reasoning_ui() -> void:
 	_reasoning_label.editable = false
 	_reasoning_label.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_reasoning_label.custom_minimum_size.y = 300
-	_reasoning_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# 移除 SIZE_EXPAND_FILL，让 TextEdit 保持固定 300px 高度
+	#_reasoning_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_reasoning_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	_reasoning_label.caret_blink = false
 	_reasoning_label.highlight_current_line = false
 	_reasoning_label.modulate = Color(0.6, 0.6, 0.6)

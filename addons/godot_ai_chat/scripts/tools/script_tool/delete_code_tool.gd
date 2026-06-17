@@ -3,7 +3,7 @@ extends BaseScriptTool
 
 
 func _init() -> void:
-	tool_name = "delete_code_range"
+	tool_name = "delete_code"
 	tool_description = "Deletes code from the active Script Editor by line range (1-based)."
 
 

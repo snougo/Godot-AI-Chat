@@ -4,7 +4,7 @@ extends EditorPlugin
 # 主场景路径
 const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
 # 插件图标
-const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/plugin_icon.svg")
+const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/icons/plugin_icon.svg")
 
 # 插件主实例
 var chat_hub_instance: Control = null

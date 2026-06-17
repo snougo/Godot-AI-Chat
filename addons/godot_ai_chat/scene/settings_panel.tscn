@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://yhavhbc6hmeu"]
 
-[ext_resource type="Script" uid="uid://dlkxbpvddb1rw" path="res://addons/godot_ai_chat/scripts/core/ui/settings_panel.gd" id="1_1lswa"]
+[ext_resource type="Script" uid="uid://dlkxbpvddb1rw" path="res://addons/godot_ai_chat/scripts/ui/settings_panel.gd" id="1_1lswa"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vnbbj"]
 bg_color = Color(0.15178573, 0.15178573, 0.15178573, 1)

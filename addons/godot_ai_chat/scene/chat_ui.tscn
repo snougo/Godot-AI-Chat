@@ -1,15 +1,15 @@
 [gd_scene format=3 uid="uid://u2oo4ymv2b8y"]
 
-[ext_resource type="Script" uid="uid://d4e8053oahxl0" path="res://addons/godot_ai_chat/scripts/core/ui/chat_ui.gd" id="1_ktmbx"]
+[ext_resource type="Script" uid="uid://d4e8053oahxl0" path="res://addons/godot_ai_chat/scripts/ui/chat_ui.gd" id="1_ktmbx"]
 [ext_resource type="Theme" uid="uid://bm6f43fgr7jjd" path="res://addons/godot_ai_chat/assets/big_yellow_scrollbar_theme.tres" id="2_p4tj1"]
 [ext_resource type="PackedScene" uid="uid://yhavhbc6hmeu" path="res://addons/godot_ai_chat/scene/settings_panel.tscn" id="2_ufwtx"]
-[ext_resource type="Texture2D" uid="uid://boc6f5o8bklo2" path="res://addons/godot_ai_chat/assets/streamline-ultimate-color--filter-text.svg" id="3_i3tmh"]
-[ext_resource type="Texture2D" uid="uid://vwlbuhvfugwf" path="res://addons/godot_ai_chat/assets/material-icon-theme--folder-markdown.svg" id="4_qoxj2"]
+[ext_resource type="Texture2D" uid="uid://boc6f5o8bklo2" path="res://addons/godot_ai_chat/assets/icons/streamline-ultimate-color--filter-text.svg" id="3_i3tmh"]
+[ext_resource type="Texture2D" uid="uid://vwlbuhvfugwf" path="res://addons/godot_ai_chat/assets/icons/material-icon-theme--folder-markdown.svg" id="4_qoxj2"]
 [ext_resource type="Script" uid="uid://cb53othg76m5n" path="res://addons/godot_ai_chat/scripts/others/user_input.gd" id="5_p6hp2"]
-[ext_resource type="Texture2D" uid="uid://csp5ftvyxqlra" path="res://addons/godot_ai_chat/assets/document.svg" id="6_ju5xs"]
-[ext_resource type="Texture2D" uid="uid://dh54j33ru0odc" path="res://addons/godot_ai_chat/assets/streamline-sharp-color--cloud-wifi-flat.svg" id="7_grk0l"]
-[ext_resource type="Texture2D" uid="uid://54q6istmwjt" path="res://addons/godot_ai_chat/assets/tool-screwdriver-svgrepo-com.svg" id="7_qjs14"]
-[ext_resource type="Texture2D" uid="uid://brk43jkprsfdw" path="res://addons/godot_ai_chat/assets/streamline-sharp-color--mail-send-email-message-flat.svg" id="9_ulynj"]
+[ext_resource type="Texture2D" uid="uid://csp5ftvyxqlra" path="res://addons/godot_ai_chat/assets/icons/document.svg" id="6_ju5xs"]
+[ext_resource type="Texture2D" uid="uid://dh54j33ru0odc" path="res://addons/godot_ai_chat/assets/icons/streamline-sharp-color--cloud-wifi-flat.svg" id="7_grk0l"]
+[ext_resource type="Texture2D" uid="uid://54q6istmwjt" path="res://addons/godot_ai_chat/assets/icons/tool-screwdriver-svgrepo-com.svg" id="7_qjs14"]
+[ext_resource type="Texture2D" uid="uid://brk43jkprsfdw" path="res://addons/godot_ai_chat/assets/icons/streamline-sharp-color--mail-send-email-message-flat.svg" id="9_ulynj"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a7m7s"]
 bg_color = Color(0, 0.2535977, 0.58258927, 1)

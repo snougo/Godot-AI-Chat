@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_je3d2")
 skill_name = "Script Editor"
-description = "读取和修改编辑器当前打开的脚本文件。支持单处编辑和批量编辑操作。"
+description = "读取和修改脚本编辑器中当前打开的脚本文件。"
 instruction_file = "res://addons/godot_ai_chat/skills/script_editor/Skill.md"
-tools = Array[String](["uid://j5410tdoskcr", "uid://moj7l2cie3cq", "uid://ho4l00iitlui", "uid://6b135025xm7j", "uid://cucpsja3qnma7", "uid://d1svxbjuoea3g", "uid://kxfihdynhleh", "uid://cw5xgoi1irsaw"])
+tools = Array[String](["uid://j5410tdoskcr", "uid://moj7l2cie3cq", "uid://cw5xgoi1irsaw", "uid://ho4l00iitlui", "uid://6b135025xm7j", "uid://cucpsja3qnma7", "uid://d1svxbjuoea3g", "uid://mmps2l0grvac", "uid://bo06p18acpk2v"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

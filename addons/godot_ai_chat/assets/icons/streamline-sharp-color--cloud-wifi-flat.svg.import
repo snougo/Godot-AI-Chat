@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://boc6f5o8bklo2"
-path="res://.godot/imported/streamline-ultimate-color--filter-text.svg-06ee9656a5741ec697dd57aad8ec4632.ctex"
+uid="uid://dh54j33ru0odc"
+path="res://.godot/imported/streamline-sharp-color--cloud-wifi-flat.svg-52d4f35b54580ddd7a91f89191fc3600.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/godot_ai_chat/assets/streamline-ultimate-color--filter-text.svg"
-dest_files=["res://.godot/imported/streamline-ultimate-color--filter-text.svg-06ee9656a5741ec697dd57aad8ec4632.ctex"]
+source_file="res://addons/godot_ai_chat/assets/icons/streamline-sharp-color--cloud-wifi-flat.svg"
+dest_files=["res://.godot/imported/streamline-sharp-color--cloud-wifi-flat.svg-52d4f35b54580ddd7a91f89191fc3600.ctex"]
 
 [params]
 

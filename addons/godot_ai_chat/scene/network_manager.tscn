@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://25giq62fx0to"]
 
-[ext_resource type="Script" uid="uid://cp6q07xwys8p0" path="res://addons/godot_ai_chat/scripts/core/network/network_manager.gd" id="1_fvbmw"]
+[ext_resource type="Script" uid="uid://cp6q07xwys8p0" path="res://addons/godot_ai_chat/scripts/network/network_manager.gd" id="1_fvbmw"]
 
 [node name="NetworkManager" type="Node" unique_id=1955945571]
 script = ExtResource("1_fvbmw")

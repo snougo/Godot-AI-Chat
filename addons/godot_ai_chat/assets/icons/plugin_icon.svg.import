@@ -2,16 +2,17 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://54q6istmwjt"
-path="res://.godot/imported/tool-screwdriver-svgrepo-com.svg-ece7d75d599ad29c0a3ca99f29a66eaa.ctex"
+uid="uid://dbpn18tfq5g12"
+path="res://.godot/imported/plugin_icon.svg-ff8e64e41a36cf4d927911c94bb72d61.ctex"
 metadata={
+"has_editor_variant": true,
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/godot_ai_chat/assets/tool-screwdriver-svgrepo-com.svg"
-dest_files=["res://.godot/imported/tool-screwdriver-svgrepo-com.svg-ece7d75d599ad29c0a3ca99f29a66eaa.ctex"]
+source_file="res://addons/godot_ai_chat/assets/icons/plugin_icon.svg"
+dest_files=["res://.godot/imported/plugin_icon.svg-ff8e64e41a36cf4d927911c94bb72d61.ctex"]
 
 [params]
 
@@ -39,5 +40,5 @@ process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
 svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
+editor/scale_with_editor_scale=true
+editor/convert_colors_with_editor_theme=true
