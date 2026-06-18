@@ -56,6 +56,8 @@ var _reasoning_container: FoldableContainer = null
 var _reasoning_label: TextEdit = null
 # [优化P1] 思考内容懒加载缓存：折叠时将文本存入缓存并清空 TextEdit，展开时才填充
 var _reasoning_text_cache: String = ""
+# [性能] 思考内容流式写缓冲：攒够量再刷到 TextEdit，避免频繁 text +=
+var _reasoning_write_buffer: String = ""
 
 # 消息块是否被挂起
 var _is_suspended: bool = false
@@ -137,14 +139,15 @@ func append_reasoning(p_text: String) -> void:
 	if _reasoning_container.is_folded():
 		_reasoning_text_cache += p_text
 	elif is_instance_valid(_reasoning_label):
-		# 保存滚动位置，避免 text += 重置 scroll_vertical 到顶部
-		var old_scroll: int = _reasoning_label.scroll_vertical
-		_reasoning_label.text += p_text
-		_reasoning_label.scroll_vertical = old_scroll
+		# 攒入缓冲区
+		_reasoning_write_buffer += p_text
+		if _reasoning_write_buffer.length() >= 20:
+			_flush_reasoning_buffer()
 
 
 ## 结束流式接收，刷新解析器缓冲区
 func finish_stream() -> void:
+	_flush_reasoning_buffer()
 	_parser.flush()
 	_close_table_if_open()
 	_finish_typing()
@@ -211,7 +214,7 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 	title_label.fit_content = true
 	title_label.selection_enabled = false
 	
-	title_label.append_text("[b][color=cyan]🔧 Tool Call:[/color][/b] [color=yellow]%s[/color]" % clean_name)
+	title_label.append_text("[color=yellow]%s[/color]" % clean_name)
 	vbox.add_child(title_label)
 	
 	# 3. 参数详情
@@ -265,9 +268,7 @@ func suspend_content() -> void:
 	if _is_suspended or _typing_active:
 		return
 	
-	# [优化P2] 无论折叠与否，统一移除内容以彻底释放布局压力
-	custom_minimum_size.y = size.y
-	remove_child(_main_margin_container)
+	_main_margin_container.visible = false
 	_is_suspended = true
 
 
@@ -276,8 +277,7 @@ func resume_content() -> void:
 	if not _is_suspended:
 		return
 	
-	add_child(_main_margin_container)
-	custom_minimum_size.y = 0
+	_main_margin_container.visible = true
 	_is_suspended = false
 
 
@@ -325,12 +325,14 @@ func _convert_inline(p_text: String) -> String:
 				i = end + 1
 				continue
 		
-		# `inline code` → 淡黄色（递归处理内部内容）
+		# `inline code` → 淡黄色
 		if c == "`":
 			var end: int = p_text.find("`", i + 1)
 			if end != -1:
 				var inner: String = p_text.substr(i + 1, end - i - 1)
-				result += "[color=#d2cf95]" + _convert_inline(inner) + "[/color]"
+				# 转义方括号，防止内联代码中的 BBCode 被解析
+				inner = inner.replace("[", "[lb]").replace("]", "[rb]")
+				result += "[color=#d2cf95]" + inner + "[/color]"
 				i = end + 1
 				continue
 		
@@ -583,7 +585,7 @@ func _set_title(p_role: String, p_model_name: String) -> void:
 				expand()
 		
 		ChatMessage.ROLE_TOOL:
-			title = "⚙️ Tool Output"
+			title = "🔧 Tool Output"
 			title_style = TITLE_STYLE_TOOL
 			if not is_folded():
 				fold()
@@ -639,39 +641,11 @@ func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> vo
 	p_label.pop()
 
 
-# 清空所有内容
-func _clear_content() -> void:
-	for c in _content_container.get_children():
-		c.queue_free()
-	
-	if is_instance_valid(_current_popup_code_view_window):
-		_current_popup_code_view_window.queue_free()
-		_current_popup_code_view_window = null
-	
-	if _content_container.has_meta("shown_calls"):
-		_content_container.set_meta("shown_calls", [])
-	
-	_parser.reset()
-	_last_ui_node = null
-	_typing_active = false
-	_current_typing_node = null
-	_reasoning_container = null
-	_reasoning_label = null
-	# [优化P1] 清空思考内容缓存
-	_reasoning_text_cache = ""
-	# 重置时恢复标志位
-	_is_first_text = true
-	_previous_line_was_blank = false
-	# 重置表格状态
-	_in_table = false
-	_table_column_count = 0
-
-
 # 创建思考内容 UI 结构
 func _create_reasoning_ui() -> void:
 	_reasoning_container = FoldableContainer.new()
 	_reasoning_container.name = "ReasoningContainer"
-	_reasoning_container.set_title("🤔 Thinking Process")
+	_reasoning_container.set_title("Thinking Process")
 	_reasoning_container.fold()
 	# [优化P1] 监听折叠/展开信号，实现懒加载
 	_reasoning_container.folding_changed.connect(_on_reasoning_fold_changed)
@@ -692,9 +666,8 @@ func _create_reasoning_ui() -> void:
 	_reasoning_label = TextEdit.new()
 	_reasoning_label.editable = false
 	_reasoning_label.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_reasoning_label.custom_minimum_size.y = 300
-	# 移除 SIZE_EXPAND_FILL，让 TextEdit 保持固定 300px 高度
-	#_reasoning_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_reasoning_label.custom_minimum_size.y = 150
+	# 移除 SIZE_EXPAND_FILL，让 TextEdit 保持固定 150px 高度
 	_reasoning_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	_reasoning_label.caret_blink = false
 	_reasoning_label.highlight_current_line = false
@@ -708,15 +681,32 @@ func _create_reasoning_ui() -> void:
 # 折叠时清空 TextEdit 文本释放布局压力，展开时从缓存填充
 func _on_reasoning_fold_changed(is_folded: bool) -> void:
 	if is_folded:
-		# 折叠：将文本保存到缓存，清空 TextEdit
+		# 折叠：先排空缓冲区，再将 TextEdit 文本保存到缓存后清空
+		_flush_reasoning_buffer()
 		if is_instance_valid(_reasoning_label) and not _reasoning_label.text.is_empty():
 			_reasoning_text_cache = _reasoning_label.text
 			_reasoning_label.text = ""
 	else:
-		# 展开：从缓存恢复文本到 TextEdit
+		# 展开：将缓存内容延迟到下一帧设置
 		if not _reasoning_text_cache.is_empty() and is_instance_valid(_reasoning_label):
-			_reasoning_label.text = _reasoning_text_cache
-			_reasoning_text_cache = ""
+			call_deferred("_set_reasoning_text_deferred")
+
+
+func _set_reasoning_text_deferred() -> void:
+	if not _reasoning_text_cache.is_empty() and is_instance_valid(_reasoning_label):
+		_reasoning_label.text = _reasoning_text_cache
+		_reasoning_text_cache = ""
+
+
+# 将缓冲区的思考内容一次性刷入 TextEdit
+func _flush_reasoning_buffer() -> void:
+	if _reasoning_write_buffer.is_empty() or not is_instance_valid(_reasoning_label):
+		return
+	
+	var old_scroll: int = _reasoning_label.scroll_vertical
+	_reasoning_label.text += _reasoning_write_buffer
+	_reasoning_label.scroll_vertical = old_scroll
+	_reasoning_write_buffer = ""
 
 
 # 创建文本块 UI
@@ -937,3 +927,32 @@ func _show_code_in_popup_window(p_code_content: String) -> void:
 	var code_edit: CodeEdit = _current_popup_code_view_window.popup_code_edit
 	code_edit.text = p_code_content
 	_current_popup_code_view_window.popup_centered(Vector2i(800, 600))
+
+
+# 清空所有内容
+func _clear_content() -> void:
+	for c in _content_container.get_children():
+		c.queue_free()
+	
+	if is_instance_valid(_current_popup_code_view_window):
+		_current_popup_code_view_window.queue_free()
+		_current_popup_code_view_window = null
+	
+	if _content_container.has_meta("shown_calls"):
+		_content_container.set_meta("shown_calls", [])
+	
+	_parser.reset()
+	_last_ui_node = null
+	_typing_active = false
+	_current_typing_node = null
+	_reasoning_container = null
+	_reasoning_label = null
+	# [优化P1] 清空思考内容缓存
+	_reasoning_text_cache = ""
+	_reasoning_write_buffer = ""
+	# 重置时恢复标志位
+	_is_first_text = true
+	_previous_line_was_blank = false
+	# 重置表格状态
+	_in_table = false
+	_table_column_count = 0
