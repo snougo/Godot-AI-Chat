@@ -1,3 +1,4 @@
+@tool
 class_name ToolBox
 extends RefCounted
 
@@ -135,30 +136,30 @@ static func refresh_editor_filesystem() -> void:
 	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
 
 
-## 从 AI 响应中移除 <think>...</think> 标签块
+## 从 AI 响应中移除  thinking... response 标签块
 static func remove_think_tags(p_text: String) -> String:
 	if p_text.is_empty():
 		return ""
-	var think_regex: RegEx = RegEx.create_from_string("(?s)<think>.*?</think>")
+	var think_regex: RegEx = RegEx.create_from_string("(?s) thinking.*? response")
 	var cleaned_text: String = think_regex.sub(p_text, "", true)
 	return cleaned_text.strip_edges()
 
 
-## 过滤掉那些在 <think> 标签尚未闭合时产生的工具调用
+## 过滤掉那些在  thinking 标签尚未闭合时产生的工具调用
 static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Array) -> Array:
-	if p_tool_calls.is_empty() or "<think>" not in p_content:
+	if p_tool_calls.is_empty() or " thinking" not in p_content:
 		return p_tool_calls
 	
-	var think_start: int = p_content.find("<think>")
-	var think_end: int = p_content.find("</think>")
+	var think_start: int = p_content.find(" thinking")
+	var think_end: int = p_content.find(" response")
 	
-	# 如果找到了 <think> 但没找到 </think>，说明思考过程尚未结束
+	# 如果找到了  thinking 但没找到  response，说明思考过程尚未结束
 	# 此时产生的所有工具调用都应视为不稳定或幻觉，予以拦截
 	if think_start != -1 and think_end == -1:
-		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed <think> block." % p_tool_calls.size())
+		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed  thinking block." % p_tool_calls.size())
 		return []
 	
-	# 如果 <think> 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
+	# 如果  thinking 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
 	# 直接放行，不再做内容匹配（防止误杀）
 	return p_tool_calls
 
@@ -195,46 +196,39 @@ static func filter_invalid_tool_calls(p_tool_calls: Array) -> Array:
 	return valid
 
 
-## 清洗、过滤工具调用，并将被服务端误判的纯文本“抢救”回消息内容中
+## 清洗、过滤工具调用，并将被服务端误判的纯文本"抢救"回消息内容中
 static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
-	var valid_calls: Array =[]
+	# 防御：确保 ToolRegistry 已初始化
+	if ToolRegistry.ai_tools.is_empty():
+		ToolRegistry.load_default_tools()
+	
+	var valid_calls: Array = []
 	var salvaged_text: String = ""
 	
 	for tc in p_msg.tool_calls:
 		var raw_name: String = tc.get("function", {}).get("name", "")
-		var clean_name: String = raw_name.replace("<tool_call>", "").replace("</tool_call>", "").replace("tool_call", "").strip_edges()
+		var args: String = tc.get("function", {}).get("arguments", "")
 		
-		# 判断是否为合法工具名称
-		if is_valid_tool_name(clean_name) and not clean_name.is_empty():
-			# 合法工具，清洗名字并补充 ID
-			if tc.has("function"):
-				tc.function["name"] = clean_name
+		# Step 1: 检测 XML 伪标签（<tool_call>/<function_call> 等），提取内部文本
+		var extract_result: Dictionary = _extract_from_xml_wrapper(raw_name)
+		var clean_name: String = extract_result.clean_name
+		
+		# Step 2: 判断 — 必须在 ToolRegistry 中注册才是合法工具
+		if not clean_name.is_empty() and ToolRegistry.ai_tools.has(clean_name):
+			# 合法工具：更新清洗后的名称，补充 ID
+			tc.function["name"] = clean_name
 			if tc.get("id", "").is_empty():
 				tc["id"] = "call_%d" % Time.get_ticks_msec()
 			valid_calls.append(tc)
 		else:
-			# 非法工具（被服务端误拦截的文本），触发抢救机制
-			AIChatLogger.warn("[ToolBox] Salvaging invalid tool call back to text: \"%s\"" % raw_name)
-			var args: String = tc.get("function", {}).get("arguments", "")
-			
+			# 伪工具调用 → 抢救回 content
+			AIChatLogger.warn("[ToolBox] Salvaging pseudo tool call: \"%s\"" % raw_name)
 			if not salvaged_text.is_empty():
 				salvaged_text += "\n"
-			
-			# 尽量还原模型原本想输出的文本
-			if "<" in raw_name or "tool" in raw_name.to_lower():
-				salvaged_text += raw_name
-			else:
-				salvaged_text += "<tool_call>" + raw_name
-			
-			if not args.is_empty():
-				if not args.begins_with("\n") and not args.begins_with(" "):
-					salvaged_text += "\n"
-				salvaged_text += args
+			salvaged_text += _restore_text(raw_name, args)
 	
-	# 更新工具列表
 	p_msg.tool_calls = valid_calls
 	
-	# 如果有抢救下来的文本，拼接到正文末尾
 	if not salvaged_text.is_empty():
 		if not p_msg.content.ends_with("\n") and not p_msg.content.is_empty():
 			p_msg.content += "\n"
@@ -242,6 +236,53 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 
 
 # --- Private Functions ---
+
+## 从 raw_name 中检测并提取 XML 伪标签
+## 处理服务端懒惰解析场景：<tool_call>xxx（无闭合）、xxx</tool_call>、完整闭合等
+## [return]: {"clean_name": String, "has_xml_wrapper": bool}
+static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
+	var result := {
+		"clean_name": p_raw_name,
+		"has_xml_wrapper": false
+	}
+	
+	# 检测开放标签前缀（服务端看到 <tool_call> 就懒惰解析的典型场景）
+	var open_patterns: Array[String] = ["<tool_call>", "<function_call>", "<function>"]
+	for pattern in open_patterns:
+		if p_raw_name.begins_with(pattern):
+			result.has_xml_wrapper = true
+			result.clean_name = p_raw_name.substr(pattern.length())
+			break
+	
+	# 检测闭合标签后缀（即使前面没有开放标签，仅后缀也算伪信号）
+	var close_patterns: Array[String] = ["</tool_call>", "</function_call>", "</function>"]
+	for pattern in close_patterns:
+		if result.clean_name.ends_with(pattern):
+			result.has_xml_wrapper = true
+			result.clean_name = result.clean_name.left(-pattern.length())
+			break
+	
+	result.clean_name = result.clean_name.strip_edges()
+	return result
+
+
+## 将伪工具调用的 raw_name 和 args 还原为可读文本
+## 根据内容形态选择还原策略：JSON 格式化、自然文本拼接等
+static func _restore_text(p_raw_name: String, p_args: String) -> String:
+	var text: String = p_raw_name
+	if not p_args.is_empty():
+		if p_args.begins_with("{") or p_args.begins_with("["):
+			var parsed: Variant = JSON.parse_string(p_args)
+			if parsed != null:
+				text += "\n" + JSON.stringify(parsed, "  ")
+			else:
+				text += "\n" + p_args
+		else:
+			if not p_args.begins_with("\n") and not p_args.begins_with(" "):
+				text += " "
+			text += p_args
+	return text
+
 
 # 内部：实际执行扫描
 static func _perform_scan() -> void:
