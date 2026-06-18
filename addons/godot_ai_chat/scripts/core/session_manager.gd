@@ -10,6 +10,10 @@ extends RefCounted
 
 var current_session_path: String = ""
 
+# --- Private Vars ---
+
+var _current_history: ChatMessageHistory = null
+
 
 # --- Public Functions ---
 
@@ -30,6 +34,7 @@ func create_new_session() -> ChatMessageHistory:
 	var new_history: ChatMessageHistory = ChatMessageHistory.new()
 	if ResourceSaver.save(new_history, final_path) == OK:
 		current_session_path = final_path
+		_current_history = new_history
 		ToolBox.update_editor_filesystem(current_session_path)
 		_bind_auto_save(new_history)
 		return new_history
@@ -46,7 +51,11 @@ func load_session(p_session_name: String) -> ChatMessageHistory:
 	if FileAccess.file_exists(path):
 		var resource = ResourceLoader.load(path)
 		if resource is ChatMessageHistory:
+			# 断开旧 history 的信号
+			if _current_history and _current_history.changed.is_connected(_auto_save):
+				_current_history.changed.disconnect(_auto_save)
 			current_session_path = path
+			_current_history = resource
 			_bind_auto_save(resource)
 			return resource
 	return null
@@ -62,6 +71,10 @@ func delete_session(p_session_name: String) -> bool:
 	if DirAccess.remove_absolute(archive_path) == OK:
 		if current_session_path == archive_path:
 			current_session_path = ""
+			if _current_history:
+				if _current_history.changed.is_connected(_auto_save):
+					_current_history.changed.disconnect(_auto_save)
+				_current_history = null
 		ToolBox.update_editor_filesystem(archive_path)
 		return true
 	return false
@@ -102,12 +115,12 @@ func _ensure_archive_dir() -> void:
 func _bind_auto_save(history: ChatMessageHistory) -> void:
 	if history.changed.is_connected(_auto_save):
 		history.changed.disconnect(_auto_save)
-	history.changed.connect(_auto_save.bind(history))
+	history.changed.connect(_auto_save)
 
 
 # 自动保存回调
-func _auto_save(history: ChatMessageHistory) -> void:
-	save_current_session(history)
+func _auto_save() -> void:
+	save_current_session(_current_history)
 
 
 # 验证消息完整性

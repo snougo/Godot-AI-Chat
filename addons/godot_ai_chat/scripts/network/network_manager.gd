@@ -84,24 +84,20 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	var result := {"success": false, "error": ""}
 	var state := {"is_finished": false}
 	
-	# [Fix] 移除冗余的超时检测逻辑，由 StreamRequest 统一处理
-	current_stream_request.chunk_received.connect(func(chunk: Dictionary): 
-		new_stream_chunk_received.emit(chunk)
-	)
-	
-	current_stream_request.usage_received.connect(func(usage: Dictionary): 
-		chat_usage_data_received.emit(usage)
-	)
+	current_stream_request.chunk_received.connect(_relay_stream_chunk)
+	current_stream_request.usage_received.connect(_relay_stream_usage)
 	
 	current_stream_request.failed.connect(func(err_msg: String): 
 		result.error = err_msg
 		state.is_finished = true
-	)
+		_clear_current_stream_request()
+	, CONNECT_ONE_SHOT)
 	
 	current_stream_request.finished.connect(func(): 
 		result.success = true
 		state.is_finished = true
-	)
+		_clear_current_stream_request()
+	, CONNECT_ONE_SHOT)
 	
 	new_chat_request_sending.emit()
 	current_stream_request.start()
@@ -139,7 +135,12 @@ func _update_provider_config() -> bool:
 
 
 func _clear_current_stream_request() -> void:
-	current_stream_request = null
+	if current_stream_request:
+		if current_stream_request.chunk_received.is_connected(_relay_stream_chunk):
+			current_stream_request.chunk_received.disconnect(_relay_stream_chunk)
+		if current_stream_request.usage_received.is_connected(_relay_stream_usage):
+			current_stream_request.usage_received.disconnect(_relay_stream_usage)
+		current_stream_request = null
 
 
 func _on_model_list_completed(p_result: int, p_response_code: int, _p_headers: PackedStringArray, p_body: PackedByteArray) -> void:
@@ -153,3 +154,13 @@ func _on_model_list_completed(p_result: int, p_response_code: int, _p_headers: P
 		get_model_list_request_succeeded.emit(list)
 	else:
 		get_model_list_request_failed.emit("No models found or invalid response format")
+
+
+# 中继 StreamRequest 的流式数据块到 UI 信号
+func _relay_stream_chunk(p_chunk: Dictionary) -> void:
+	new_stream_chunk_received.emit(p_chunk)
+
+
+# 中继 StreamRequest 的用量数据到 UI 信号
+func _relay_stream_usage(p_usage: Dictionary) -> void:
+	chat_usage_data_received.emit(p_usage)

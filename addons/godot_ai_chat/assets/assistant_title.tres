@@ -1,9 +1,9 @@
 [gd_resource type="StyleBoxFlat" format=3 uid="uid://bemrplcwbfiji"]
 
 [resource]
-content_margin_top = 10.0
-content_margin_bottom = 10.0
-bg_color = Color(0.26687866, 0.2284482, 0.5546875, 1)
+content_margin_top = 6.0
+content_margin_bottom = 6.0
+bg_color = Color(0.14074638, 0.22746341, 0.3529412, 1)
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
