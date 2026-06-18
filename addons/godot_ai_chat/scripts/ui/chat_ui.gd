@@ -495,8 +495,6 @@ func _on_save_as_markdown_button_pressed() -> void:
 	_file_dialog.add_filter("*.md", "Markdown File")
 	_file_dialog.current_dir = PluginPaths.SESSION_DIR
 	
-	#_file_dialog.current_file = _generate_default_filename(".md")
-	
 	# 使用当前会话文件名（去掉.tres后缀，改为.md）
 	if not _current_session_name.is_empty():
 		_file_dialog.current_file = _current_session_name.replace(".tres", ".md")
