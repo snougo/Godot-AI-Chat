@@ -21,6 +21,14 @@ const TITLE_STYLE_TOOL: StyleBoxFlat = preload("res://addons/godot_ai_chat/asset
 ## 统一背景样式资源
 const BG_STYLE: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/message_background.tres")
 
+## 合法的 BBCode 标签白名单（RichTextLabel 支持的核心标签）
+const BBCODE_TAGS: Array[String] = [
+	"b", "i", "u", "s", "color", "font", "font_size",
+	"url", "lb", "rb", "img",
+	"center", "left", "right", "indent",
+	"code", "highlight", "br", "p"
+]
+
 # --- @onready Vars ---
 
 @onready var _content_container: VBoxContainer = $MarginContainer/VBoxContainer
@@ -339,10 +347,13 @@ func _convert_inline(p_text: String) -> String:
 					result += "[color=#B39DDB][url=" + link_url + "]" + link_text + "[/url][/color]"
 					i = close_paren + 1
 					continue
-			# 不是链接格式，当作普通字符（转义方括号防止 BBCode 注入）
-			result += "[lb]"
-			i += 1
-			continue
+			
+			# 不是链接 → 检测是否为合法的 BBCode 标签（白名单）
+			var bbcode_len: int = _match_bbcode_tag(p_text, i)
+			if bbcode_len > 0:
+				result += p_text.substr(i, bbcode_len)
+				i += bbcode_len
+				continue
 		
 		# ~~strikethrough~~（递归处理内部内容）
 		if c == "~" and i + 1 < len and p_text[i + 1] == "~":
@@ -382,6 +393,47 @@ func _convert_inline(p_text: String) -> String:
 		i += 1
 	
 	return result
+
+
+# 检测 p_text 在 p_idx 位置是否是一个合法的 BBCode 标签
+# 返回标签完整长度（含方括号），不是标签则返回 0
+func _match_bbcode_tag(p_text: String, p_idx: int) -> int:
+	var remaining: int = p_text.length() - p_idx
+	if remaining < 3 or p_text[p_idx] != "[":
+		return 0
+	
+	var tag_start: int = p_idx + 1
+	var is_closing: bool = p_text[tag_start] == "/"
+	if is_closing:
+		tag_start += 1
+	
+	# 提取标签名（仅限字母）
+	var tag_end: int = tag_start
+	while tag_end < p_text.length():
+		var ch: String = p_text[tag_end]
+		if (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z"):
+			tag_end += 1
+		else:
+			break
+	
+	if tag_end == tag_start:  # 没有标签名
+		return 0
+	
+	# 校验标签名是否在白名单中
+	var tag_name: String = p_text.substr(tag_start, tag_end - tag_start).to_lower()
+	if tag_name not in BBCODE_TAGS:
+		return 0
+	
+	# 找闭合 ]，限制最大查找范围 100 字符防溢出
+	var pos: int = tag_end
+	var max_search: int = mini(pos + 100, p_text.length())
+	while pos < max_search and p_text[pos] != "]":
+		pos += 1
+	
+	if pos >= max_search or p_text[pos] != "]":
+		return 0
+	
+	return pos - p_idx + 1
 
 
 # 将一行 Markdown 表格数据转为 BBCode 表格行
@@ -439,7 +491,6 @@ func _make_table_row(p_line: String) -> String:
 		for c in cells:
 			data_cells.append("[cell]%s[/cell]" % c)
 		return "".join(data_cells) + "\n"
-
 
 
 # 闭合未关闭的表格（流结束或静态加载结束时调用）
@@ -741,6 +792,7 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 
 # 创建代码块 UI
 func _create_code_block(p_lang: String) -> void:
+	_close_table_if_open()
 	_finish_typing()
 	
 	var code_edit: CodeEdit = CodeEdit.new()
