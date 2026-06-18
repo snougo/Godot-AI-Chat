@@ -268,7 +268,9 @@ func suspend_content() -> void:
 	if _is_suspended or _typing_active:
 		return
 	
-	_main_margin_container.visible = false
+	# [优化P2] 无论折叠与否，统一移除内容以彻底释放布局压力
+	custom_minimum_size.y = size.y
+	remove_child(_main_margin_container)
 	_is_suspended = true
 
 
@@ -277,7 +279,8 @@ func resume_content() -> void:
 	if not _is_suspended:
 		return
 	
-	_main_margin_container.visible = true
+	add_child(_main_margin_container)
+	custom_minimum_size.y = 0
 	_is_suspended = false
 
 
