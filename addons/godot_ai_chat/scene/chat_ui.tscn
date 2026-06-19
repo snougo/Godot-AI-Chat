@@ -117,6 +117,7 @@ text_overrun_behavior = 1
 layout_mode = 2
 size_flags_vertical = 3
 size_flags_stretch_ratio = 3.0
+theme_override_constants/margin_left = 10
 
 [node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/Chat/VBoxContainer/ChatDisplayView" unique_id=176257922]
 layout_mode = 2
