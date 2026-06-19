@@ -31,9 +31,9 @@ corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_3s2ge"]
-bg_color = Color(0.6, 0.6, 0.6, 0.078431375)
-border_width_left = 20
-border_color = Color(0.8, 0.8, 0.8, 0.078431375)
+bg_color = Color(0.6, 0.6, 0.6, 0)
+border_width_left = 16
+border_color = Color(0.8, 0.8, 0.8, 0)
 border_blend = true
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tprmw"]
