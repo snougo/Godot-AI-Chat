@@ -37,13 +37,8 @@ func get_model_list() -> void:
 	
 	get_model_list_request_started.emit()
 	
-	if current_provider is ZhipuAIProvider:
-		var model_list: Array[String] = current_provider.parse_model_list_response(PackedByteArray())
-		get_model_list_request_succeeded.emit(model_list)
-		return
-	
-	if current_provider is AnthropicCompatibleProvider and ToolBox.get_plugin_settings().api_base_url == "https://api.deepseek.com/anthropic":
-		var models: Array[String] = ["deepseek-v4-flash"]
+	if not current_provider.supports_model_list_api(api_base_url):
+		var models: Array[String] = current_provider.get_static_model_list()
 		get_model_list_request_succeeded.emit(models)
 		return
 	

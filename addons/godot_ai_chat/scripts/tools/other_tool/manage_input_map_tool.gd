@@ -1,8 +1,8 @@
 @tool
 extends AiTool
 
-## 管理项目输入映射 的工具
-## 支持增删改查操作，使用 Godot API 原生常量: KEY_W, MOUSE_BUTTON_LEFT, JOY_BUTTON_A 等
+## 管理项目输入映射的工具。
+## 支持三种操作：add（新建动作）、remove（删除动作）、list（列出全部动作）。
 
 
 const USER_HINT: String = "\n[Notice] Changes saved. If not visible in 'Project Settings' UI, restart the editor."
@@ -10,7 +10,7 @@ const USER_HINT: String = "\n[Notice] Changes saved. If not visible in 'Project 
 
 func _init() -> void:
 	tool_name = "manage_input_map"
-	tool_description = "Manage InputMap actions using Godot API constants."
+	tool_description = "Manages InputMap actions. Supports: add (create new), remove (delete), list (show all)."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -19,28 +19,24 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"operation": {
 				"type": "string",
-				"enum": ["add", "update", "remove", "list", "clear"],
-				"description": "Operation type: add/update/remove/list/clear"
+				"enum": ["add", "remove", "list"],
+				"description": "Operation type: add (create new action with events), remove (delete an action), list (show all actions)."
 			},
-			"actions": {
+			"action_name": {
+				"type": "string",
+				"description": "Action name (e.g. 'move_forward'). Required for remove. Optional for add (auto-generated if empty). Ignored for list."
+			},
+			"events": {
 				"type": "array",
-				"items": {
-					"type": "object",
-					"properties": {
-						"name": { "type": "string", "description": "Action name (e.g. 'move_forward')" },
-						"events": {
-							"type": "array",
-							"items": { "type": "string" },
-							"description": "Event strings: 'KEY_W', 'KEY_CTRL+KEY_S', 'MOUSE_BUTTON_LEFT', 'JOY_BUTTON_A', 'JOY_AXIS_LEFT_X' "
-						},
-						"clear_existing": { "type": "boolean", "description": "Clear existing events (default: true for add, false for update)" }
-					},
-					"required": ["name"]
-				},
-				"description": "Actions to process (not needed for 'list' operation)"
+				"items": { "type": "string" },
+				"description": "Event bindings. Use Godot API constants: 'KEY_W', 'KEY_CTRL+KEY_S', etc."
 			},
-			"deadzone": { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Deadzone value (default: 0.5)" },
-			"action_name": { "type": "string", "description": "Single action name for 'remove' or 'list' single action" }
+			"deadzone": {
+				"type": "number",
+				"minimum": 0.0,
+				"maximum": 1.0,
+				"description": "Deadzone value for analog inputs (default: 0.5)."
+			}
 		},
 		"required": ["operation"]
 	}
@@ -52,201 +48,119 @@ func execute(p_args: Dictionary) -> Dictionary:
 		return {"success": false, "data": "Missing required parameter: operation"}
 	
 	match operation:
-		"add", "update": return _execute_add_update(p_args)
-		"remove": return _execute_remove(p_args)
-		"list": return _execute_list(p_args)
-		"clear": return _execute_clear(p_args)
-		_: return {"success": false, "data": "Unknown operation: %s" % operation}
+		"add":
+			return _execute_add(p_args)
+		"remove":
+			return _execute_remove(p_args)
+		"list":
+			return _execute_list()
+		_:
+			return {"success": false, "data": "Unknown operation: %s" % operation}
 
 
-func _execute_add_update(p_args: Dictionary) -> Dictionary:
-	var actions: Array = p_args.get("actions", [])
+# ==================== ADD ====================
+
+func _execute_add(p_args: Dictionary) -> Dictionary:
+	var action_name: String = p_args.get("action_name", "").strip_edges()
+	var events_list: Array = p_args.get("events", [])
 	var deadzone: float = p_args.get("deadzone", 0.5)
-	var is_update: bool = p_args.get("operation") == "update"
 	
-	if actions.is_empty():
-		return {"success": false, "data": "No actions provided."}
-	
-	var log_lines: Array = []
-	var changed: bool = false
-	
-	for action_data in actions:
-		var action_name: String = action_data.get("name", "")
-		if action_name.is_empty():
-			log_lines.append("! Skipped: Empty action name")
-			continue
-		
-		var events_list: Array = action_data.get("events", [])
-		var clear: bool = action_data.get("clear_existing", not is_update)
-		
-		var result = _add_or_update_action(action_name, events_list, clear, deadzone)
-		log_lines.append(result.log)
-		changed = result.changed or changed
-	
-	if changed:
-		if ProjectSettings.save() != OK:
-			return {"success": false, "data": "Failed to save ProjectSettings"}
-		return {"success": true, "data": "\n".join(log_lines) + USER_HINT}
-	return {"success": true, "data": "No changes made.\n" + "\n".join(log_lines)}
-
-
-func _execute_remove(p_args: Dictionary) -> Dictionary:
-	var names: Array = []
-	if p_args.has("action_name") and not p_args.action_name.is_empty():
-		names.append(p_args.action_name)
-	for data in p_args.get("actions", []):
-		if data.has("name") and not data.name.is_empty() and not names.has(data.name):
-			names.append(data.name)
-	
-	if names.is_empty():
-		return {"success": false, "data": "No action name specified for removal."}
-	
-	var log_lines: Array = []
-	for name in names:
-		var path = "input/" + name
-		if ProjectSettings.has_setting(path):
-			ProjectSettings.clear(path)
-			log_lines.append("Removed from ProjectSettings: %s" % name)
-		else:
-			log_lines.append("! Not found in ProjectSettings: %s" % name)
-		
-		if InputMap.has_action(name):
-			InputMap.erase_action(name)
-			log_lines.append("Removed from InputMap: %s" % name)
-		else:
-			log_lines.append("! Not found in InputMap: %s" % name)
-	
-	if ProjectSettings.save() != OK:
-		return {"success": false, "data": "Failed to save ProjectSettings"}
-	return {"success": true, "data": "\n".join(log_lines) + USER_HINT}
-
-
-func _execute_list(p_args: Dictionary) -> Dictionary:
-	var action_name: String = p_args.get("action_name", "")
-	if not action_name.is_empty():
-		return _list_single_action(action_name)
-	return _list_all_actions()
-
-
-func _execute_clear(p_args: Dictionary) -> Dictionary:
-	var action_name: String = p_args.get("action_name", "")
 	if action_name.is_empty():
-		return {"success": false, "data": "No action_name specified."}
+		action_name = "new_action_%d" % Time.get_ticks_msec()
 	
 	var path = "input/" + action_name
-	if not ProjectSettings.has_setting(path):
-		return {"success": false, "data": "Action not found: %s" % action_name}
+	if ProjectSettings.has_setting(path):
+		return {
+			"success": false,
+			"data": "Action '%s' already exists. Use 'list' to see existing actions." % action_name
+		}
 	
-	var dict: Dictionary = ProjectSettings.get_setting(path)
-	var count: int = dict.get("events", []).size()
-	dict["events"] = []
+	# 新建 ProjectSettings 条目
+	var dict: Dictionary = {"deadzone": deadzone, "events": []}
 	ProjectSettings.set_setting(path, dict)
 	
-	if InputMap.has_action(action_name):
-		InputMap.action_erase_events(action_name)
+	# 新建 InputMap 条目
+	InputMap.add_action(action_name, deadzone)
 	
-	if ProjectSettings.save() != OK:
-		return {"success": false, "data": "Failed to save ProjectSettings"}
-	
-	return {"success": true, "data": "Cleared %d events for action: %s%s" % [count, action_name, USER_HINT]}
-
-
-func _list_single_action(action_name: String) -> Dictionary:
-	var path = "input/" + action_name
-	if not ProjectSettings.has_setting(path):
-		return {"success": false, "data": "Action not found: %s" % action_name}
-	
-	var dict: Dictionary = ProjectSettings.get_setting(path)
-	var result: String = "Action: %s\n  Deadzone: %s\n  Events:\n" % [action_name, dict.get("deadzone", 0.5)]
-	
-	var events: Array = dict.get("events", [])
-	if events.is_empty():
-		result += "    (none)"
-	else:
-		for ev in events:
-			result += "    - %s\n" % _event_to_string(ev)
-	
-	return {"success": true, "data": result}
-
-
-func _list_all_actions() -> Dictionary:
-	var actions: Array = []
-	for prop in ProjectSettings.get_property_list():
-		if prop.name.begins_with("input/") and not prop.name.substr(6).begins_with("ui_"):
-			actions.append(prop.name.substr(6))
-	
-	if actions.is_empty():
-		return {"success": true, "data": "No InputMap actions found."}
-	
-	var result: String = "Found %d action(s):\n" % actions.size()
-	for name in actions:
-		var dict: Dictionary = ProjectSettings.get_setting("input/" + name)
-		var events: Array = dict.get("events", [])
-		result += "  - %s (deadzone: %.2f)\n" % [name, dict.get("deadzone", 0.5)]
-		for ev in events:
-			result += "      → %s\n" % _event_to_string(ev)
-	
-	return {"success": true, "data": result}
-
-
-func _add_or_update_action(action_name: String, events_list: Array, clear: bool, deadzone: float) -> Dictionary:
-	var log_str: String = ""
-	var changed: bool = false
-	var path = "input/" + action_name
-	var dict: Dictionary
-	
-	if ProjectSettings.has_setting(path):
-		dict = ProjectSettings.get_setting(path)
-		log_str += "Updated Action: %s\n" % action_name
-	else:
-		dict = {"deadzone": deadzone, "events": []}
-		ProjectSettings.set_setting(path, dict)
-		log_str += "Added Action: %s\n" % action_name
-		changed = true
-	
-	if dict.get("deadzone", 0.5) != deadzone:
-		dict["deadzone"] = deadzone
-		changed = true
-	
-	if not dict.has("events"):
-		dict["events"] = []
-	
-	if clear and not dict["events"].is_empty():
-		dict["events"].clear()
-		changed = true
-	
-	if not InputMap.has_action(action_name):
-		InputMap.add_action(action_name, deadzone)
-		changed = true
-	elif clear:
-		InputMap.action_erase_events(action_name)
-	
+	# 绑定事件
+	var bound: int = 0
 	for event_str in events_list:
 		var ev: InputEvent = _parse_event_string(event_str)
 		if ev:
 			dict["events"].append(ev)
 			InputMap.action_add_event(action_name, ev)
-			log_str += "  + Bound: %s -> %s\n" % [action_name, event_str]
-			changed = true
-		else:
-			log_str += "  ! Failed to parse: %s\n" % event_str
+			bound += 1
 	
 	ProjectSettings.set_setting(path, dict)
-	return {"log": log_str, "changed": changed}
+	
+	if ProjectSettings.save() != OK:
+		return {"success": false, "data": "Failed to save ProjectSettings"}
+	
+	if bound > 0:
+		return {"success": true, "data": "Created action '%s' with %d event(s)." % [action_name, bound]}
+	return {"success": true, "data": "Created action '%s' (no events)." % action_name}
 
 
-# ==================== 核心：解析 Godot API 常量事件 ====================
+# ==================== REMOVE ====================
+
+func _execute_remove(p_args: Dictionary) -> Dictionary:
+	var action_name: String = p_args.get("action_name", "").strip_edges()
+	if action_name.is_empty():
+		return {"success": false, "data": "Missing required parameter: action_name"}
+	
+	var path = "input/" + action_name
+	
+	if not ProjectSettings.has_setting(path) and not InputMap.has_action(action_name):
+		return {"success": false, "data": "Action not found: %s. Use 'list' to see existing actions." % action_name}
+	
+	if ProjectSettings.has_setting(path):
+		ProjectSettings.clear(path)
+	
+	if InputMap.has_action(action_name):
+		InputMap.erase_action(action_name)
+	
+	if ProjectSettings.save() != OK:
+		return {"success": false, "data": "Action removed from InputMap but failed to save ProjectSettings."}
+	
+	return {"success": true, "data": "Removed action: %s" % action_name}
+
+
+# ==================== LIST ====================
+
+func _execute_list() -> Dictionary:
+	var action_paths: Array[String] = []
+	for prop in ProjectSettings.get_property_list():
+		if prop.name.begins_with("input/") and not prop.name.substr(6).begins_with("ui_"):
+			action_paths.append(prop.name)
+	
+	if action_paths.is_empty():
+		return {"success": true, "data": "No InputMap actions found."}
+	
+	var result: String = "Found %d action(s):\n" % action_paths.size()
+	for path in action_paths:
+		var name: String = path.substr(6)
+		var dict: Dictionary = ProjectSettings.get_setting(path)
+		var events: Array = dict.get("events", [])
+		result += "  - %s (deadzone: %.2f)\n" % [name, dict.get("deadzone", 0.5)]
+		if events.is_empty():
+			result += "      (no events)\n"
+		else:
+			for ev in events:
+				result += "      -> %s\n" % _event_to_string(ev)
+	
+	return {"success": true, "data": result}
+
+
+# ==================== 事件解析 ====================
 
 func _parse_event_string(event_str: String) -> InputEvent:
 	event_str = event_str.strip_edges().to_upper()
 	if event_str.is_empty():
 		return null
 	
-	# 组合键
 	if "+" in event_str:
 		return _parse_key_combination(event_str)
 	
-	# 单键 - 使用 OS.find_keycode_from_string 解析 KEY_* 常量
 	if event_str.begins_with("KEY_"):
 		var code = _get_keycode_from_constant(event_str)
 		return _create_key_event(code) if code != KEY_NONE else null
@@ -279,7 +193,6 @@ func _parse_key_combination(event_str: String) -> InputEventKey:
 	ev.keycode = code
 	ev.physical_keycode = code
 	
-	# 处理修饰键
 	for i in range(parts.size() - 1):
 		match parts[i].strip_edges():
 			"KEY_CTRL", "KEY_CONTROL": ev.ctrl_pressed = true
@@ -311,17 +224,12 @@ func _parse_joy_axis(event_str: String) -> InputEventJoypadMotion:
 	return ev
 
 
-## 使用 OS.find_keycode_from_string 解析 KEY_* 常量
 func _get_keycode_from_constant(const_name: String) -> int:
-	# 去除 KEY_ 前缀
 	var key_name = const_name.substr(4) if const_name.begins_with("KEY_") else const_name
-	
-	# 使用 Godot API 查找 keycode
 	var code = OS.find_keycode_from_string(key_name)
 	if code != KEY_NONE:
 		return code
 	
-	# 特殊处理一些常用别名（OS.find_keycode_from_string 可能无法识别的）
 	match key_name:
 		"CTRL": return KEY_CTRL
 		"CONTROL": return KEY_CTRL
@@ -355,7 +263,6 @@ func _get_keycode_from_constant(const_name: String) -> int:
 	return KEY_NONE
 
 
-## 鼠标按钮常量映射（数量少，直接映射）
 func _get_mouse_button_from_constant(const_name: String) -> int:
 	match const_name:
 		"MOUSE_BUTTON_NONE": return MOUSE_BUTTON_NONE
@@ -369,13 +276,11 @@ func _get_mouse_button_from_constant(const_name: String) -> int:
 		"MOUSE_BUTTON_XBUTTON1": return MOUSE_BUTTON_XBUTTON1
 		"MOUSE_BUTTON_XBUTTON2": return MOUSE_BUTTON_XBUTTON2
 		_:
-			# 尝试解析纯数字
 			if const_name.is_valid_int():
 				return const_name.to_int()
 			return -1
 
 
-## 手柄按钮常量映射（数量少，直接映射）
 func _get_joy_button_from_constant(const_name: String) -> int:
 	match const_name:
 		"JOY_BUTTON_INVALID": return JOY_BUTTON_INVALID
@@ -401,13 +306,11 @@ func _get_joy_button_from_constant(const_name: String) -> int:
 		"JOY_BUTTON_PADDLE4": return JOY_BUTTON_PADDLE4
 		"JOY_BUTTON_TOUCHPAD": return JOY_BUTTON_TOUCHPAD
 		_:
-			# 尝试解析纯数字
 			if const_name.is_valid_int():
 				return const_name.to_int()
 			return -1
 
 
-## 手柄轴常量映射（数量少，直接映射）
 func _get_joy_axis_from_constant(const_name: String) -> int:
 	match const_name:
 		"JOY_AXIS_INVALID": return JOY_AXIS_INVALID
@@ -420,7 +323,6 @@ func _get_joy_axis_from_constant(const_name: String) -> int:
 		"JOY_AXIS_SDL_MAX": return JOY_AXIS_SDL_MAX
 		"JOY_AXIS_MAX": return JOY_AXIS_MAX
 		_:
-			# 尝试解析纯数字
 			if const_name.is_valid_int():
 				return const_name.to_int()
 			return -1

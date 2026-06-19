@@ -31,37 +31,6 @@ static func get_plugin_settings() -> PluginSettingsConfig:
 	return plugin_settings
 
 
-## 估算消息列表的 Token 消耗
-static func estimate_tokens_for_messages(p_messages: Array) -> int:
-	# 定义不同字符类型的权重
-	const CHINESE_CHAR_WEIGHT: float = 1.5
-	const OTHER_CHAR_WEIGHT: float = 1.0 / 3.8
-	
-	var total_text: String = ""
-	for message in p_messages:
-		if message is Dictionary:
-			if message.has("content") and message.content is String:
-				total_text += message.content
-		elif message is ChatMessage:
-			total_text += message.content
-	
-	if total_text.is_empty():
-		return 0
-	
-	var estimated_tokens: float = 0.0
-	var chinese_regex: RegEx = RegEx.create_from_string("[\u4e00-\u9fff]")
-	
-	# 1. 计算中文字符
-	var chinese_matches: Array[RegExMatch] = chinese_regex.search_all(total_text)
-	estimated_tokens += chinese_matches.size() * CHINESE_CHAR_WEIGHT
-	
-	# 2. 计算非中文字符
-	var non_chinese_text: String = chinese_regex.sub(total_text, "", true)
-	estimated_tokens += non_chinese_text.length() * OTHER_CHAR_WEIGHT
-	
-	return int(ceil(estimated_tokens))
-
-
 ## 用于结构化打印聊天历史上下文的调试函数
 static func print_structured_context(p_title: String, p_messages: Array, p_context_info: Dictionary = {}) -> void:
 	AIChatLogger.debug("\n--- [调试] 上下文报告: %s ---" % p_title)
@@ -181,25 +150,10 @@ static func is_valid_tool_name(p_name: String) -> bool:
 	return regex.search(p_name) != null
 
 
-## 过滤无效的工具调用
-## 返回一个只包含有效工具名称的新数组
-static func filter_invalid_tool_calls(p_tool_calls: Array) -> Array:
-	var valid: Array = []
-	
-	for tc in p_tool_calls:
-		var name: String = tc.get("function", {}).get("name", "")
-		if is_valid_tool_name(name):
-			valid.append(tc)
-		else:
-			AIChatLogger.warn("[ToolBox] Filtered invalid tool call: \"%s\"" % name)
-	
-	return valid
-
-
 ## 清洗、过滤工具调用，并将被服务端误判的纯文本"抢救"回消息内容中
 static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 	# 防御：确保 ToolRegistry 已初始化
-	if ToolRegistry.ai_tools.is_empty():
+	if ToolRegistry.main_agent_tool.is_empty():
 		ToolRegistry.load_default_tools()
 	
 	var valid_calls: Array = []
@@ -213,8 +167,8 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 		var extract_result: Dictionary = _extract_from_xml_wrapper(raw_name)
 		var clean_name: String = extract_result.clean_name
 		
-		# Step 2: 判断 — 必须在 ToolRegistry 中注册才是合法工具
-		if not clean_name.is_empty() and ToolRegistry.ai_tools.has(clean_name):
+		# Step 2: 判断 — 必须在 ToolRegistry 中注册才是合法工具（注意 Sub-Agent 的工具和 Main-Agent 的工具注册是隔离的）
+		if not clean_name.is_empty() and (ToolRegistry.main_agent_tool.has(clean_name) or ToolRegistry.sub_agent_tool.has(clean_name)):
 			# 合法工具：更新清洗后的名称，补充 ID
 			tc.function["name"] = clean_name
 			if tc.get("id", "").is_empty():
@@ -237,9 +191,9 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 
 # --- Private Functions ---
 
-## 从 raw_name 中检测并提取 XML 伪标签
-## 处理服务端懒惰解析场景：<tool_call>xxx（无闭合）、xxx</tool_call>、完整闭合等
-## [return]: {"clean_name": String, "has_xml_wrapper": bool}
+# 从 raw_name 中检测并提取 XML 伪标签
+# 处理服务端懒惰解析场景：<tool_call>xxx（无闭合）、xxx</tool_call>、完整闭合等
+# [return]: {"clean_name": String, "has_xml_wrapper": bool}
 static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
 	var result := {
 		"clean_name": p_raw_name,
@@ -266,8 +220,8 @@ static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
 	return result
 
 
-## 将伪工具调用的 raw_name 和 args 还原为可读文本
-## 根据内容形态选择还原策略：JSON 格式化、自然文本拼接等
+# 将伪工具调用的 raw_name 和 args 还原为可读文本
+# 根据内容形态选择还原策略：JSON 格式化、自然文本拼接等
 static func _restore_text(p_raw_name: String, p_args: String) -> String:
 	var text: String = p_raw_name
 	if not p_args.is_empty():

@@ -32,8 +32,12 @@ const CORE_TOOLS_PATHS: Array[String] = [
 
 # --- Public Vars ---
 
-## 存储当前激活的工具实例 { "tool_name": tool_instance }
-static var ai_tools: Dictionary = {}
+## 存储当前激活的Main-Agent工具实例 { "tool_name": tool_instance }
+static var main_agent_tool: Dictionary = {}
+
+## 缓存所有技能包中定义的工具名称（独立于 main_agent_tool 的挂载状态）
+## 用于 ToolBox 中全局清洗逻辑判断 Sub-Agent 可能使用的合法工具
+static var sub_agent_tool: Dictionary = {}
 ## 缓存可用技能资源 { "skill_name": skill_resource }
 static var available_skills: Dictionary = {}
 ## 当前已挂载的技能列表 (有序数组，后加载的覆盖先加载的)
@@ -97,13 +101,13 @@ static func is_skill_active(p_skill_name: String) -> bool:
 ## 核心重构逻辑：清空 -> Core -> Skills
 static func rebuild_tool_set() -> void:
 	# 1. 清空当前工具
-	ai_tools.clear()
+	main_agent_tool.clear()
 	
 	# 2. 加载核心工具 (Base Layer)
 	_load_core_tools()
 	
 	# 3. 按顺序叠加技能工具 (Overlay Layer)
-	# 由于 ai_tools 是字典，后加载的同名工具会直接覆盖旧的
+	# 由于 main_agent_tool 是字典，后加载的同名工具会直接覆盖旧的
 	for skill_name in active_skills_list:
 		# 增加健壮性检查: 防止 skill 文件丢失导致 Crash
 		if not available_skills.has(skill_name):
@@ -117,7 +121,7 @@ static func rebuild_tool_set() -> void:
 				if tool_path is String and not tool_path.is_empty():
 					_load_and_register_tool(tool_path)
 	
-	AIChatLogger.debug("[ToolRegistry] Tool set rebuilt. Active Skills: %s. Total Tools: %d" % [str(active_skills_list), ai_tools.size()])
+	AIChatLogger.debug("[ToolRegistry] Tool set rebuilt. Active Skills: %s. Total Tools: %d" % [str(active_skills_list), main_agent_tool.size()])
 
 
 ## 获取组合后的 System Instructions
@@ -147,20 +151,20 @@ static func get_combined_system_instructions() -> String:
 ## [param p_tool_name]: 工具名称
 static func get_tool(p_tool_name: String) -> Object:
 	# 安全检查：防止脚本重载后状态丢失
-	if ai_tools.is_empty():
+	if main_agent_tool.is_empty():
 		# 防御性编程：如果未初始化则加载默认
 		load_default_tools() 
-	return ai_tools.get(p_tool_name)
+	return main_agent_tool.get(p_tool_name)
 
 
 ## 获取所有工具的定义 (用于 API 调用)
 ## [param p_for_gemini]: 是否针对 Gemini 格式进行转换
 static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictionary]:
-	if ai_tools.is_empty():
+	if main_agent_tool.is_empty():
 		load_default_tools()
 	
 	var definitions: Array[Dictionary] = []
-	for tool_instance in ai_tools.values():
+	for tool_instance in main_agent_tool.values():
 		var schema: Dictionary = tool_instance.get_parameters_schema()
 		
 		# Gemini 格式特殊处理
@@ -206,7 +210,7 @@ static func convert_schema_to_gemini(p_schema: Dictionary) -> Dictionary:
 
 # --- Private Functions ---
 
-## 扫描技能目录
+# 扫描技能目录
 static func _scan_skills() -> void:
 	available_skills.clear()
 	if not DirAccess.dir_exists_absolute(PluginPaths.SKILLS_DIR):
@@ -221,9 +225,12 @@ static func _scan_skills() -> void:
 				_load_skill_from_folder(PluginPaths.SKILLS_DIR.path_join(folder_name))
 			folder_name = dir.get_next()
 		dir.list_dir_end()
+	
+	# 技能扫描完成后，建立全技能工具名缓存
+	_build_skill_tool_names_cache()
 
 
-## 从文件夹加载技能资源
+# 从文件夹加载技能资源
 static func _load_skill_from_folder(p_folder_path: String) -> void:
 	var dir: DirAccess = DirAccess.open(p_folder_path)
 	if dir:
@@ -245,13 +252,13 @@ static func _load_skill_from_folder(p_folder_path: String) -> void:
 		dir.list_dir_end()
 
 
-## 加载核心工具
+# 加载核心工具
 static func _load_core_tools() -> void:
 	for path in CORE_TOOLS_PATHS:
 		_load_and_register_tool(path)
 
 
-## 加载并注册单个工具
+# 加载并注册单个工具
 static func _load_and_register_tool(p_path: String) -> void:
 	if not FileAccess.file_exists(p_path):
 		AIChatLogger.warn("[ToolRegistry] Tool file not found: %s" % p_path)
@@ -273,5 +280,25 @@ static func _load_and_register_tool(p_path: String) -> void:
 				t_name = tool_instance.call("get_tool_name")
 			
 			if not t_name.is_empty():
-				# 如果 ai_tools[t_name] 已存在，直接覆盖，不报错
-				ai_tools[t_name] = tool_instance
+				# 如果 main_agent_tool[t_name] 已存在，直接覆盖，不报错
+				main_agent_tool[t_name] = tool_instance
+
+
+# 遍历所有技能包，提取工具名称，建立缓存
+static func _build_skill_tool_names_cache() -> void:
+	sub_agent_tool.clear()
+	for skill_res in available_skills.values():
+		if "tools" in skill_res:
+			var tools: Array = skill_res.get("tools")
+			for tool_path in tools:
+				if tool_path is String and not tool_path.is_empty() \
+						and FileAccess.file_exists(tool_path):
+					var script: Resource = load(tool_path)
+					if script and script is GDScript:
+						var inst: Object = script.new()
+						var t_name: String = inst.get("tool_name") if "tool_name" in inst else ""
+						if not t_name.is_empty():
+							sub_agent_tool[t_name] = true
+	
+	# Sub-Agent 内置工具（不在 skill 包 tools 列表中，需手动注册）
+	sub_agent_tool["report_task_result"] = true

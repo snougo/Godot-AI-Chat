@@ -55,7 +55,7 @@ func run_task() -> String:
 		_remove_sub_agent_node_from_root()
 		return "Failed to initialize Sub Agent Provider."
 	
-	var is_gemini = provider is GeminiProvider
+	var is_gemini: bool = provider is GeminiProvider
 	
 	# 4. 主循环（使用 HTTPClient 主线程轮询）
 	var turns_taken = 0
@@ -96,6 +96,7 @@ func run_task() -> String:
 		assistant_msg.reasoning_content = reasoning
 		assistant_msg.tool_calls = raw_tool_calls
 		
+		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
 		ToolBox.salvage_and_clean_tool_calls(assistant_msg)
 		_history.add_message(assistant_msg)
 		
@@ -177,18 +178,11 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 	var client = HTTPClient.new()
 	
 	# 解析 URL
-	var protocol_pos = p_url.find("://")
-	var protocol = p_url.substr(0, protocol_pos)
-	var rest = p_url.substr(protocol_pos + 3)
-	var host_end = rest.find("/")
-	var host = rest.substr(0, host_end) if host_end != -1 else rest
-	var path = rest.substr(host_end) if host_end != -1 else "/"
-	var port = 443 if protocol == "https" else 80
-	
-	if ":" in host:
-		var parts = host.split(":")
-		host = parts[0]
-		port = parts[1].to_int()
+	var url_parts: Dictionary = URLHelper.parse_url(p_url)
+	var protocol: String = url_parts.protocol
+	var host: String = url_parts.host
+	var port: int = url_parts.port
+	var path: String = url_parts.path
 	
 	# 连接服务器
 	var tls_opts = TLSOptions.client() if protocol == "https" else null
@@ -335,11 +329,11 @@ func _load_isolated_tools() -> void:
 						_tools[inst.tool_name] = inst
 
 
-func _get_tool_definitions(is_gemini: bool) -> Array:
+func _get_tool_definitions(p_is_gemini: bool) -> Array:
 	var defs = []
 	for tool_inst in _tools.values():
 		var schema = tool_inst.get_parameters_schema()
-		if is_gemini:
+		if p_is_gemini:
 			schema = ToolRegistry.convert_schema_to_gemini(schema)
 			defs.append({
 				"name": tool_inst.tool_name,

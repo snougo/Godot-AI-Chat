@@ -102,18 +102,11 @@ func _thread_task() -> void:
 	var err: Error = OK
 	
 	# 1. 解析 URL
-	var protocol_pos: int = _url.find("://")
-	var protocol: String = _url.substr(0, protocol_pos)
-	var rest: String = _url.substr(protocol_pos + 3)
-	var host_end: int = rest.find("/")
-	var host: String = rest.substr(0, host_end) if host_end != -1 else rest
-	var path: String = rest.substr(host_end) if host_end != -1 else "/"
-	var port: int = 443 if protocol == "https" else 80
-	
-	if ":" in host:
-		var parts: PackedStringArray = host.split(":")
-		host = parts[0]
-		port = parts[1].to_int()
+	var url_parts: Dictionary = URLHelper.parse_url(_url)
+	var protocol: String = url_parts.protocol
+	var host: String = url_parts.host
+	var port: int = url_parts.port
+	var path: String = url_parts.path
 	
 	# 2. 连接服务器
 	var tls_opts: TLSOptions = TLSOptions.client() if protocol == "https" else null

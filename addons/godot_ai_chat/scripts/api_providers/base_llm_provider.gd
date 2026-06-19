@@ -68,3 +68,14 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 ## [param p_raw_chunk]: 原始数据块
 func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) -> Dictionary:
 	return { "content_delta": "" }
+
+
+## [可覆写] 当前 Provider 是否支持通过 API 端点获取模型列表
+## [param p_base_url]: 当前配置的 API Base URL（用于运行时判断，如 DeepSeek 特判）
+func supports_model_list_api(p_base_url: String) -> bool:
+	return true
+
+
+## [可覆写] 返回静态内置模型列表（当 supports_model_list_api() 返回 false 时使用）
+func get_static_model_list() -> Array[String]:
+	return []

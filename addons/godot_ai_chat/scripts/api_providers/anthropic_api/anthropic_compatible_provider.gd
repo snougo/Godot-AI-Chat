@@ -65,6 +65,16 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 	return list
 
 
+## DeepSeek 的 Anthropic 兼容端点不提供模型列表 API
+func supports_model_list_api(p_base_url: String) -> bool:
+	return p_base_url != "https://api.deepseek.com/anthropic"
+
+
+## 返回 DeepSeek 内置模型列表
+func get_static_model_list() -> Array[String]:
+	return ["deepseek-v4-flash", "deepseek-v4-pro"]
+
+
 # --- Private Functions ---
 
 func _build_url(p_base: String, p_endpoint: String) -> String:

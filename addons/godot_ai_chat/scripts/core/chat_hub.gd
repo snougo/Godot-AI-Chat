@@ -89,7 +89,7 @@ func _run_chat_loop() -> void:
 	if _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
 		_network_manager.new_stream_chunk_received.disconnect(_on_stream_chunk)
 	
-	if _agent_orchestrator._is_cancelled:
+	if _agent_orchestrator.is_cancelled:
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Stopped")
 		_current_chat_window.rollback_incomplete_message()
 	else:

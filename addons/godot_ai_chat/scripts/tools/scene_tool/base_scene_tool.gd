@@ -24,10 +24,16 @@ func get_active_scene_root() -> Node:
 ## 根据路径从根节点获取目标节点
 ## [param p_root]: 场景根节点
 ## [param p_path]: 节点路径，支持以下格式：
-##   - "." 表示根节点
-##   - "NodeName" 仅节点名（场景内唯一时可用）
-##   - "Parent/Child" 相对路径（推荐）
-##   - "/Root/Child" 绝对路径（可选前缀 '/'，但不强制）
+##   - "."                 根节点
+##   - "NodeName"          仅节点名（场景内唯一时可用，否则会返回错误提示）
+##   - "Parent/Child"      相对路径，从根节点向下解析（✅ 推荐）
+##   - "/RootName/Child"   绝对路径，以 "/" 开头，Godot 从场景根节点解析
+## 
+## ⚠️ 路径解析规则：
+##   - 不含 "/" → 先尝试作为直接子节点查找，失败后使用名称搜索
+##   - 含 "/" 但不以 "/" 开头 → 作为相对路径传给 Godot 的 get_node()
+##   - 以 "/" 开头 → 作为绝对路径传给 Godot 的 get_node()
+## 
 ## [return]: 目标节点，如果未找到返回 null
 func get_node_from_root(p_root: Node, p_path: String) -> Node:
 	if p_path.is_empty() or p_path == "." or p_path == "/":
@@ -55,14 +61,28 @@ func get_node_from_root(p_root: Node, p_path: String) -> Node:
 	
 	# 如果直接查找失败，尝试用节点名模糊匹配（仅当路径不含 "/" 时）
 	if not target_path.contains("/"):
-		var found_node = _find_node_by_name(p_root, target_path)
-		if found_node:
-			return found_node
+		# 先收集所有同名节点路径
+		var matched_paths: Array[String] = get_all_node_paths_by_name(p_root, target_path)
+		var match_count: int = matched_paths.size()
+		
+		if match_count == 0:
+			return null
+		elif match_count == 1:
+			# 唯一匹配，准确定位
+			return p_root.get_node(matched_paths[0])
+		else:
+			# 多个同名节点 — 不自动选择，返回 null 让调用者处理
+			return null
 	
 	return null
 
 
 ## 递归获取节点的完整属性（包括 Resource 内部属性）
+## 返回值中每个属性包含：
+##   - "value":     字符串表示（便于 LLM 阅读）
+##   - "raw":       原始值（结构化数据，便于 LLM 理解类型）
+##   - "type":      属性类型枚举值
+##   - "type_name": 类型名称
 func get_all_node_properties(p_node: Node) -> Dictionary:
 	var properties := {}
 	var prop_list := p_node.get_property_list()
@@ -72,18 +92,17 @@ func get_all_node_properties(p_node: Node) -> Dictionary:
 			continue
 		
 		var value = p_node.get(p.name)
+		var entry: Dictionary = {
+			"value": str(value),
+			"raw": value,
+			"type": p.type,
+			"type_name": get_type_name(p.type)
+		}
 		
 		if value is Resource:
-			properties[p.name] = {
-				"value": str(value),
-				"type": p.type,
-				"properties": _get_resource_properties_recursive(value)
-			}
-		else:
-			properties[p.name] = {
-				"value": str(value),
-				"type": p.type,
-			}
+			entry["properties"] = _get_resource_properties_recursive(value)
+		
+		properties[p.name] = entry
 	
 	return properties
 
@@ -144,6 +163,16 @@ func get_scene_tree_string(p_root: Node) -> String:
 func get_all_node_paths(p_root: Node) -> Array[String]:
 	var paths: Array[String] = []
 	_collect_node_paths(p_root, p_root, ".", paths)
+	return paths
+
+
+## 收集所有匹配指定名称的节点路径
+## [param p_root]: 场景根节点
+## [param p_name]: 要搜索的节点名称
+## [return]: 路径字符串数组（相对于根节点）
+func get_all_node_paths_by_name(p_root: Node, p_name: String) -> Array[String]:
+	var paths: Array[String] = []
+	_collect_node_paths_by_name(p_root, p_root, ".", p_name, paths)
 	return paths
 
 
@@ -381,8 +410,8 @@ func find_similar_paths(p_root: Node, p_input_path: String) -> Array[String]:
 	if p_root.name.to_lower().contains(input_lower) or input_lower.contains(p_root.name.to_lower()):
 		similar_paths.append(".")
 	
-	# 递归检查子节点
-	_collect_similar_paths(p_root, p_root.name, input_lower, similar_paths)
+	# 递归检查子节点（从 "." 起始，与 get_all_node_paths 一致）
+	_collect_similar_paths(p_root, ".", input_lower, similar_paths)
 	
 	return similar_paths
 
@@ -404,30 +433,24 @@ func get_node_path_error_hint(p_root: Node, p_input_path: String) -> String:
 		for s in similar:
 			hint += "   • %s\n" % s
 	
+	# 检查是否为同名重复节点
+	var matched_by_name: Array[String] = get_all_node_paths_by_name(p_root, p_input_path)
+	if matched_by_name.size() > 1:
+		hint += "\n⚠️ Multiple nodes named '%s' found:\n" % p_input_path
+		for path in matched_by_name:
+			hint += "   • %s\n" % path
+		hint += "Please use a full relative path (e.g., 'Parent/%s') to disambiguate.\n" % p_input_path
+	
 	hint += "\n📝 Path format tips:\n"
 	hint += "   • '.' = root node\n"
-	hint += "   • 'NodeName' = node name (if unique)\n"
-	hint += "   • 'Parent/Child' = relative path (recommended)\n"
-	hint += "   • '/Root/Child' = absolute path from root\n"
+	hint += "   • 'NodeName' = node name (only if unique in scene)\n"
+	hint += "   • 'Parent/Child' = relative path from root (✅ recommended)\n"
+	hint += "   • '/RootName/Child' = absolute path (starts with '/', resolved from scene root)\n"
 	
 	return hint
 
 
 # --- Private Functions ---
-
-func _find_node_by_name(p_node: Node, p_name: String) -> Node:
-	# 先检查当前节点
-	if p_node.name == p_name:
-		return p_node
-	
-	# 递归检查子节点
-	for child in p_node.get_children():
-		var found = _find_node_by_name(child, p_name)
-		if found:
-			return found
-	
-	return null
-
 
 func _collect_node_paths(p_node: Node, p_root: Node, p_current_path: String, p_paths: Array[String]) -> void:
 	# 添加到列表
@@ -448,11 +471,34 @@ func _collect_node_paths(p_node: Node, p_root: Node, p_current_path: String, p_p
 		_collect_node_paths(child, p_root, child_path, p_paths)
 
 
+# 递归收集所有匹配指定名称的节点路径
+func _collect_node_paths_by_name(p_node: Node, p_root: Node, p_current_path: String, p_target_name: String, p_paths: Array[String]) -> void:
+	if p_node.name == p_target_name:
+		p_paths.append(p_current_path)
+	
+	# 外部场景实例不再深入
+	if p_node != p_root and not p_node.scene_file_path.is_empty():
+		return
+	
+	for child in p_node.get_children():
+		var child_path: String
+		if p_current_path == ".":
+			child_path = child.name
+		else:
+			child_path = p_current_path + "/" + child.name
+		_collect_node_paths_by_name(child, p_root, child_path, p_target_name, p_paths)
+
+
 func _get_resource_properties_recursive(resource: Object) -> Dictionary:
 	var props := {}
 	for p in resource.get_property_list():
 		if (p.usage & PROPERTY_USAGE_EDITOR):
-			props[p.name] = str(resource.get(p.name))
+			var val = resource.get(p.name)
+			props[p.name] = {
+				"value": str(val),
+				"raw": val,
+				"type_name": get_type_name(p.type)
+			}
 	return props
 
 
@@ -473,17 +519,22 @@ func _traverse_node(node: Node, root: Node, depth: int, lines: PackedStringArray
 		_traverse_node(c, root, depth + 1, lines)
 
 
-# 递归收集相似路径
+## 递归收集相似路径（返回相对于根节点的路径）
 func _collect_similar_paths(p_node: Node, p_current_path: String, p_input_lower: String, p_results: Array[String]) -> void:
 	for child in p_node.get_children():
-		var child_path: String = p_current_path + "/" + child.name
+		var child_path: String
+		if p_current_path == ".":
+			child_path = child.name
+		else:
+			child_path = p_current_path + "/" + child.name
 		
 		# 检查节点名称是否相似
 		if child.name.to_lower().contains(p_input_lower) or p_input_lower.contains(child.name.to_lower()):
-			p_results.append(child_path.trim_prefix(p_node.name + "/"))
+			p_results.append(child_path)
 		
-		# 递归检查子节点
-		_collect_similar_paths(child, child_path, p_input_lower, p_results)
+		# 外部场景实例不再深入
+		if child.scene_file_path.is_empty():
+			_collect_similar_paths(child, child_path, p_input_lower, p_results)
 
 
 # 带验证的 Vector2 转换

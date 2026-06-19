@@ -12,16 +12,14 @@ var network_manager: NetworkManager
 var current_chat_window: CurrentChatWindow
 var chat_ui: ChatUI
 
-# --- Private Vars ---
-
-var _is_cancelled: bool = false
+var is_cancelled: bool = false
 
 
 # --- Public Functions ---
 
 ## 取消当前工作流
 func cancel_workflow() -> void:
-	_is_cancelled = true
+	is_cancelled = true
 	if network_manager:
 		network_manager.cancel_stream()
 
@@ -30,10 +28,10 @@ func cancel_workflow() -> void:
 ## [param p_base_history]: 基础历史记录
 ##[param p_settings]: 插件设置
 func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsConfig) -> void:
-	_is_cancelled = false
+	is_cancelled = false
 	
 	while true:
-		if _is_cancelled: break
+		if is_cancelled: break
 		
 		# 新一轮网络请求开始，确保状态切回等待响应
 		if chat_ui:
@@ -47,8 +45,8 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		# 流式网络请求结束，立刻通知 UI 刷出缓冲区残留并停止打字机
 		current_chat_window.flush_stream_buffer()
 		
-		if _is_cancelled or not response_result.success:
-			if not response_result.success and not _is_cancelled:
+		if is_cancelled or not response_result.success:
+			if not response_result.success and not is_cancelled:
 				current_chat_window.append_error_message(response_result.error)
 			break
 		
@@ -64,7 +62,7 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		if not is_gemini and "<think>" in last_msg.content:
 			last_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(last_msg.content, last_msg.tool_calls)
 		
-		#[终极修复]: 抢救被服务端误拦截的合法文本，并清洗真正的工具调用
+		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
 		var old_content_len: int = last_msg.content.length()
 		ToolBox.salvage_and_clean_tool_calls(last_msg)
 		
@@ -82,7 +80,7 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 			chat_ui.update_ui_state(ChatUI.UIState.TOOLCALLING)
 		
 		for call in last_msg.tool_calls:
-			if _is_cancelled: break
+			if is_cancelled: break
 			
 			# 此时数组里的工具一定是干净、合法且有 ID 的，直接使用
 			var tool_name: String = call.function.name
@@ -106,7 +104,7 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 				AIChatLogger.error(result_str)
 			else:
 				var result_dict: Dictionary = await tool_instance.execute(args)
-				if _is_cancelled: break
+				if is_cancelled: break
 				
 				var data_val: Variant = result_dict.get("data", "")
 				if data_val is Dictionary or data_val is Array:

@@ -52,3 +52,28 @@ static func normalize_zhipu_url(p_input_url: String) -> String:
 	
 	# Case E: 仅域名，直接拼接
 	return url + "/api/paas/v4/chat/completions"
+
+
+## 解析 URL 为结构化数据
+## [param p_url]: 完整 URL 字符串
+## [return]: {protocol: String, host: String, port: int, path: String}
+static func parse_url(p_url: String) -> Dictionary:
+	var protocol_pos: int = p_url.find("://")
+	var protocol: String = p_url.substr(0, protocol_pos)
+	var rest: String = p_url.substr(protocol_pos + 3)
+	var host_end: int = rest.find("/")
+	var host: String = rest.substr(0, host_end) if host_end != -1 else rest
+	var path: String = rest.substr(host_end) if host_end != -1 else "/"
+	var port: int = 443 if protocol == "https" else 80
+	
+	if ":" in host:
+		var parts: PackedStringArray = host.split(":")
+		host = parts[0]
+		port = parts[1].to_int()
+	
+	return {
+		"protocol": protocol,
+		"host": host,
+		"port": port,
+		"path": path
+	}

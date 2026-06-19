@@ -2,14 +2,14 @@
 extends AiTool
 
 ## 移动单一文件到新的目标路径。
-## 注意：如需移动文件夹，请使用 manage_folder（action: "move"）。
+## 注意：本工具仅支持移动文件，不支持移动文件夹。
 
 
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "move_file"
-	tool_description = "Moves a single file to a new target path. For moving folders, use `manage_folder` with action 'move' instead."
+	tool_description = "Moves a single file to a new target path. Folders are not supported."
 
 
 # --- Public Functions ---
@@ -48,7 +48,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	# 仅允许移动文件，拒绝移动目录
 	if DirAccess.dir_exists_absolute(source_path):
-		return {"success": false, "data": "Error: '%s' is a directory. Use `manage_folder` tool to move folders." % source_path}
+		return {"success": false, "data": "Error: '%s' is a folder, not a file." % source_path}
 	
 	if not FileAccess.file_exists(source_path):
 		return {"success": false, "data": "Error: Source file not found at " + source_path}
