@@ -13,13 +13,11 @@
    - 多处同时替换编辑 → `multi_replace`
 5. **确认**：使用 `get_edited_script` 确认修改结果。
 
-## 工具使用解释
-`multi_replace` 的详细使用说明见前置文档 `res://addons/godot_ai_chat/skills/script_editor/reference/multi_replace_tool_guide.md`
+## 帮助文档
+`multi_replace` 工具的详细使用说明，请查阅文档 `res://addons/godot_ai_chat/skills/script_editor/reference/multi_replace_tool_guide.md`
 
 ## 注意事项
 
 - 所有编辑操作仅对当前脚本编辑器中打开的脚本文件生效，所以确保编辑前先打开目标脚本。
-- `insert_code` 和 `delete_code` 基于正确的行号工作，而 `multi_replace` 虽然基于字符匹配来工作，不过这三者的编辑都会造成现有的编辑对象的行号对应的代码内容发生改变，所以这三个工具只能各自单独单次进行调用。
-- 所有编辑操作不会应用给磁盘上的脚本文件，而只是改变了脚本文件在内存中的状态。
-- `get_edited_script` 会返回编辑后的最新状态，适合用来查看编辑中文件的修改状态。
-- `read_file` 只会返回磁盘上脚本文件原始状态，不适合用来查看编辑中文件的修改状态。
+- `insert_code` 和 `delete_code` 工具基于行号工作，其功能也会造成行数变化和行代码内容改变，因此不适合连续调用或者混合调用。
+- `read_file` 无法获取脚本编辑后的状态，应当使用 `get_edited_script` 获取。

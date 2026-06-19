@@ -141,7 +141,7 @@ func append_reasoning(p_text: String) -> void:
 	elif is_instance_valid(_reasoning_label):
 		# 攒入缓冲区
 		_reasoning_write_buffer += p_text
-		if _reasoning_write_buffer.length() >= 50:
+		if _reasoning_write_buffer.length() >= 20:
 			_flush_reasoning_buffer()
 
 

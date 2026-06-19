@@ -4,7 +4,7 @@ extends BaseSceneTool
 
 func _init() -> void:
 	tool_name = "edit_scene"
-	tool_description = "Adds, deletes, moves node to modify the SceneTree hierarchy. Use `open_file` first to open target scene"
+	tool_description = "Adds, deletes, moves node to modify the SceneTree hierarchy."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -14,23 +14,23 @@ func get_parameters_schema() -> Dictionary:
 			"action": {
 				"type": "string",
 				"enum": ["add_node", "delete_node", "move_node"],
-				"description": "The action to perform. Use 'get_edited_scene' first to see the current scene structure."
+				"description": "Operation to perform. Use 'get_edited_scene' first to view current scene."
 			},
 			"node_path": {
 				"type": "string",
-				"description": "Target node path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body/Sprite')\n\nRequired for: delete_node, move_node"
+				"description": "Target node path."
 			},
 			"parent_path": {
 				"type": "string",
-				"description": "Target parent path. Use one of these formats:\n- '.' = root node\n- 'NodeName' = direct node name (only if unique in scene)\n- 'Parent/Child' = relative path from root (RECOMMENDED, e.g., 'Player/Body')\n\nRequired for: move_node, add_node (defaults to root if empty)"
+				"description": "Target parent path."
 			},
 			"node_class": {
 				"type": "string",
-				"description": "Class name (e.g., 'Node3D', 'Node2D', 'Control', 'Sprite2D') or 'res://path/to/scene.tscn'. Required for 'add_node'."
+				"description": "Class name (e.g. 'Sprite2D', 'Node3D') or 'res://path/to/scene.tscn'. Required for: add_node."
 			},
 			"node_name": {
 				"type": "string",
-				"description": "Name for the new node. Optional for 'add_node' (auto-generated if empty)."
+				"description": "Name for the new node. Optional (auto-generated if empty)."
 			}
 		},
 		"required": ["action"]

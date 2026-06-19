@@ -14,8 +14,9 @@
    - 修改动作 → 先 `remove` 再 `add`
 5. **反馈结果**：简要列出已执行的变更。
 
-## 工具使用解释
-`manage_input_map` 工具参数说明请查阅：`res://addons/godot_ai_chat/skills/input_mapping_wizard/reference/manage_input_map_guide.md`
+## 帮助文档
+`manage_input_map` 工具的详细使用说明，请查阅文档：`res://addons/godot_ai_chat/skills/input_mapping_wizard/reference/manage_input_map_guide.md`
 
 ## 注意事项
+
 - 安全保护：除非用户明确指定，否则不修改 `ui_` 开头的内置动作，新建动作也禁止使用 `ui_` 前缀。
