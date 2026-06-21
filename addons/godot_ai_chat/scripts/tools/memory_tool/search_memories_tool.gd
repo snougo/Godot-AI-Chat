@@ -77,6 +77,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		var entry: MemoryEntry = results[i]
 		lines.append("")
 		lines.append("[%d] %s" % [i + 1, entry.title])
+		lines.append("    ID: %d" % entry.id)
 		lines.append("    Workspace: %s" % entry.workspace_path)
 		lines.append("    Topic: %s" % entry.topic)
 		lines.append("    Type: %s" % entry.memory_type)

@@ -21,6 +21,7 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_godot_api_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/web_fetch_content_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/delete_memory_tool.gd",
