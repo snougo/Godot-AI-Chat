@@ -111,5 +111,55 @@ static func _repair_truncated_json(p_json_str: String) -> String:
 	# 2. 逆序补全所有未闭合的括号
 	while not stack.is_empty():
 		result += stack.pop_back()
-		
+	
+	# 修复被截断的 JSON 关键字
+	result = _fix_truncated_keywords(result)
+	
 	return result
+
+
+# 修复被截断的 JSON 关键字值（如 "nu" → "null", "tru" → "true" 等）
+static func _fix_truncated_keywords(p_json: String) -> String:
+	const TRUNCATED_MAP: Dictionary = {
+		"n": "null", "nu": "null", "nul": "null",
+		"t": "true", "tr": "true", "tru": "true",
+		"f": "false", "fa": "false", "fal": "false", "fals": "false"
+	}
+	
+	# 快速路径：已经是合法 JSON，无需修复
+	if JSON.parse_string(p_json) != null:
+		return p_json
+	
+	# 从末尾跳过空白和闭合括号，定位到最后一个值的末尾
+	var end: int = p_json.length() - 1
+	while end >= 0 and p_json[end] in " \t\n\r}]":
+		end -= 1
+	if end < 0:
+		return p_json
+	
+	# 检查该位置是否在字符串引号内（在引号内的内容不处理）
+	var in_str: bool = false
+	var is_esc: bool = false
+	for i in range(end + 1):
+		if is_esc:
+			is_esc = false
+			continue
+		var c: String = p_json[i]
+		if c == "\\":
+			is_esc = true
+		elif c == "\"":
+			in_str = not in_str
+	
+	if in_str:
+		return p_json  # 在引号内，不应修改
+	
+	# 从 end 向前找到分隔符，提取潜在残缺值
+	var start: int = end
+	while start >= 0 and p_json[start] not in ":{,[":
+		start -= 1
+	
+	var candidate: String = p_json.substr(start + 1, end - start).strip_edges()
+	if TRUNCATED_MAP.has(candidate):
+		return p_json.left(start + 1) + TRUNCATED_MAP[candidate] + p_json.right(end + 1)
+	
+	return p_json

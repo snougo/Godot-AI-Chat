@@ -21,14 +21,6 @@ const TITLE_STYLE_TOOL: StyleBoxFlat = preload("res://addons/godot_ai_chat/asset
 ## 统一背景样式资源
 const BG_STYLE: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/message_background.tres")
 
-## 合法的 BBCode 标签白名单（RichTextLabel 支持的核心标签）
-const BBCODE_TAGS: Array[String] = [
-	"b", "i", "u", "s", "color", "font", "font_size",
-	"url", "lb", "rb", "img",
-	"center", "left", "right", "indent",
-	"code", "highlight", "br", "p"
-]
-
 # --- @onready Vars ---
 
 @onready var _content_container: VBoxContainer = $MarginContainer/VBoxContainer
@@ -72,7 +64,6 @@ var _current_popup_code_view_window: PopupCodeViewWindow = null
 
 # 表格渲染状态
 var _in_table: bool = false
-var _table_column_count: int = 0
 
 
 # --- Built-in Functions ---
@@ -291,320 +282,6 @@ func is_suspended() -> bool:
 
 # --- Private Functions ---
 
-# 将一行文本中的内联 Markdown 转换为 BBCode
-# 使用 match 分派模式：按首字符路由，每种语法内联处理
-func _convert_inline(p_text: String) -> String:
-	var result: String = ""
-	var i: int = 0
-	var len: int = p_text.length()
-	
-	while i < len:
-		var c: String = p_text[i]
-		
-		match c:
-			"*":
-				# ***bold-italic***（优先于 ** 检测，防止 *** 被拆分为 ** + *）
-				if i + 2 < len and p_text[i + 1] == "*" and p_text[i + 2] == "*":
-					var end: int = p_text.find("***", i + 3)
-					if end != -1:
-						var inner: String = _convert_inline(p_text.substr(i + 3, end - i - 3))
-						result += "[b][i][color=#c792ea]" + inner + "[/color][/i][/b]"
-						i = end + 3
-						continue
-				
-				# **bold**（递归处理内部内容）
-				if i + 1 < len and p_text[i + 1] == "*":
-					var end: int = p_text.find("**", i + 2)
-					if end != -1:
-						var inner: String = _convert_inline(p_text.substr(i + 2, end - i - 2))
-						result += "[b][color=#94bcff]" + inner + "[/color][/b]"
-						i = end + 2
-						continue
-				
-				# *italic*（跳过中间的 **...** 对）
-				var end: int = _find_italic_end(p_text, i)
-				if end != -1:
-					var inner: String = _convert_inline(p_text.substr(i + 1, end - i - 1))
-					result += "[i][color=#569CD6]" + inner + "[/color][/i]"
-					i = end + 1
-					continue
-				
-				result += c
-				i += 1
-			
-			"`":
-				# `inline code` → 淡黄色，转义方括号防 BBCode 注入
-				var end: int = p_text.find("`", i + 1)
-				if end != -1:
-					var inner: String = p_text.substr(i + 1, end - i - 1)
-					inner = inner.replace("[", "[lb]").replace("]", "[rb]")
-					result += "[color=#d2cf95]" + inner + "[/color]"
-					i = end + 1
-					continue
-				result += c
-				i += 1
-			
-			"[":
-				# [text](url) 链接 → 淡紫色（递归处理内部文本）
-				var close_bracket: int = p_text.find("]", i + 1)
-				if close_bracket != -1 and close_bracket + 1 < len and p_text[close_bracket + 1] == "(":
-					var close_paren: int = p_text.find(")", close_bracket + 2)
-					if close_paren != -1:
-						var link_text: String = p_text.substr(i + 1, close_bracket - i - 1)
-						var link_url: String = p_text.substr(close_bracket + 2, close_paren - close_bracket - 2)
-						link_url = link_url.replace("[", "[lb]").replace("]", "[rb]")
-						link_text = _convert_inline(link_text)
-						result += "[color=#B39DDB][url=" + link_url + "]" + link_text + "[/url][/color]"
-						i = close_paren + 1
-						continue
-				
-				# 非链接 → 检测是否为合法的 BBCode 标签（白名单穿透）
-				var bbcode_len: int = _match_bbcode_tag(p_text, i)
-				if bbcode_len > 0:
-					result += p_text.substr(i, bbcode_len)
-					i += bbcode_len
-					continue
-				
-				# 都不是 → 转义为 [lb]
-				result += "[lb]"
-				i += 1
-			
-			"]":
-				# 独立 ] → 转义为 [rb]
-				result += "[rb]"
-				i += 1
-			
-			"~":
-				# ~~strikethrough~~（递归处理内部内容）
-				if i + 1 < len and p_text[i + 1] == "~":
-					var end: int = p_text.find("~~", i + 2)
-					if end != -1:
-						var inner: String = _convert_inline(p_text.substr(i + 2, end - i - 2))
-						result += "[s]" + inner + "[/s]"
-						i = end + 2
-						continue
-				result += c
-				i += 1
-			
-			"<":
-				# <自动链接> → 淡紫色（与内联链接同色）
-				var end: int = p_text.find(">", i + 1)
-				if end != -1:
-					var url: String = p_text.substr(i + 1, end - i - 1)
-					if url.begins_with("http://") or url.begins_with("https://") \
-							or url.begins_with("ftp://") or url.begins_with("www.") \
-							or ("@" in url and "." in url):
-						url = url.replace("[", "[lb]").replace("]", "[rb]")
-						result += "[color=#B39DDB][url=" + url + "]" + url + "[/url][/color]"
-						i = end + 1
-						continue
-				# 不是有效自动链接 → 当作普通字符输出
-				result += c
-				i += 1
-			
-			_:
-				# 普通字符直接追加
-				result += c
-				i += 1
-	
-	return result
-
-
-# 处理 * / ** / *** 标记
-func _handle_star(p_text: String, p_i: int, p_len: int, p_result: String) -> int:
-	# ***bold-italic***（优先检测，防止 *** 被拆分为 ** + *）
-	if p_i + 2 < p_len and p_text[p_i + 1] == "*" and p_text[p_i + 2] == "*":
-		var end: int = p_text.find("***", p_i + 3)
-		if end != -1:
-			var inner: String = _convert_inline(p_text.substr(p_i + 3, end - p_i - 3))
-			p_result += "[b][i][color=#c792ea]" + inner + "[/color][/i][/b]"
-			return end + 3
-	
-	# **bold**
-	if p_i + 1 < p_len and p_text[p_i + 1] == "*":
-		var end: int = p_text.find("**", p_i + 2)
-		if end != -1:
-			var inner: String = _convert_inline(p_text.substr(p_i + 2, end - p_i - 2))
-			p_result += "[b][color=#94bcff]" + inner + "[/color][/b]"
-			return end + 2
-	
-	# *italic*（跳过中间的 **...** 对）
-	var end: int = _find_italic_end(p_text, p_i)
-	if end != -1:
-		var inner: String = _convert_inline(p_text.substr(p_i + 1, end - p_i - 1))
-		p_result += "[i][color=#569CD6]" + inner + "[/color][/i]"
-		return end + 1
-	
-	p_result += p_text[p_i]
-	return p_i + 1
-
-
-# 处理 `inline code` 标记
-func _handle_backtick(p_text: String, p_i: int, p_len: int, p_result: String) -> int:
-	var end: int = p_text.find("`", p_i + 1)
-	if end != -1:
-		var inner: String = p_text.substr(p_i + 1, end - p_i - 1)
-		inner = inner.replace("[", "[lb]").replace("]", "[rb]")
-		p_result += "[color=#d2cf95]" + inner + "[/color]"
-		return end + 1
-	
-	p_result += p_text[p_i]
-	return p_i + 1
-
-
-# 处理 [link](url) 和 [BBCode] 标记
-func _handle_bracket(p_text: String, p_i: int, p_len: int, p_result: String) -> int:
-	var close_bracket: int = p_text.find("]", p_i + 1)
-	
-	# [text](url) 链接
-	if close_bracket != -1 and close_bracket + 1 < p_len and p_text[close_bracket + 1] == "(":
-		var close_paren: int = p_text.find(")", close_bracket + 2)
-		if close_paren != -1:
-			var link_text: String = p_text.substr(p_i + 1, close_bracket - p_i - 1)
-			var link_url: String = p_text.substr(close_bracket + 2, close_paren - close_bracket - 2)
-			link_url = link_url.replace("[", "[lb]").replace("]", "[rb]")
-			link_text = _convert_inline(link_text)
-			p_result += "[color=#B39DDB][url=" + link_url + "]" + link_text + "[/url][/color]"
-			return close_paren + 1
-	
-	# 合法 BBCode 标签（白名单穿透）
-	var bbcode_len: int = _match_bbcode_tag(p_text, p_i)
-	if bbcode_len > 0:
-		p_result += p_text.substr(p_i, bbcode_len)
-		return p_i + bbcode_len
-	
-	# 都不是 → 转义为 [lb]
-	p_result += "[lb]"
-	return p_i + 1
-
-
-# 处理 ~~strikethrough~~ 标记
-func _handle_tilde(p_text: String, p_i: int, p_len: int, p_result: String) -> int:
-	if p_i + 1 < p_len and p_text[p_i + 1] == "~":
-		var end: int = p_text.find("~~", p_i + 2)
-		if end != -1:
-			var inner: String = _convert_inline(p_text.substr(p_i + 2, end - p_i - 2))
-			p_result += "[s]" + inner + "[/s]"
-			return end + 2
-	
-	p_result += p_text[p_i]
-	return p_i + 1
-
-
-# 处理 <auto-link> 标记
-func _handle_angle(p_text: String, p_i: int, p_len: int, p_result: String) -> int:
-	var end: int = p_text.find(">", p_i + 1)
-	if end != -1:
-		var url: String = p_text.substr(p_i + 1, end - p_i - 1)
-		if url.begins_with("http://") or url.begins_with("https://") \
-				or url.begins_with("ftp://") or url.begins_with("www.") \
-				or ("@" in url and "." in url):
-			url = url.replace("[", "[lb]").replace("]", "[rb]")
-			p_result += "[color=#B39DDB][url=" + url + "]" + url + "[/url][/color]"
-			return end + 1
-	
-	p_result += p_text[p_i]
-	return p_i + 1
-
-
-# 检测 p_text 在 p_idx 位置是否是一个合法的 BBCode 标签
-# 返回标签完整长度（含方括号），不是标签则返回 0
-func _match_bbcode_tag(p_text: String, p_idx: int) -> int:
-	var remaining: int = p_text.length() - p_idx
-	if remaining < 3 or p_text[p_idx] != "[":
-		return 0
-	
-	var tag_start: int = p_idx + 1
-	var is_closing: bool = p_text[tag_start] == "/"
-	if is_closing:
-		tag_start += 1
-	
-	# 提取标签名（仅限字母）
-	var tag_end: int = tag_start
-	while tag_end < p_text.length():
-		var ch: String = p_text[tag_end]
-		if (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z"):
-			tag_end += 1
-		else:
-			break
-	
-	if tag_end == tag_start:  # 没有标签名
-		return 0
-	
-	# 校验标签名是否在白名单中
-	var tag_name: String = p_text.substr(tag_start, tag_end - tag_start).to_lower()
-	if tag_name not in BBCODE_TAGS:
-		return 0
-	
-	# 找闭合 ]，限制最大查找范围 100 字符防溢出
-	var pos: int = tag_end
-	var max_search: int = mini(pos + 100, p_text.length())
-	while pos < max_search and p_text[pos] != "]":
-		pos += 1
-	
-	if pos >= max_search or p_text[pos] != "]":
-		return 0
-	
-	return pos - p_idx + 1
-
-
-# 将一行 Markdown 表格数据转为 BBCode 表格行
-# 首行自动作为表头（带背景色+粗体）
-func _make_table_row(p_line: String) -> String:
-	var row: String = p_line
-	if row.begins_with("|"):
-		row = row.substr(1)
-	if row.ends_with("|"):
-		row = row.left(-1)
-	
-	# 手动解析单元格，跳过反引号内的内容
-	var cells: Array[String] = []
-	var current_cell: String = ""
-	var in_backtick: bool = false
-	var i: int = 0
-	while i < row.length():
-		var ch: String = row[i]
-		
-		# 遇到反引号，切换状态
-		if ch == "`":
-			in_backtick = not in_backtick
-			current_cell += ch
-			i += 1
-			continue
-		
-		# 在反引号外遇到 `\|` → 当作普通字符
-		if not in_backtick and ch == "\\" and i + 1 < row.length() and row[i + 1] == "|":
-			current_cell += "|"
-			i += 2
-			continue
-		
-		# 在反引号外遇到 `|` → 分隔单元格
-		if not in_backtick and ch == "|":
-			cells.append(_convert_inline(current_cell.strip_edges()))
-			current_cell = ""
-			i += 1
-			continue
-		
-		current_cell += ch
-		i += 1
-	
-	# 最后一个单元格
-	cells.append(_convert_inline(current_cell.strip_edges()))
-	
-	if not _in_table:
-		_in_table = true
-		_table_column_count = cells.size()
-		var header_cells: PackedStringArray = []
-		for c in cells:
-			header_cells.append("[cell bg=#2d2d5e][b]%s[/b][/cell]" % c)
-		return "[table=%d]" % _table_column_count + "".join(header_cells) + "\n"
-	else:
-		var data_cells: PackedStringArray = []
-		for c in cells:
-			data_cells.append("[cell]%s[/cell]" % c)
-		return "".join(data_cells) + "\n"
-
-
 # 闭合未关闭的表格（流结束或静态加载结束时调用）
 func _close_table_if_open() -> void:
 	if _in_table:
@@ -612,50 +289,6 @@ func _close_table_if_open() -> void:
 		if is_instance_valid(_last_ui_node) and _last_ui_node is RichTextLabel:
 			_last_ui_node.text += "[/table]\n\n"
 
-
-# 查找斜体的闭合 *，跳过中间的 **...** 对
-func _find_italic_end(p_text: String, p_start: int) -> int:
-	var j: int = p_start + 1
-	while j < p_text.length():
-		if p_text[j] == "*":
-			# 遇到 **（粗体开始），跳过到其闭合 **
-			if j + 1 < p_text.length() and p_text[j + 1] == "*":
-				var bold_end: int = p_text.find("**", j + 2)
-				if bold_end != -1:
-					j = bold_end + 2
-					continue
-				else:
-					return -1  # ** 未闭合，斜体也无法闭合
-			else:
-				return j  # 单个 *，就是斜体的闭合标记
-		j += 1
-	return -1
-
-
-# 将一行文本转换为 BBCode（行级结构 + 内联转换）
-# 支持：标题(#~######) **bold** `code`
-func _convert_md_to_bbcode(p_text: String) -> String:
-	# 去掉尾部 \n（Parser 在每个 TEXT segment 末尾添加的）
-	var content: String = p_text.trim_suffix("\n")
-	
-	# --- 1. 标题检测 ---
-	var heading_level: int = 0
-	for level in range(1, 7):
-		var prefix: String = "#".repeat(level) + " "
-		if content.begins_with(prefix):
-			heading_level = level
-			break
-	
-	if heading_level > 0:
-		var heading_text: String = content.substr(heading_level + 1).strip_edges()
-		heading_text = _convert_inline(heading_text)
-		var sizes: Array[int] = [28, 24, 20, 18, 16, 14]
-		return "[font_size=%d][b][color=#ff729c]%s[/color][/b][/font_size]\n" % [sizes[heading_level - 1], heading_text]
-	
-	# --- 3. 普通文本：内联转换 ---
-	return _convert_inline(content) + "\n"
-
-# ----------- Markdown 2 BBcode 结束-----------
 
 # 解析器信号回调：将解析段落路由到对应的 UI 渲染方法
 func _on_parser_segment_parsed(p_type: int, p_content: String, p_meta: String) -> void:
@@ -828,8 +461,17 @@ func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabe
 	rtl.selection_enabled = true
 	rtl.focus_mode = Control.FOCUS_CLICK
 	rtl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	
+	# 处理 URL 链接点击，打开系统默认浏览器
+	rtl.meta_clicked.connect(func(p_meta: Variant):
+		if typeof(p_meta) == TYPE_STRING:
+			var url: String = p_meta as String
+			if url.begins_with("http://") or url.begins_with("https://"):
+				OS.shell_open(url)
+	)
+	
 	# 对初始文本去除开头空白行
-	var converted: String = _convert_md_to_bbcode(p_initial_text)
+	var converted: String = MarkdownToBBCode.convert_line(p_initial_text)
 	rtl.text = converted.lstrip("\n")
 	if not p_initial_text.is_empty():
 		_is_first_text = false
@@ -852,12 +494,14 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 	var is_table_row: bool = line.begins_with("|")
 	
 	if is_table_row:
-		# 跳过分隔行（| --- |）
 		var check: String = line.replace("|", "").replace("-", "").replace(" ", "").replace(":", "")
 		if check.is_empty():
 			return
 		
-		var bb: String = _make_table_row(line)
+		var is_header: bool = not _in_table
+		var bb: String = MarkdownToBBCode.make_table_row(line, is_header)
+		if is_header:
+			_in_table = true
 		_last_ui_node.text += bb
 		return
 	
@@ -866,7 +510,7 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		_in_table = false
 		_last_ui_node.text += "[/table]\n\n"
 	
-	var converted: String = _convert_md_to_bbcode(p_text)
+	var converted: String = MarkdownToBBCode.convert_line(p_text)
 	var is_blank: bool = converted == "\n"
 	
 	# 跳过消息开头的所有空白行
@@ -1066,4 +710,3 @@ func _clear_content() -> void:
 	_previous_line_was_blank = false
 	# 重置表格状态
 	_in_table = false
-	_table_column_count = 0

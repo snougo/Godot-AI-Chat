@@ -5,9 +5,7 @@
 [resource]
 script = ExtResource("1_ek4o3")
 skill_name = "Image Reader"
-description = "本技能可通过 Sub-Agent的多模态能力来获取图像内容的文字描述
-
-使用场景如下：
+description = "本技能用于获取图像内容，使用场景如下：
 - 获取指定图片文件的图像内容的文字描述
 - 获取指定场景在编辑器视窗截图内容的文字描述（目标场景需事前在编辑器中打开）"
 instruction_file = "res://addons/godot_ai_chat/skills/image_reader/Skill.md"

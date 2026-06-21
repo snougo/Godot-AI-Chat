@@ -59,23 +59,18 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 					else:
 						untopiced_count += 1
 				
-				final_system_prompt += "\n\n===== GLOBAL MEMORIES =====\n"
+				final_system_prompt += "\n===== GLOBAL MEMORIES =====\n"
+				final_system_prompt += "Topic:\n"
 				
 				var topic_names: Array[String] = []
 				for key in topic_counts.keys():
 					topic_names.append(key)
 				topic_names.sort()
 				
-				var display_items: Array[Dictionary] = []
 				for topic_name in topic_names:
-					display_items.append({"label": "Topic: %s" % topic_name, "count": topic_counts[topic_name]})
+					final_system_prompt += "- **%s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
 				if untopiced_count > 0:
-					display_items.append({"label": "未分组", "count": untopiced_count})
-				
-				for i in display_items.size():
-					final_system_prompt += "- **%s** (%d 条记忆)\n" % [display_items[i]["label"], display_items[i]["count"]]
-					if i < display_items.size() - 1:
-						final_system_prompt += "\n---\n\n"
+					final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
 				
 				final_system_prompt += "==============================\n"
 			
@@ -93,24 +88,17 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 						untopiced_count += 1
 				
 				final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
+				final_system_prompt += "Topic:\n"
 				
 				var topic_names: Array[String] = []
 				for key in topic_counts.keys():
 					topic_names.append(key)
 				topic_names.sort()
 				
-				# 收集所有显示项
-				var display_items: Array[Dictionary] = []
 				for topic_name in topic_names:
-					display_items.append({"label": "Topic: %s" % topic_name, "count": topic_counts[topic_name]})
+					final_system_prompt += "- **%s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
 				if untopiced_count > 0:
-					display_items.append({"label": "未分组", "count": untopiced_count})
-				
-				# 逐项输出，项间用 --- 隔开（上下各留一空行）
-				for i in display_items.size():
-					final_system_prompt += "- **%s** (%d 条记忆)\n" % [display_items[i]["label"], display_items[i]["count"]]
-					if i < display_items.size() - 1:
-						final_system_prompt += "\n---\n\n"
+					final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
 				
 				final_system_prompt += "==============================\n"
 			

@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_t5bru")
 skill_name = "Input Mapping Wizard"
-description = "本技能可通过文字描述配置指定的 Godot 项目的 InputMap（按键映射）。"
+description = "本技能用于配置指定的 Godot 项目的 InputMap（按键映射）。"
 instruction_file = "res://addons/godot_ai_chat/skills/input_mapping_wizard/Skill.md"
-tools = Array[String](["uid://dlr4a68e7tifd", "uid://bo06p18acpk2v", "uid://cw5xgoi1irsaw"])
+tools = Array[String](["uid://dlr4a68e7tifd", "uid://bo06p18acpk2v", "uid://dkor40h5a6eo0"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

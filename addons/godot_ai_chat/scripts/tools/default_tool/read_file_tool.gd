@@ -11,12 +11,9 @@ extends AiTool
 ## 上下文类型与允许的扩展名映射
 const EXTENSION_MAP: Dictionary = {
 	"scene":      ["tscn", "scn"],
-	"gdscript":   ["gd"],
-	"shader":     ["gdshader", "glsl"],
+	"script":     ["gd", "gdshader", "glsl"],
+	"text":       ["md", "json", "cfg", "txt"],
 	"resource":   ["tres", "res"],
-	"markdown":   ["md"],
-	"config":     ["json", "cfg"],
-	"plain_text": ["txt"],
 	"image_meta": ["png", "jpg", "jpeg"]
 }
 
@@ -37,7 +34,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"file_type": {
 				"type": "string",
-				"enum": ["scene", "gdscript", "shader", "resource", "markdown", "config", "plain_text", "image_meta"],
+				"enum": ["scene", "script", "text", "resource", "image_meta"],
 				"description": "The type of file to read."
 			},
 			"path": {
@@ -64,10 +61,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var validation_result: String = _validate_path(path)
 	if not validation_result.is_empty():
 		return {"success": false, "data": validation_result}
-	
-	# 安全拦截：禁止读取本插件目录下的资源文件，防止API密钥等敏感信息泄漏
-	#if file_type == "resource" and path.begins_with(PluginPaths.PLUGIN_DIR):
-		#return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
 	
 	# 安全拦截：禁止读取指定的敏感资源文件
 	if file_type == "resource" and (
@@ -124,12 +117,12 @@ func _read_file_content(p_file_type: String, p_path: String, p_provider: Context
 	match p_file_type:
 		"scene":
 			return p_provider.get_scene_tree_as_markdown(p_path)
-		"gdscript", "shader":
+		"script":
 			return p_provider.get_script_content_as_markdown(p_path)
+		"text":
+			return p_provider.get_text_content_as_markdown(p_path)
 		"resource":
 			return _read_resource_content(p_path)
-		"markdown", "config", "plain_text":
-			return p_provider.get_text_content_as_markdown(p_path)
 		"image_meta":
 			return p_provider.get_image_metadata_as_markdown(p_path)
 		_:
