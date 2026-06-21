@@ -8,6 +8,7 @@ extends Resource
 @export var api_base_url: String = "http://127.0.0.1:1234"
 @export var api_key: String = ""
 @export var model_name: String = ""
+@export var supports_vision: bool = false
 
 @export_range(1, 100, 1) var max_chat_turns: int = 40
 @export var network_timeout: int = 180

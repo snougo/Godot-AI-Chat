@@ -1,19 +1,21 @@
 @tool
 extends AiTool
 
-## 搜索 Godot ClassDB 和本地 API 文档。
+## 搜索 Godot ClassDB、自定义全局类和本地 API 文档。
 ## 支持搜索类、方法、信号、属性（支持精确和跨类搜索）。
 ## 包含继承链搜索和智能提示功能。
+
 
 # --- Constants ---
 
 const LOCAL_DOC_PATH: String = "res://godot_doc"
 
+
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "search_godot_api"
-	tool_description = "Searches Godot ClassDB and local API docs."
+	tool_description = "Searches Godot ClassDB, custom global classes, and local API docs."
 
 
 # --- Public Functions ---
@@ -24,7 +26,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"keyword": {
 				"type": "string",
-				"description": "Search keyword. Only support `ClassName` (Node2D, Control, etc). \n > **Warning: ** Do not search for multiple keywords at the same time."
+				"description": "Search keyword. Only support `ClassName` (Node2D, Control and CustomClass, etc). \n > **Warning: ** Do not search for multiple keywords at the same time."
 			}
 		},
 		"required": ["keyword"]
@@ -126,6 +128,16 @@ func _search_builtin_api_multi(p_keywords: PackedStringArray) -> String:
 					found_class = true
 					break
 		
+		# --- 自定义全局类回退：ClassDB 找不到时查询 ProjectSettings ---
+		if not found_class:
+			var global_classes: Array[Dictionary] = ProjectSettings.get_global_class_list()
+			for cls_dict in global_classes:
+				var global_class_name: String = cls_dict.get("class", "")
+				if not global_class_name.is_empty() and global_class_name.to_lower() == kw_lower:
+					class_exact.append(global_class_name)
+					found_class = true
+					break
+		
 		# --- Variant 内置类型回退：ClassDB 找不到时检查本地文档 ---
 		if not found_class:
 			var variant_doc_path: String = LOCAL_DOC_PATH.path_join("classes/class_%s.md" % kw_lower)
@@ -141,11 +153,19 @@ func _search_builtin_api_multi(p_keywords: PackedStringArray) -> String:
 			if not member_search.is_empty():
 				member_results.append(member_search)
 		
-		# 模糊匹配类名
+		# 模糊匹配类名（引擎内置类）
 		for cls in all_classes:
 			if kw_lower in cls.to_lower():
 				if cls not in class_exact and cls not in class_fuzzy:
 					class_fuzzy.append(cls)
+		
+		# 模糊匹配类名（自定义全局类）
+		var global_classes: Array[Dictionary] = ProjectSettings.get_global_class_list()
+		for cls_dict in global_classes:
+			var global_class_name: String = cls_dict.get("class", "")
+			if not global_class_name.is_empty() and kw_lower in global_class_name.to_lower():
+				if global_class_name not in class_exact and global_class_name not in class_fuzzy:
+					class_fuzzy.append(global_class_name)
 	
 	# 构建结果
 	var lines: Array[String] = []
@@ -250,7 +270,7 @@ func _search_member_in_single_class(p_class: String, p_member_lower: String) -> 
 
 func _search_member_across_classes(p_member_name: String, p_all_classes: PackedStringArray) -> Dictionary:
 	var member_lower: String = p_member_name.to_lower()
-	
+
 	var exact_methods: Array[Dictionary] = []
 	var fuzzy_methods: Array[Dictionary] = []
 	var exact_signals: Array[Dictionary] = []
@@ -448,6 +468,33 @@ func _format_class_results_detailed(p_exact: Array[String], p_fuzzy: Array[Strin
 func _format_class_detailed(p_class: String) -> String:
 	var lines: Array[String] = []
 	lines.append("## Class: `%s`" % p_class)
+	
+	# --- 自定义全局类判断（优先于 Variant 判断）---
+	var is_global_script_class: bool = false
+	var global_script_info: Dictionary = {}
+	var global_classes: Array[Dictionary] = ProjectSettings.get_global_class_list()
+	for cls_dict in global_classes:
+		if cls_dict.get("class", "") == p_class:
+			is_global_script_class = true
+			global_script_info = cls_dict
+			break
+	
+	if is_global_script_class:
+		lines.append("**Type:** Custom Global Script Class")
+		var base_class: String = global_script_info.get("base", "")
+		if not base_class.is_empty():
+			lines.append("**Inherits:** `%s`" % base_class)
+		var script_path: String = global_script_info.get("path", "")
+		if not script_path.is_empty():
+			lines.append("**Script:** `%s`" % script_path)
+		var language: String = global_script_info.get("language", "")
+		if not language.is_empty():
+			lines.append("**Language:** %s" % language)
+		if global_script_info.get("is_tool", false):
+			lines.append("**Tool:** `@tool`")
+		lines.append("\n💡 This is a custom global class. Use `open_file` to open its script or `read_file` to view its source.")
+		return "\n".join(lines)
+	# -------------------------------------------------
 	
 	# --- Variant 内置类型：提前短路，避免 ClassDB 报错 ---
 	var is_variant_type: bool = not ClassDB.class_exists(p_class)

@@ -12,6 +12,8 @@
 5. **配置节点属性**：首先使用 `get_scene_node_properties` 获取目标节点的当前属性，然后使用 `set_scene_node_properties` 设置目标节点属性
 6. **确认结果**：使用 `get_edited_scene` 确认编辑后的场景树结构
 
+> 如果你支持图像识别，还可以使用 `capture_edited_scene_screenshot` 截图来确认当前编辑中场景的视觉效果。
+
 ## 帮助文档
  `set_scene_node_properties` 工具的详细使用说明，请查阅文档：`res://addons/godot_ai_chat/skills/scene_builder/reference/scene_node_params_guide.md`
  `edit_scene` 工具的详细使用说明，请查阅文档：`res://addons/godot_ai_chat/skills/scene_builder/reference/edit_scene_tool_guide.md`

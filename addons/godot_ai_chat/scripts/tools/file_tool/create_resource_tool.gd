@@ -18,7 +18,7 @@ const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 
 func _init() -> void:
 	tool_name = "create_resource"
-	tool_description = "Creates a new Resource (.tres/.res) file. REQUIRED: always specify a concrete 'resource_type' (e.g. StyleBoxFlat, Material, Curve, AnimationNode, etc). Never use the default 'Resource' base class — it produces an unusable empty resource in the editor."
+	tool_description = "Creates a new Resource (.tres/.res) file."
 
 
 # --- Public Functions ---
@@ -37,10 +37,10 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"resource_type": {
 				"type": "string",
-				"description": "[REQUIRED] Concrete Resource subclass name to instantiate (e.g. 'StyleBoxFlat', 'Material', 'Curve', 'AnimationNodeBlendTree', 'Gradient', 'NoiseTexture2D', etc). DO NOT use the base 'Resource' class — it is semantically empty and unusable in almost all workflows."
+				"description": "Concrete Resource subclass name to instantiate."
 			}
 		},
-		"required": ["path", "file_name"]
+		"required": ["path", "file_name", "resource_type"]
 	}
 
 

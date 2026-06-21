@@ -152,8 +152,8 @@ func run_task() -> String:
 			AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 			_history.add_tool_message(t_result, call_id, t_name)
 		
-		# 所有工具结果之后，将图片数据注入为 User 消息
-		if not pending_images.is_empty():
+		# 仅当模型支持视觉(VLM)时，才将图片注入回对话供分析
+		if _config.supports_vision and not pending_images.is_empty():
 			var img_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, \
 				"The following images were retrieved from tool execution. Please analyze their content.")
 			for img in pending_images:
