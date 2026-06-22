@@ -17,7 +17,7 @@ Simply put, this is a full-featured AI Agent plugin embedded directly into the G
 3. Place all plugins into the `addons` folder.
 4. Enable this plugin.
 
-> **Note:** Although this plugin's own operation does not depend on any external tools, a few tools invoked by the AI rely on the APIs exposed by the two Godot plugins mentioned above. You only need to download these two plugins and place them in the `addons` folder; there is no need to enable them.
+> **Note:** Although this plugin's own operation does not depend on any external tools, a few tools invoked by the AI rely on the APIs exposed by the two Godot plugins mentioned above. You only need to download these three plugins and place them in the `addons` folder; there is no need to enable them.
 
 ## Plugin Settings
 
