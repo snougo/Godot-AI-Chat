@@ -12,6 +12,7 @@
    - 单处删除或插入编辑 → `insert_code` 或 `delete_code`
    - 多处同时替换编辑 → `multi_replace`
 5. **确认**：使用 `get_edited_script` 确认修改结果。
+6. **保存脚本**：使用 `save_edited_file` 将编辑结果保存到磁盘上。
 
 ## 帮助文档
 `multi_replace` 工具的详细使用说明，请查阅文档 `res://addons/godot_ai_chat/skills/script_editor/reference/multi_replace_tool_guide.md`

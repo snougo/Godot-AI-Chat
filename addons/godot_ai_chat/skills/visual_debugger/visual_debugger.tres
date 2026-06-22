@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://cnwkrann0813e"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_4x5pl"]
+
+[resource]
+script = ExtResource("1_4x5pl")
+skill_name = "Visual Debugger"
+description = "本技能使用对2D、3D视窗进行截图的方式帮助定位场景节点的属性设置问题和其他视觉问题。因此在使用本技能前，请向用户确认当前配置的 Sub-Agent是否为多模态模型。"
+instruction_file = "res://addons/godot_ai_chat/skills/visual_debugger/Skill.md"
+tools = Array[String](["uid://ho4l00iitlui", "uid://dqxvmm3op2kf1", "uid://cgmng0ah88fe4", "uid://oih54idxsj1r"])

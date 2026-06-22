@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://cwspgxyxthk2s"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_5pajg"]
+
+[resource]
+script = ExtResource("1_5pajg")
+skill_name = "PBR Material Builder"
+description = "本技能只适用于自动化创建标准3DPBR材质，不适合其他类型的材质创建。"
+instruction_file = "res://addons/godot_ai_chat/skills/pbr_material_builder/Skill.md"
+tools = Array[String](["uid://j5410tdoskcr", "uid://cw5xgoi1irsaw", "uid://c0y7yml7ecuvx", "uid://cowwxsqfjoudu"])

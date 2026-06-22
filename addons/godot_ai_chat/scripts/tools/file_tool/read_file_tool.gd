@@ -65,7 +65,8 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 安全拦截：禁止读取指定的敏感资源文件
 	if file_type == "resource" and (
 		path == PluginPaths.PLUGIN_DIR + "plugin_settings_config.tres" or
-		path == PluginPaths.PLUGIN_DIR + "sub_agent_config.tres"
+		path == PluginPaths.PLUGIN_DIR + "sub_agent_config.tres" or
+		path == PluginPaths.PLUGIN_DIR + "sketchfab_config.tres"
 	):
 		return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
 	

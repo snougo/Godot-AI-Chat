@@ -247,8 +247,13 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 				byte_buffer.clear()
 				text_buffer += text
 				var new_text = text_buffer.substr(processed_pos)
-				_parse_sse_lines(new_text, result)
-				processed_pos = text_buffer.length()
+				
+				var last_newline: int = new_text.rfind("\n")
+				if last_newline != -1:
+					var complete_text: String = new_text.substr(0, last_newline + 1)
+					_parse_sse_lines(complete_text, result)
+					processed_pos += complete_text.length()
+				# 没有完整行时不处理，processed_pos 保持不变，数据留在缓冲区等待下一块
 				
 				# 首 token 判定：基于实际内容，而非原始 HTTP chunk
 				if not has_received_first_chunk:
@@ -266,6 +271,13 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 		await get_tree().process_frame
 	
 	client.close()
+	
+	# 流结束时刷出缓冲区中不完整的末行（防御性处理，保障数据不丢失）
+	if processed_pos < text_buffer.length():
+		var remaining: String = text_buffer.substr(processed_pos).strip_edges()
+		if not remaining.is_empty():
+			_parse_sse_lines(remaining, result)
+	
 	return result
 
 

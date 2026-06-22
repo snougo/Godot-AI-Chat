@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://dfcxxk3tc5vqf"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_j8wnq"]
+
+[resource]
+script = ExtResource("1_j8wnq")
+skill_name = "Resource Manager"
+description = "本技能用于创建、编辑各类资源文件，并且支持自定义资源。"
+instruction_file = "res://addons/godot_ai_chat/skills/resource_manager/Skill.md"
+tools = Array[String](["uid://j5410tdoskcr", "uid://c3ssc1cwopyos", "uid://dkoemiuidfsgi", "uid://ydovvy0q5bci", "uid://dkor40h5a6eo0"])

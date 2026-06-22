@@ -36,8 +36,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	for skill_name in all_skills:
 		var is_active: bool = ToolRegistry.is_skill_active(skill_name)
-		var status_icon: String = "✅" if is_active else "⬜"
-		#var status_text: String = "**Active (Mounted)**" if is_active else "Inactive (Unmounted)"
 		var status_text: String = "**Active (Used by Sub-Agent)**" if is_active else "Inactive (Not Used by Sub-Agent)"
 		
 		var skill_res = ToolRegistry.available_skills.get(skill_name)
@@ -45,10 +43,10 @@ func execute(p_args: Dictionary) -> Dictionary:
 		if skill_res and "description" in skill_res:
 			desc = skill_res.description
 		
-		output += "### %s %s\n" % [status_icon, skill_name]
-		output += "- **Status**: %s\n" % status_text
+		output += "### %s\n" % skill_name
+		output += "**Status**: %s\n" % status_text
 		if not desc.is_empty():
-			output += "- **Description**: %s\n" % desc
+			output += "**Description**: %s\n" % desc
 		
 		# 添加工具列表
 		var tool_names: Array[String] = []
@@ -61,15 +59,14 @@ func execute(p_args: Dictionary) -> Dictionary:
 						tool_names.append(tool_name_str)
 		
 		if tool_names.is_empty():
-			output += "- **Tools**: None\n"
+			output += "**Tools**: None\n"
 		else:
-			output += "- **Tools**: %s\n" % ", ".join(tool_names)
+			output += "**Tools**:\n"
+			for t_name in tool_names:
+				output += "\t- %s\n" % t_name
 		
 		output += "\n"
-	
 	output += "---\n"
-	#output += "> To change status, use the `manage_skill` tool with action='mount' or 'unmount'."
-	
 	return {"success": true, "data": output}
 
 

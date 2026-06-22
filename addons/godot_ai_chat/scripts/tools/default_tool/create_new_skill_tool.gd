@@ -13,7 +13,7 @@ const SKILLS_BASE_PATH: String = "res://addons/godot_ai_chat/skills/"
 
 func _init() -> void:
 	tool_name = "create_new_skill"
-	tool_description = "Creates a new skill folder structure, generates the `SKILL.md` file, and creates the corresponding AiSkill resource file."
+	tool_description = "Creates a new skill folder structure, generates `SKILL.md` and AiSkill resource file. Skills folder path: `res://addons/godot_ai_chat/skills`"
 
 
 # --- Public Functions ---
@@ -25,11 +25,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"skill_folder_name": {
 				"type": "string",
-				"description": "The folder name for the skill (kebab_case), e.g., 'my_new_skill'. Must be a valid folder name, not a path."
+				"description": "The folder name for the skill (kebab_case), Must be a valid folder name, not a path."
 			},
 			"skill_md_content": {
 				"type": "string",
-				"description": "The full content of the SKILL.md file, including frontmatter. The first line should be a Markdown heading (e.g., '# Skill Name') which will be used as the AiSkill resource's skill_name."
+				"description": "The full content of the SKILL.md file, including frontmatter."
 			}
 		},
 		"required": ["skill_folder_name", "skill_md_content"]
