@@ -13,7 +13,7 @@ Simply put, this is a full-featured AI Agent plugin embedded directly into the G
 ## Installation
 
 1. Download this plugin.
-2. Download the dependency plugins: [Context Toolkit](https://github.com/snougo/Context-Toolkit) and [Godot Dom Parser](https://github.com/codeWonderland/godot-dom-parser).
+2. Download the dependency plugins: [Context Toolkit](https://github.com/snougo/Context-Toolkit) / [Godot Dom Parser](https://github.com/codeWonderland/godot-dom-parser) / [Godot Shader Library](https://github.com/Kelpekk/Godot-Shader-Library).
 3. Place all plugins into the `addons` folder.
 4. Enable this plugin.
 
