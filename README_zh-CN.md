@@ -9,7 +9,7 @@
 
 ## 安装
 1. 下载本插件
-2. 下载依赖插件 [Context Toolkit](https://github.com/snougo/Context-Toolkit) 和 [Godot Dom Parser](https://github.com/codeWonderland/godot-dom-parser)
+2. 下载依赖插件： [Context Toolkit](https://github.com/snougo/Context-Toolkit) / [Godot Dom Parser](https://github.com/codeWonderland/godot-dom-parser) / [Godot Shader Library](https://github.com/Kelpekk/Godot-Shader-Library).
 3. 将所有插件放入addons文件夹中
 4. 启用本插件
 
