@@ -9,11 +9,11 @@
 
 ## 安装
 1. 下载本插件
-2. 下载依赖插件 [Context Toolkit](https://github.com/snougo/Context-Toolkit) 和 [Godot Dom Parser](https://github.com/codeWonderland/godot-dom-parser)
+2. 下载依赖插件： [Context Toolkit](https://github.com/snougo/Context-Toolkit) / [Godot Dom Parser](https://github.com/codeWonderland/godot-dom-parser) / [Godot Shader Library](https://github.com/Kelpekk/Godot-Shader-Library).
 3. 将所有插件放入addons文件夹中
 4. 启用本插件
 
-> 注意：本插件虽然自身运行不依赖任何外部工具，但是少数供AI调用的工具依赖上述两个Godot插件暴露的API工作，你只需要下载这两个插件并放入addons插件文件夹中即可，无需启用。
+> 注意：本插件虽然自身运行不依赖任何外部工具，但是少数供AI调用的工具依赖上述三个Godot插件暴露的API工作，你只需要下载这三个插件并放入addons插件文件夹中即可，无需启用。
 
 ## 插件设置
 初次启用时，你需要找到插件的设置页面，并对 `Base Url`, `API Key` 以及 `System Prompt` 这三个设置选项进行填写。如果你不知道这三个设置选项是什么意思，可以直接发送截图给第三方AI询问，我就不在这里解释了。
