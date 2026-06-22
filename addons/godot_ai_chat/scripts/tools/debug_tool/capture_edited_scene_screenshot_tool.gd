@@ -4,13 +4,14 @@ extends BaseSceneTool
 ## 捕获场景视窗截图工具
 ## 
 ## 捕获当前编辑器3D或2D视窗的画面，返回截图数据供AI分析。
-## 自动检测当前活动的视窗类型（3D优先），对于AI理解场景布局、节点位置、视觉效果等非常有用。
+## 根据场景根节点类型自动选择视窗（Node2D/Control → 2D，Node3D → 3D），
+## 也可通过 viewport_type 参数手动指定。
 
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "capture_edited_scene_screenshot"
-	tool_description = "Captures a screenshot of the current edited scene viewport in the Godot Editor. Useful for analyzing scene layout, visual effects, or debugging rendering issues. Returns the screenshot as an image attachment."
+	tool_description = "Captures a screenshot of the current edited scene viewport in the Godot Editor."
 
 
 # --- Public Functions ---
@@ -18,12 +19,18 @@ func _init() -> void:
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
-		"properties": {},
-		"required": []
+		"properties": {
+			"viewport_type": {
+				"type": "string",
+				"description": "Force screenshot from '2D' or '3D' viewport.",
+				"enum": ["2D", "3D"]
+			}
+		},
+		"required": ["viewport_type"]
 	}
 
 
-func execute(_p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> Dictionary:
 	if not Engine.is_editor_hint():
 		return {"success": false, "data": "Editor only tool."}
 	
@@ -35,22 +42,26 @@ func execute(_p_args: Dictionary) -> Dictionary:
 	var viewport: SubViewport = null
 	var viewport_type: String = ""
 	
-	# 优先尝试获取3D视窗
-	var viewport_3d: SubViewport = EditorInterface.get_editor_viewport_3d()
-	if viewport_3d:
-		viewport = viewport_3d
+	# 优先使用手动指定的视窗类型，否则根据场景根节点类型自动判断
+	if p_args.has("viewport_type") and not p_args["viewport_type"] == null:
+		viewport_type = p_args["viewport_type"]
+	elif root is Node2D or root is Control:
+		viewport_type = "2D"
+	else:
 		viewport_type = "3D"
 	
-	# 如果没有3D视窗，尝试获取2D视窗
-	if not viewport:
-		var viewport_2d: SubViewport = EditorInterface.get_editor_viewport_2d()
-		if viewport_2d:
-			viewport = viewport_2d
-			viewport_type = "2D"
+	# 按类型获取视窗并自动切换标签
+	if viewport_type == "2D":
+		viewport = EditorInterface.get_editor_viewport_2d()
+		if viewport:
+			EditorInterface.set_main_screen_editor("2D")
+	else:
+		viewport = EditorInterface.get_editor_viewport_3d()
+		if viewport:
+			EditorInterface.set_main_screen_editor("3D")
 	
-	# 如果都没有获取到
 	if not viewport:
-		return {"success": false, "data": "No 2D or 3D viewport available."}
+		return {"success": false, "data": "No %s viewport available." % viewport_type}
 	
 	# 等待渲染完成
 	await RenderingServer.frame_post_draw

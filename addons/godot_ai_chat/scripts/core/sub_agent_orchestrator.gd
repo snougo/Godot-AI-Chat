@@ -127,9 +127,39 @@ func run_task() -> String:
 				break
 			
 			var tool_inst = _tools.get(t_name)
+			#var t_result = ""
+			#if tool_inst:
+				#var res = await tool_inst.execute(t_args)
+				#
+				## 多模态支持：检测工具返回的图片附件
+				#var has_image_attachment: bool = res.has("attachments") \
+					#and res.attachments is Dictionary \
+					#and res.attachments.has("image_data") \
+					#and res.attachments.image_data is PackedByteArray \
+					#and not res.attachments.image_data.is_empty()
+				#
+				#if has_image_attachment:
+					#pending_images.append({
+						#"data": res.attachments.image_data,
+						#"mime": res.attachments.get("mime", "image/png"),
+						#"tool_name": t_name
+					#})
+				#
+				#t_result = JSON.stringify(res.get("data", res), "\t")
+			#else:
+				#t_result = "[ERROR] Tool not found: " + t_name
+			#
+			#AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
+			#_history.add_tool_message(t_result, call_id, t_name)
+			
 			var t_result = ""
 			if tool_inst:
 				var res = await tool_inst.execute(t_args)
+				
+				# 先获取结果文本
+				t_result = JSON.stringify(res.get("data", res), "\t")
+				
+				AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 				
 				# 多模态支持：检测工具返回的图片附件
 				var has_image_attachment: bool = res.has("attachments") \
@@ -139,21 +169,31 @@ func run_task() -> String:
 					and not res.attachments.image_data.is_empty()
 				
 				if has_image_attachment:
-					pending_images.append({
-						"data": res.attachments.image_data,
-						"mime": res.attachments.get("mime", "image/png"),
-						"tool_name": t_name
-					})
-				
-				t_result = JSON.stringify(res.get("data", res), "\t")
+					if is_gemini:
+						# Gemini: 图片直接放入 tool 消息（原生支持）
+						var tool_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, t_result, t_name)
+						tool_msg.tool_call_id = call_id
+						tool_msg.add_image(res.attachments.image_data, res.attachments.get("mime", "image/png"))
+						_history.add_message(tool_msg)
+					else:
+						# 非 Gemini: 收集图片，稍后通过新增 User 消息承载
+						pending_images.append({
+							"data": res.attachments.image_data,
+							"mime": res.attachments.get("mime", "image/png"),
+							"tool_name": t_name
+						})
+						_history.add_tool_message(t_result, call_id, t_name)
+				else:
+					_history.add_tool_message(t_result, call_id, t_name)
 			else:
 				t_result = "[ERROR] Tool not found: " + t_name
-			
-			AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
-			_history.add_tool_message(t_result, call_id, t_name)
+				_history.add_tool_message(t_result, call_id, t_name)
 		
 		# 仅当模型支持视觉(VLM)时，才将图片注入回对话供分析
-		if _config.supports_vision and not pending_images.is_empty():
+		#if _config.supports_vision and not pending_images.is_empty():
+		
+		# 仅当非 Gemini 且模型支持视觉(VLM)时，才将图片以 User 消息注入
+		if not is_gemini and _config.supports_vision and not pending_images.is_empty():
 			var img_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, \
 				"The following images were retrieved from tool execution. Please analyze their content.")
 			for img in pending_images:

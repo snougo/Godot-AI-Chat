@@ -7,14 +7,15 @@
 
 1. **打开场景**：使用 `open_file` 打开需要检查的 `.tscn` 场景文件。
 2. **调整视角**：
-   - 3D 场景：使用 `set_3d_viewport_camera` 设置相机位置和朝向。推荐使用 `position` + `look_at` 组合，直观指定"站在哪里，看哪里"。
+   - 3D 场景：使用 `set_3d_viewport_camera`，必须同时提供 `position` 和 `look_at`，直观指定"站在哪里，看哪里"。
    - 2D 场景：使用 `set_2d_viewport_transform` 调整缩放和平移。
 3. **截图检查**：使用 `capture_edited_scene_screenshot` 截取当前视窗画面进行分析。
 4. **多角度验证**：重复步骤 2-3，从多个角度检查场景（如俯视图、前视图、侧视图、特写等）。
-5. **问题定位**：根据截图发现的问题，调用 `report_task_result` 进行报告。
+5. **检查场景数据**：使用 `get_edited_scene` 获取当前场景节点结构，并使用 `get_scene_node_properties` 检查相关节点的属性。
+6. **问题定位**：结合多角度截图内容和节点属性信息，定位问题所在（如果存在），并调用 `report_task_result` 进行报告。
 
 ## 注意事项
-- 优先使用 `position` + `look_at` 而非 `rotation`，更直观且不易出错
+- 必须同时提供 `position` + `look_at`，缺少任意一个都会报错
 - 3D 视口索引 0 是主透视视口，1-3 是四视图的其他面板
 - 截图前确保视窗已完成渲染，截图工具内部已处理等待逻辑
 - 检查完毕后可通过 `set_main_screen_editor("3D")` 恢复默认视角

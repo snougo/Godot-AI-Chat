@@ -37,6 +37,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if not Engine.is_editor_hint():
 		return {"success": false, "data": "Editor only tool."}
 	
+	EditorInterface.set_main_screen_editor("2D")
 	var viewport: SubViewport = EditorInterface.get_editor_viewport_2d()
 	if not viewport:
 		return {"success": false, "data": "No 2D viewport available."}

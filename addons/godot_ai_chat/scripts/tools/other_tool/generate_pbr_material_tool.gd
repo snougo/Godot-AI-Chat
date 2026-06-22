@@ -17,7 +17,7 @@ const TEXTURE_MAPS: Dictionary = {
 }
 
 ## 支持的文件扩展名
-const SUPPORTED_EXTENSIONS: Array[String] = ["png", "jpg", "jpeg", "tga", "webp", "bmp"]
+const SUPPORTED_EXTENSIONS: Array[String] = ["png", "jpg", "jpeg"]
 
 ## 分辨率后缀列表
 const RESOLUTION_SUFFIXES: Array[String] = ["_1k", "_2k", "_4k", "_8k", "_512", "_1024", "_2048", "_4096"]

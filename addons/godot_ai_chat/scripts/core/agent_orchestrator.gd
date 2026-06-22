@@ -112,6 +112,18 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 				else:
 					result_str = str(data_val)
 				
+				#if result_dict.has("attachments"):
+					#var att: Dictionary = result_dict.attachments
+					#if att.has("image_data"):
+						#image_data = att.image_data
+						#image_mime = att.get("mime", "image/png")
+						
+						#if not is_gemini and not image_data.is_empty():
+							#_attach_image_to_last_user_message(base_history, image_data, image_mime)
+							#if result_str == "Image successfully read and attached to this message.":
+								#result_str = "Image content has been uploaded to the context. Please check the user message."
+							#image_data = PackedByteArray()
+			
 				if result_dict.has("attachments"):
 					var att: Dictionary = result_dict.attachments
 					if att.has("image_data"):
@@ -119,19 +131,26 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 						image_mime = att.get("mime", "image/png")
 						
 						if not is_gemini and not image_data.is_empty():
-							_attach_image_to_last_user_message(base_history, image_data, image_mime)
 							if result_str == "Image successfully read and attached to this message.":
-								result_str = "Image content has been uploaded to the context. Please check the user message."
-							image_data = PackedByteArray()
+								result_str = "Image content has been uploaded to the context as a new user message."
+							# 暂不清空 image_data，等 append_tool_message 后再处理
 			
-			current_chat_window.append_tool_message(tool_name, result_str, call_id, image_data, image_mime)
+			#current_chat_window.append_tool_message(tool_name, result_str, call_id, image_data, image_mime)
+			
+			current_chat_window.append_tool_message(tool_name, result_str, call_id,
+				image_data if is_gemini else PackedByteArray(),
+				image_mime if is_gemini else "")
+			
+			# 新增：将图片数据作为独立的 User 消息插入
+			if not is_gemini and not image_data.is_empty():
+				current_chat_window.append_user_message("Image content from tool: " + tool_name, [{"data": image_data, "mime": image_mime}])
 
 
 # --- Private Functions ---
 
 # 附加图片到最后一条用户消息
-func _attach_image_to_last_user_message(history: ChatMessageHistory, p_data: PackedByteArray, p_mime: String) -> void:
-	for i in range(history.messages.size() - 1, -1, -1):
-		if history.messages[i].role == ChatMessage.ROLE_USER:
-			history.messages[i].add_image(p_data, p_mime)
-			return
+#func _attach_image_to_last_user_message(history: ChatMessageHistory, p_data: PackedByteArray, p_mime: String) -> void:
+	#for i in range(history.messages.size() - 1, -1, -1):
+		#if history.messages[i].role == ChatMessage.ROLE_USER:
+			#history.messages[i].add_image(p_data, p_mime)
+			#return
