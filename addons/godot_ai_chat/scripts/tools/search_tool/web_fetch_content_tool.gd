@@ -32,7 +32,7 @@ const _NOISE_TAGS: Array[String] = [
 
 func _init() -> void:
 	tool_name = "web_fetch_content"
-	tool_description = "Fetches a web page and extracts its main text content. NOTE: ALWAYS use `search_godot_api` first to read Godot API doc."
+	tool_description = "Fetches a web page and extracts its main text content. NOTE: Always use `search_godot_api` to read Godot API doc, not this tool."
 
 
 # --- Public Functions ---

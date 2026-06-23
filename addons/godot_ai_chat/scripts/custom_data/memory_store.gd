@@ -79,26 +79,15 @@ func delete_entry(p_id: int) -> bool:
 
 # --- 检索 ---
 
-## 多条件搜索
-## 关键词使用词级模糊匹配（任意词命中即匹配）
-func search(p_workspace_path: String = "", p_keywords: String = "", p_limit: int = 10, p_memory_type: String = "", p_topic: String = "") -> Array[MemoryEntry]:
+## 按工作区+话题检索
+func search(p_workspace_path: String = "", p_topic: String = "", p_limit: int = 10) -> Array[MemoryEntry]:
 	var results: Array[MemoryEntry] = []
 	
 	for entry in entries:
-		# 工作区过滤：如果传了工作区路径
+		# 工作区过滤
 		if not p_workspace_path.is_empty():
 			if _normalize_path(entry.workspace_path) != _normalize_path(p_workspace_path):
 				continue
-		
-		# 模糊关键词搜索
-		if not p_keywords.is_empty():
-			var text_lower: String = (entry.title + " " + entry.content).to_lower()
-			if not _fuzzy_match(p_keywords.to_lower(), text_lower):
-				continue
-		
-		# 类型过滤
-		if not p_memory_type.is_empty() and entry.memory_type != p_memory_type:
-			continue
 		
 		# 话题过滤
 		if not p_topic.is_empty() and entry.topic != p_topic:

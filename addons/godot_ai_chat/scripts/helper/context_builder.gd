@@ -117,6 +117,36 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	return context_messages
 
 
+## 构建 Sub-Agent 的上下文消息列表
+## [param p_base_system_prompt]: SubAgentConfig.base_system_prompt
+## [param p_skill_name]: 技能名称（用于加载对应的 SKILL.md）
+## [param p_task_description]: 任务描述文本
+## [return]: [SYSTEM, USER] 两条消息组成的数组
+static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: String, p_task_description: String) -> Array[ChatMessage]:
+	var messages: Array[ChatMessage] = []
+	
+	# 1. 加载技能指令（SKILL.md）
+	var skill_instruction := ""
+	var skill_res: Resource = ToolRegistry.available_skills.get(p_skill_name)
+	if skill_res and "instruction_file" in skill_res:
+		var path: String = skill_res.instruction_file
+		if FileAccess.file_exists(path):
+			skill_instruction = FileAccess.get_file_as_string(path)
+	
+	# 2. 组装 System Prompt
+	var final_sys_prompt: String = p_base_system_prompt
+	if not skill_instruction.is_empty():
+		final_sys_prompt += "\n\n==== SKILL INSTRUCTION ====\n" + skill_instruction
+	
+	messages.append(ChatMessage.new(ChatMessage.ROLE_SYSTEM, final_sys_prompt))
+	
+	# 3. 组装 Task Prompt
+	var final_user_prompt := "Please execute the following task using your tools:\n\n==== TASK DESCRIPTION ====\n" + p_task_description
+	messages.append(ChatMessage.new(ChatMessage.ROLE_USER, final_user_prompt))
+	
+	return messages
+
+
 # --- Private Functions ---
 
 # 路径归一化：去除尾部斜杠

@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "search_memories"
-	tool_description = "Search stored memories by workspace."
+	tool_description = "Search stored memories by workspace and topic."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -15,49 +15,28 @@ func get_parameters_schema() -> Dictionary:
 				"type": "string",
 				"description": "Filter by workspace path (required)"
 			},
-			"keywords": {
+			"topic": {
 				"type": "string",
-				"description": "Keywords to fuzzy search in title and content (optional — leave empty to return all entries of the specified type and topic)"
-			},
-			"memory_type": {
-				"type": "string",
-				"enum": MemoryEntry.get_valid_types(),
-				"description": "Filter by memory type (required — must select one type)"
+				"description": "Filter by topic (required). Use `get_memory_topics` to get existing topics."
 			},
 			"limit": {
 				"type": "integer",
 				"minimum": 1,
 				"maximum": 50,
-				"default": 10,
-				"description": "Maximum number of results (required, default 10, max 50)"
-			},
-			"topic": {
-				"type": "string",
-				"description": "Filter by topic (required), Use `get_memory_topics` to get existing topics."
+				"description": "Maximum number of results (required)"
 			}
 		},
-		"required": ["workspace_path", "memory_type", "limit", "topic"]
+		"required": ["workspace_path", "topic", "limit"]
 	}
 
 
 func execute(p_args: Dictionary) -> Dictionary:
 	var workspace_path: String = p_args.get("workspace_path", "").strip_edges()
-	var keywords: String = p_args.get("keywords", "").strip_edges()
-	var memory_type: String = p_args.get("memory_type", "").strip_edges()
-	var limit: int = p_args.get("limit", 10)
 	var topic: String = p_args.get("topic", "").strip_edges()
+	var limit: int = p_args.get("limit", 10)
 	
 	if workspace_path.is_empty():
 		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
-	
-	if memory_type.is_empty():
-		return {"success": false, "data": "Error: memory_type is required. Select one type from: %s" % [", ".join(MemoryEntry.get_valid_types())]}
-	
-	if not MemoryEntry.is_valid_type(memory_type):
-		return {
-			"success": false,
-			"data": "Error: Invalid memory type '%s'. Valid options: %s" % [memory_type, MemoryEntry.get_valid_types()]
-		}
 	
 	if topic.is_empty():
 		return {"success": false, "data": "Error: topic is required. Use get_memory_topics to see available topics."}
@@ -65,7 +44,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	limit = clampi(limit, 1, 50)
 	
 	var store := _load_or_create_store()
-	var results := store.search(workspace_path, keywords, limit, memory_type, topic)
+	var results := store.search(workspace_path, topic, limit)
 	
 	if results.is_empty():
 		return {"success": true, "data": "No memories found matching the criteria."}

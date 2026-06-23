@@ -45,8 +45,8 @@ enum UIState {
 # --- @onready Vars ---
 
 @onready var _status_label: Label = $TabContainer/Chat/VBoxContainer/StatusLabel
-@onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/ChatTurnDisplay
-@onready var _current_token_usage: Label = $TabContainer/Chat/VBoxContainer/CurrentTokenUsage
+@onready var _chat_turn_display: Label = $TabContainer/Chat/VBoxContainer/InfoContainer/ChatTurnDisplay
+@onready var _current_token_usage: Label = $TabContainer/Chat/VBoxContainer/InfoContainer/CurrentTokenUsage
 
 @onready var _workspace_label: Label = $TabContainer/Chat/VBoxContainer/WorkspaceLabel
 @onready var _workspace_select_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/WorkspaceSelectButton
@@ -69,6 +69,8 @@ enum UIState {
 @onready var _error_dialog: AcceptDialog = $AcceptDialog
 @onready var _file_dialog: FileDialog = $FileDialog
 @onready var _tab_container: TabContainer = $TabContainer 
+
+@onready var _allow_editor_script_checkbutton: CheckButton = $TabContainer/Chat/VBoxContainer/InfoContainer/CheckButton
 
 # 暴露给 Controller 使用的内部节点引用
 @onready var _chat_list_container: VBoxContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer/ChatListContainer
@@ -114,6 +116,10 @@ func _ready() -> void:
 	
 	_workspace_select_button.pressed.connect(_on_workspace_select_button_pressed)
 	_workspace_file_dialog.dir_selected.connect(_on_workspace_dir_selected)
+	
+	var _cfg: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	_allow_editor_script_checkbutton.button_pressed = _cfg.allow_editor_script_execution
+	_allow_editor_script_checkbutton.toggled.connect(_on_allow_editor_script_toggled)
 	
 	_update_session_selector()
 	reset_token_usage_display()
@@ -309,12 +315,7 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 	var display_prompt: int = _archived_total_usage.prompt + p
 	var display_completion: int = _archived_total_usage.completion + c
 	
-	_current_token_usage.text = "Cost: %d (Sum: %d) | Prompt: %d | Compl: %d" % [
-		t, 
-		display_total,
-		p,
-		c
-	]
+	_current_token_usage.text = "Total Tokens: %d" % display_total
 	
 	_current_token_usage.tooltip_text = (
 		"Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" +
@@ -327,7 +328,7 @@ func reset_token_usage_display() -> void:
 	_archived_total_usage = { "prompt": 0, "completion": 0, "total": 0 }
 	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
 	
-	_current_token_usage.text = "Token Cost: 0"
+	_current_token_usage.text = "Total Tokens: 0"
 	_current_token_usage.tooltip_text = ""
 
 
@@ -539,3 +540,9 @@ func _on_workspace_select_button_pressed() -> void:
 func _on_workspace_dir_selected(p_dir: String) -> void:
 	workspace_changed.emit(p_dir)
 	_update_workspace_display(p_dir)
+
+
+func _on_allow_editor_script_toggled(p_toggled_on: bool) -> void:
+	var _cfg: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	_cfg.allow_editor_script_execution = p_toggled_on
+	ResourceSaver.save(_cfg, PluginPaths.SETTINGS_PATH)

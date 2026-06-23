@@ -17,6 +17,9 @@ const CULLING_INTERVAL: float = 0.2 # 每秒检测5次，足够平滑且低耗
 ## 消息块场景
 const CHAT_MESSAGE_BLOCK_SCENE: PackedScene = preload(PluginPaths.CHAT_MESSAGE_BLOCK_SCENE)
 
+# [自动滚动] 距底部多少像素以内视为"在底部"
+const BOTTOM_THRESHOLD: float = 50.0
+
 # --- Public Vars ---
 
 ## 消息列表容器引用
@@ -34,10 +37,17 @@ var is_plugin_init: bool = false
 var _culling_timer: float = 0.0
 var _is_loading: bool = false
 
+# [自动滚动] 用户是否在底部，允许自动跟随
+var _auto_scroll_enabled: bool = true
+# [自动滚动] 防递归标志，区分程序滚动和用户操作
+var _is_auto_scrolling: bool = false
+
 
 # --- Built-in Functions ---
 
 func _process(delta: float) -> void:
+	_ensure_scroll_signal_connected()
+	
 	_culling_timer += delta
 	if _culling_timer >= CULLING_INTERVAL:
 		_culling_timer = 0.0
@@ -59,6 +69,7 @@ func load_session_history_resource(p_session_history: ChatMessageHistory) -> voi
 func append_user_message(p_text: String, p_images: Array = []) -> void:
 	chat_history.add_user_message(p_text, p_images)
 	_add_block(ChatMessage.ROLE_USER, p_text, true, [], p_images)
+	_scroll_to_bottom()
 
 
 ## 追加错误消息到 UI
@@ -93,6 +104,7 @@ func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call
 	# [修复] 修正参数传递顺序：
 	# _add_block(role, content, instant, tool_calls, images, reasoning)
 	_add_block(ChatMessage.ROLE_TOOL, p_result_text, true, [], display_images, "")
+	_scroll_to_bottom()
 
 
 ## 处理流式数据块
@@ -151,7 +163,8 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 		if last.role != ChatMessage.ROLE_ASSISTANT:
 			if not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty():
 				chat_history.add_message(target_msg)
-
+	
+	# 自动滚动已改为通过 ScrollBar.changed 信号实时响应，无需此处手动触发
 
 
 ## 回滚未完成的消息（用于停止生成时）
@@ -330,7 +343,54 @@ func _get_last_block() -> ChatMessageBlock:
 
 # 滚动到列表底部
 func _scroll_to_bottom() -> void:
+	_auto_scroll_enabled = true
 	await get_tree().process_frame
 	await get_tree().process_frame
 	if chat_scroll_container.get_v_scroll_bar():
 		chat_scroll_container.scroll_vertical = chat_scroll_container.get_v_scroll_bar().max_value
+
+
+# 即时滚动到底部（call_deferred 确保在布局更新后执行）
+func _apply_auto_scroll() -> void:
+	if not is_instance_valid(chat_scroll_container):
+		return
+	var sb: ScrollBar = chat_scroll_container.get_v_scroll_bar()
+	if sb:
+		chat_scroll_container.scroll_vertical = sb.max_value
+
+
+# 确保 ScrollBar 的信号已连接（延迟连接，因为 ScrollBar 可能在节点初始化时尚未创建）
+func _ensure_scroll_signal_connected() -> void:
+	if not is_instance_valid(chat_scroll_container):
+		return
+	var sb := chat_scroll_container.get_v_scroll_bar()
+	if not sb:
+		return
+	if not sb.changed.is_connected(_on_scroll_bar_changed):
+		sb.changed.connect(_on_scroll_bar_changed)
+	if not sb.value_changed.is_connected(_on_scroll_value_changed):
+		sb.value_changed.connect(_on_scroll_value_changed)
+
+
+# ScrollBar 属性变化时触发（max_value 增加等），自动跟随到底部
+func _on_scroll_bar_changed() -> void:
+	if _is_auto_scrolling or not _auto_scroll_enabled:
+		return
+	_is_auto_scrolling = true
+	_apply_auto_scroll()
+	_is_auto_scrolling = false
+
+
+# ScrollBar 值变化时触发（用户手动滚动），更新自动滚动状态
+func _on_scroll_value_changed(p_value: float) -> void:
+	if _is_auto_scrolling:
+		return  # 程序触发的，忽略
+	if not is_instance_valid(chat_scroll_container):
+		return
+	var sb := chat_scroll_container.get_v_scroll_bar()
+	if sb and sb.max_value > 0:
+		var max_scroll: float = sb.max_value - sb.page
+		if p_value >= max_scroll - BOTTOM_THRESHOLD:
+			_auto_scroll_enabled = true
+		else:
+			_auto_scroll_enabled = false

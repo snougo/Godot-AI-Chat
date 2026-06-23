@@ -37,3 +37,7 @@ extends Resource
 
 ## 系统提示词（System Prompt），用于设定 AI 的角色和行为准则
 @export_multiline var system_prompt: String = ""
+
+## 是否允许 AI 调用 run_editor_script 执行编辑器脚本。
+## 默认关闭。Chat UI 中有快捷开关可控制。
+@export var allow_editor_script_execution: bool = false

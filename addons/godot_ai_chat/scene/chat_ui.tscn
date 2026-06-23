@@ -15,31 +15,25 @@
 bg_color = Color(0.14921169, 0.17173423, 0.20833331, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_a7m7s"]
-bg_color = Color(0, 0.2535977, 0.58258927, 1)
+bg_color = Color(0.12124173, 0.25550973, 0.5843137, 1)
 
 [sub_resource type="LabelSettings" id="LabelSettings_2kdn8"]
 font_size = 25
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_w6mml"]
-bg_color = Color(0.070537165, 0.13036937, 0.26785713, 1)
-
-[sub_resource type="LabelSettings" id="LabelSettings_qjs14"]
-font_size = 25
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cf2p2"]
-bg_color = Color(0.40740654, 0.15687086, 0.44705883, 1)
-
-[sub_resource type="LabelSettings" id="LabelSettings_yewlv"]
-font_size = 25
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qjs14"]
-bg_color = Color(0, 0.40784314, 0.16943333, 1)
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5m1uj"]
+bg_color = Color(0.14029495, 0.42352942, 0.09909216, 1)
 
 [sub_resource type="LabelSettings" id="LabelSettings_ju5xs"]
 font_size = 25
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6j1bt"]
 bg_color = Color(0.11236896, 0.24705882, 0.18459842, 0.627451)
+
+[sub_resource type="LabelSettings" id="LabelSettings_qjs14"]
+font_size = 20
+
+[sub_resource type="LabelSettings" id="LabelSettings_yewlv"]
+font_size = 20
 
 [node name="ChatUI" type="Control" unique_id=1784100897]
 layout_mode = 3
@@ -74,7 +68,6 @@ layout_mode = 2
 theme_override_constants/margin_left = 6
 theme_override_constants/margin_top = 6
 theme_override_constants/margin_right = 6
-theme_override_constants/margin_bottom = 6
 metadata/_tab_index = 0
 
 [node name="VBoxContainer" type="VBoxContainer" parent="TabContainer/Chat" unique_id=1931601258]
@@ -89,25 +82,9 @@ label_settings = SubResource("LabelSettings_2kdn8")
 vertical_alignment = 1
 text_overrun_behavior = 1
 
-[node name="ChatTurnDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=968373152]
-layout_mode = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_w6mml")
-text = "Turns:"
-label_settings = SubResource("LabelSettings_qjs14")
-vertical_alignment = 1
-text_overrun_behavior = 1
-
-[node name="CurrentTokenUsage" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=430120038]
-layout_mode = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_cf2p2")
-text = "Token Cost: 0"
-label_settings = SubResource("LabelSettings_yewlv")
-vertical_alignment = 1
-text_overrun_behavior = 1
-
 [node name="WorkspaceLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=891807978]
 layout_mode = 2
-theme_override_styles/normal = SubResource("StyleBoxFlat_qjs14")
+theme_override_styles/normal = SubResource("StyleBoxFlat_5m1uj")
 text = "Current Workspace: res://addons/godot_ai_chat"
 label_settings = SubResource("LabelSettings_ju5xs")
 vertical_alignment = 1
@@ -245,6 +222,33 @@ text = "Send"
 icon = ExtResource("9_ulynj")
 text_overrun_behavior = 2
 expand_icon = true
+
+[node name="InfoContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=558707086]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="ChatTurnDisplay" type="Label" parent="TabContainer/Chat/VBoxContainer/InfoContainer" unique_id=968373152]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Turns:"
+label_settings = SubResource("LabelSettings_qjs14")
+vertical_alignment = 1
+
+[node name="CurrentTokenUsage" type="Label" parent="TabContainer/Chat/VBoxContainer/InfoContainer" unique_id=430120038]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Total Tokens: 0"
+label_settings = SubResource("LabelSettings_yewlv")
+vertical_alignment = 1
+
+[node name="CheckButton" type="CheckButton" parent="TabContainer/Chat/VBoxContainer/InfoContainer" unique_id=183730394]
+layout_mode = 2
+tooltip_text = "Allowed LLM Can Run Custom EditorScript.
+Don't Set Enable If You Don't Know What You Are Doing!!!"
+theme_override_colors/font_pressed_color = Color(1, 0.96862745, 0.627451, 1)
+theme_override_colors/font_hover_pressed_color = Color(1, 0.96862745, 0.627451, 1)
+theme_override_colors/button_checked_color = Color(0.49494523, 1, 0.46427542, 1)
+text = "Run EditorScript"
 
 [node name="Settings" type="MarginContainer" parent="TabContainer" unique_id=1397559023]
 visible = false

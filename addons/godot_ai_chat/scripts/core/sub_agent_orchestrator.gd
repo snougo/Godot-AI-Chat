@@ -26,22 +26,14 @@ func run_task() -> String:
 	# 1. 加载工具
 	_load_isolated_tools()
 	
-	# 2. 组装提示词
-	var skill_instruction := ""
-	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
-	if skill_res and "instruction_file" in skill_res:
-		var path: String = skill_res.instruction_file
-		if FileAccess.file_exists(path):
-			skill_instruction = FileAccess.get_file_as_string(path)
-	
-	var final_sys_prompt: String = _config.base_system_prompt
-	if not skill_instruction.is_empty():
-		final_sys_prompt += "\n\n==== SKILL INSTRUCTION ====\n" + skill_instruction
-	
-	_history.add_message(ChatMessage.new(ChatMessage.ROLE_SYSTEM, final_sys_prompt))
-	
-	var final_user_prompt := "Please execute the following task using your tools:\n\n==== TASK DESCRIPTION ====\n" + task_description
-	_history.add_message(ChatMessage.new(ChatMessage.ROLE_USER, final_user_prompt))
+	# 2. 组装上下文（委托给 ContextBuilder）
+	var context_messages: Array[ChatMessage] = ContextBuilder.build_sub_agent_context(
+		_config.base_system_prompt,
+		skill_name,
+		task_description
+	)
+	for msg in context_messages:
+		_history.add_message(msg)
 	
 	# 3. 准备 Provider
 	if _config.model_name.is_empty():
@@ -127,30 +119,6 @@ func run_task() -> String:
 				break
 			
 			var tool_inst = _tools.get(t_name)
-			#var t_result = ""
-			#if tool_inst:
-				#var res = await tool_inst.execute(t_args)
-				#
-				## 多模态支持：检测工具返回的图片附件
-				#var has_image_attachment: bool = res.has("attachments") \
-					#and res.attachments is Dictionary \
-					#and res.attachments.has("image_data") \
-					#and res.attachments.image_data is PackedByteArray \
-					#and not res.attachments.image_data.is_empty()
-				#
-				#if has_image_attachment:
-					#pending_images.append({
-						#"data": res.attachments.image_data,
-						#"mime": res.attachments.get("mime", "image/png"),
-						#"tool_name": t_name
-					#})
-				#
-				#t_result = JSON.stringify(res.get("data", res), "\t")
-			#else:
-				#t_result = "[ERROR] Tool not found: " + t_name
-			#
-			#AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
-			#_history.add_tool_message(t_result, call_id, t_name)
 			
 			var t_result = ""
 			if tool_inst:
@@ -188,9 +156,6 @@ func run_task() -> String:
 			else:
 				t_result = "[ERROR] Tool not found: " + t_name
 				_history.add_tool_message(t_result, call_id, t_name)
-		
-		# 仅当模型支持视觉(VLM)时，才将图片注入回对话供分析
-		#if _config.supports_vision and not pending_images.is_empty():
 		
 		# 仅当非 Gemini 且模型支持视觉(VLM)时，才将图片以 User 消息注入
 		if not is_gemini and _config.supports_vision and not pending_images.is_empty():
