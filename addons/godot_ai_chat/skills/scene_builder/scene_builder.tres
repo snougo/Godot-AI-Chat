@@ -5,7 +5,8 @@
 [resource]
 script = ExtResource("1_c1qt1")
 skill_name = "Scene Builder"
-description = "本技能用于创建完整的 Godot 场景，支持场景文件创建、节点层级搭建和属性节点配置，但是不支持配置节点子资源的嵌套属性，因此推荐使用 Resource Manager 技能创建相关节点资源后再使用本技能。"
+description = "本技能用于创建完整的 Godot 场景，支持场景创建、节点层级搭建和节点属性设置。
+注意本技能不支持设置节点的 sub-resource 的嵌套属性，推荐使用 Resource Manager 技能创建相关 sub-resource 后再使用本技能创建场景。"
 instruction_file = "res://addons/godot_ai_chat/skills/scene_builder/Skill.md"
-tools = Array[String](["uid://clah6obs2tt0x", "uid://c35mseu23cb84", "uid://wp7xufdhqmke", "uid://dmag53k50t7xo", "uid://cvhi0v2o2ah02", "uid://j5410tdoskcr", "uid://dkor40h5a6eo0", "uid://ho4l00iitlui", "uid://dqxvmm3op2kf1", "uid://dvmrxnee1ybba"])
+tools = Array[String](["uid://clah6obs2tt0x", "uid://ho4l00iitlui", "uid://c35mseu23cb84", "uid://wp7xufdhqmke", "uid://dmag53k50t7xo", "uid://cvhi0v2o2ah02", "uid://j5410tdoskcr", "uid://dkor40h5a6eo0", "uid://dkqn5wywfwo2q", "uid://dvmrxnee1ybba"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

@@ -97,7 +97,7 @@ func run_task() -> String:
 		if clean_tool_calls.is_empty():
 			_remove_sub_agent_node_from_root()
 			AIChatLogger.warn("[Sub Agent] Stopped without calling tools.")
-			return "Task aborted: Sub Agent stopped without reporting a result."
+			return "Task aborted: Sub Agent stopped without reporting a result. Its may has completed the task, please check."
 		
 		# 收集本轮工具返回的图片附件
 		var pending_images: Array[Dictionary] = []
@@ -172,7 +172,10 @@ func run_task() -> String:
 	
 	_remove_sub_agent_node_from_root()
 	AIChatLogger.warn("[Sub Agent] Exceeded max turns.")
-	return "Task failed: Sub Agent exceeded max turns."
+	return """Sub Agent reached the maximum execution step limit and was forcibly terminated. 
+	Its task has been partially completed. 
+	Please re-invoke the Sub Agent to continue from where it left off.
+	"""
 
 
 # 使用 HTTPClient 在主线程轮询流式响应

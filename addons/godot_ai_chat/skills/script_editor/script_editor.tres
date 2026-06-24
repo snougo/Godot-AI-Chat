@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_je3d2")
 skill_name = "Script Editor"
-description = "本技能用于读取和修改 gdscript 脚本文件，但不支持创建、编辑 gdshader 文件。如需修改 gdshader 文件，只能由用户直接手动替换。"
+description = "本技能用于读取、创建和编辑 gdscript 脚本文件，但不支持创建和编辑 gdshader 文件。"
 instruction_file = "res://addons/godot_ai_chat/skills/script_editor/Skill.md"
-tools = Array[String](["uid://djfhhpm25e2kl", "uid://6b135025xm7j", "uid://cucpsja3qnma7", "uid://d1svxbjuoea3g", "uid://mmps2l0grvac", "uid://bo06p18acpk2v", "uid://ho4l00iitlui", "uid://j5410tdoskcr", "uid://dkor40h5a6eo0", "uid://dvmrxnee1ybba"])
+tools = Array[String](["uid://djfhhpm25e2kl", "uid://6b135025xm7j", "uid://cucpsja3qnma7", "uid://d1svxbjuoea3g", "uid://mmps2l0grvac", "uid://bo06p18acpk2v", "uid://ho4l00iitlui", "uid://j5410tdoskcr", "uid://dkor40h5a6eo0", "uid://dvmrxnee1ybba", "uid://dkqn5wywfwo2q"])
 metadata/_custom_type_script = "uid://bx2rijcjhyx38"

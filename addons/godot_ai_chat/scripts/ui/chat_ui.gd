@@ -70,7 +70,7 @@ enum UIState {
 @onready var _file_dialog: FileDialog = $FileDialog
 @onready var _tab_container: TabContainer = $TabContainer 
 
-@onready var _allow_editor_script_checkbutton: CheckButton = $TabContainer/Chat/VBoxContainer/InfoContainer/CheckButton
+@onready var _allow_editor_script_checkbutton: CheckButton = $TabContainer/Chat/VBoxContainer/InfoContainer/PandoraBox
 
 # 暴露给 Controller 使用的内部节点引用
 @onready var _chat_list_container: VBoxContainer = $TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer/ChatListContainer
@@ -317,10 +317,7 @@ func update_token_usage_display(p_usage: Dictionary) -> void:
 	
 	_current_token_usage.text = "Total Tokens: %d" % display_total
 	
-	_current_token_usage.tooltip_text = (
-		"Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" +
-		"Session Total (Snowball):\n - Prompt: %d\n - Completion: %d\n - Total: %d"
-	) % [p, c, t, display_prompt, display_completion, display_total]
+	_current_token_usage.tooltip_text = "Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" % [p, c, t]
 
 
 ## 重置 Token 显示
