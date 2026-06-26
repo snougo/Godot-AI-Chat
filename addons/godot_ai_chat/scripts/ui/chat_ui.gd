@@ -39,6 +39,7 @@ enum UIState {
 	WAITING_RESPONSE,    ## 等待 AI 响应
 	RESPONSE_GENERATING, ## 正在生成响应
 	TOOLCALLING,         ## 正在执行工具调用
+	COMPRESSING,         ## 正在压缩上下文
 	ERROR                ## 发生错误
 }
 
@@ -219,6 +220,18 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
 		
+		UIState.COMPRESSING:
+			_status_label.modulate = Color.GOLD
+			_user_input.editable = false
+			_user_input.caret_blink = false
+			_send_button.text = "..."
+			_send_button.disabled = true
+			_delete_chat_button.disabled = true
+			_load_chat_button.disabled = true
+			_save_as_markdown_button.disabled = true
+			_new_chat_button.disabled = true
+			_reconnect_button.disabled = true
+		
 		UIState.ERROR:
 			_status_label.modulate = Color.RED
 			_user_input.editable = false
@@ -350,6 +363,7 @@ func _get_default_status_text(p_state: UIState) -> String:
 		UIState.WAITING_RESPONSE: return "Waiting for LLM response..."
 		UIState.RESPONSE_GENERATING: return "LLM is generating..."
 		UIState.TOOLCALLING: return "Executing Tools..."
+		UIState.COMPRESSING: return "Compressing context..."
 		UIState.ERROR: return "Error"
 	return ""
 

@@ -82,6 +82,12 @@ func get_turn_count() -> int:
 	return valid_turns_count
 
 
+## 获取按轮次分组的消息列表（公开方法，供上下文压缩器使用）
+## [return]: Array[Array[ChatMessage]]
+func get_grouped_turns() -> Array:
+	return _group_messages_into_turns()
+
+
 ## 截断历史记录（用于 Context Window 管理）
 ## [param p_max_turns]: 最大保留的对话轮数
 ## [param p_system_prompt]: 可选的系统提示词

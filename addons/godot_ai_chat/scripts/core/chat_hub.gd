@@ -18,6 +18,7 @@ extends Control
 var _session_manager: SessionManager
 var _is_performing_cleanup: bool = false
 var _is_plugin_init: bool = false
+var _compression_config: ContextCompressionConfig = null
 
 
 # --- Built-in Functions ---
@@ -121,6 +122,44 @@ func _update_turn_info() -> void:
 		_chat_ui.update_turn_display(0, settings.max_chat_turns)
 
 
+func _get_compression_config() -> ContextCompressionConfig:
+	if _compression_config:
+		return _compression_config
+	if ResourceLoader.exists(PluginPaths.COMPRESSION_CONFIG_PATH):
+		_compression_config = load(PluginPaths.COMPRESSION_CONFIG_PATH) as ContextCompressionConfig
+	else:
+		_compression_config = ContextCompressionConfig.new()
+		ResourceSaver.save(_compression_config, PluginPaths.COMPRESSION_CONFIG_PATH)
+		ToolBox.update_editor_filesystem(PluginPaths.COMPRESSION_CONFIG_PATH)
+	return _compression_config
+
+
+func _try_compress_context() -> Dictionary:
+	_chat_ui.update_ui_state(ChatUI.UIState.COMPRESSING)
+	
+	var history := _current_chat_window.chat_history
+	var config := _get_compression_config()
+	
+	var compressor := ContextCompressor.new()
+	var result: Dictionary = await compressor.compress_context(history, _network_manager, config)
+	
+	if not result.success:
+		AIChatLogger.error("[ChatHub] Context compression failed: " + result.error)
+		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+		return {"success": false, "error": result.error}
+	
+	# 保存为新会话并加载
+	var saved_history := _session_manager.create_session_from_history(result.new_history)
+	
+	if saved_history:
+		_load_history_to_ui(saved_history, _session_manager.current_session_path.get_file())
+		AIChatLogger.info("[ChatHub] Context compressed. New session: " + _session_manager.current_session_path.get_file())
+		return {"success": true}
+	else:
+		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+		return {"success": false, "error": "Failed to save compressed session."}
+
+
 # --- Signal Callbacks ---
 
 func _on_user_send_message(text: String) -> void:
@@ -130,8 +169,24 @@ func _on_user_send_message(text: String) -> void:
 	
 	_chat_ui.clear_user_input()
 	var processed: Dictionary = AttachmentProcessor.process_input(text)
-	_current_chat_window.append_user_message(processed.final_text, processed.images)
 	
+	# 检查是否需要上下文压缩
+	var settings := ToolBox.get_plugin_settings()
+	var compression_config := _get_compression_config()
+	
+	if compression_config and compression_config.enabled:
+		var turn_count := _current_chat_window.chat_history.get_turn_count()
+		if turn_count >= settings.max_chat_turns:
+			var compress_result := await _try_compress_context()
+			if compress_result.success:
+				# 压缩成功，新对话已加载完毕，等待用户重新输入
+				_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Context compressed. Ready for new input.")
+				return
+			else:
+				_chat_ui.show_confirmation("⚠️ Context compression failed, using truncated context.\nError: " + compress_result.get("error", "Unknown"))
+	
+	# 正常流程（未触发压缩或压缩失败降级）
+	_current_chat_window.append_user_message(processed.final_text, processed.images)
 	_run_chat_loop()
 
 

@@ -43,6 +43,36 @@ func create_new_session() -> ChatMessageHistory:
 	return null
 
 
+## 从已有历史创建新会话（用于上下文压缩后的新会话加载）
+## [param p_history]: 预构建好的历史记录对象
+## [return]: 保存并绑定后的历史记录对象，失败返回 null
+func create_session_from_history(p_history: ChatMessageHistory) -> ChatMessageHistory:
+	_ensure_archive_dir()
+	var now: Dictionary = Time.get_datetime_dict_from_system(false)
+	var base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d_compressed" % [now.year, now.month, now.day, now.hour, now.minute, now.second]
+	var extension: String = ".tres"
+	var final_path: String = PluginPaths.SESSION_DIR.path_join(base_filename + extension)
+	
+	var counter: int = 1
+	while FileAccess.file_exists(final_path):
+		final_path = PluginPaths.SESSION_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
+		counter += 1
+	
+	# 断开旧 history 的自动保存信号
+	if _current_history and _current_history.changed.is_connected(_auto_save):
+		_current_history.changed.disconnect(_auto_save)
+	
+	if ResourceSaver.save(p_history, final_path) == OK:
+		current_session_path = final_path
+		_current_history = p_history
+		ToolBox.update_editor_filesystem(current_session_path)
+		_bind_auto_save(p_history)
+		return p_history
+	
+	AIChatLogger.error("[SessionManager] Failed to create compressed session file.")
+	return null
+
+
 ## 加载会话
 ## [param p_session_name]: 会话文件名
 ## [return]: 加载的历史记录对象，失败返回 null

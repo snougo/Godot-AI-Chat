@@ -16,6 +16,9 @@ const PLUGIN_DIR: String = "res://addons/godot_ai_chat/"
 ## 插件设置资源文件路径
 const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings_config.tres"
 
+## 上下文压缩配置资源文件路径
+const COMPRESSION_CONFIG_PATH: String = PLUGIN_DIR + "context_compression_config.tres"
+
 ## 默认工作区路径
 const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 
