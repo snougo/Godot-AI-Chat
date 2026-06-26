@@ -2,7 +2,6 @@
 extends AiTool
 
 ## 文件夹综合管理工具。
-## 本AI工的部分功能依赖第三方Godot插件 Context Toolkit
 
 
 # --- Built-in Functions ---
@@ -56,18 +55,16 @@ func _handle_list(p_args: Dictionary) -> Dictionary:
 	if path.is_empty():
 		return {"success": false, "data": "Error: 'path' parameter is required for action 'list'."}
 	
-	#var security_error: String = validate_path_safety(path)
-	#if not security_error.is_empty():
-		#return {"success": false, "data": security_error}
-	
-	var dir := DirAccess.open("res://")
+	var dir := DirAccess.open(path)
 	if dir == null:
-		return {"success": false, "data": "Failed to access file system."}
-	if not dir.dir_exists(path):
-		return {"success": false, "data": "Error: Directory not found: " + path}
+		return {"success": false, "data": "Failed to access directory: " + path}
 	
-	var context_provider := ContextProvider.new()
-	return context_provider.get_folder_structure_as_markdown(path)
+	var md: String = "Context for Folder: `%s`\n\n" % path
+	md += "Folder File Structure:\n```\n"
+	md += "%s/\n" % path.get_file()
+	md += _build_folder_tree(path, "  ")
+	md += "```\n"
+	return {"success": true, "data": md}
 
 
 # 处理文件夹创建操作
@@ -99,9 +96,38 @@ func _handle_create(p_args: Dictionary) -> Dictionary:
 
 # === Utility Functions ===
 
+# 递归构建文件夹树
+static func _build_folder_tree(p_path: String, p_indent: String) -> String:
+	var result: String = ""
+	var dir := DirAccess.open(p_path)
+	if not dir:
+		return ""
+	
+	var subdirs: Array = []
+	for item in dir.get_directories():
+		if item != "." and item != "..":
+			subdirs.append(item)
+	
+	var files: Array = []
+	for item in dir.get_files():
+		files.append(item)
+	
+	var all_items: Array = subdirs + files
+	for i in range(all_items.size()):
+		var item = all_items[i]
+		var is_last: bool = (i == all_items.size() - 1)
+		var prefix: String = "└─ " if is_last else "├─ "
+		var item_path: String = p_path.path_join(item)
+		
+		if item in subdirs:
+			result += p_indent + prefix + item + "/\n"
+			result += _build_folder_tree(item_path, p_indent + ("   " if is_last else "│  "))
+		else:
+			result += p_indent + prefix + item + "\n"
+	return result
+
+
 # 标准化路径格式
-# [param p_path]: 原始路径
-# [return]: 标准化后的路径
 func _normalize_path(p_path: String) -> String:
 	var normalized: String = p_path.replace("\\", "/")
 	if normalized.ends_with("/"):

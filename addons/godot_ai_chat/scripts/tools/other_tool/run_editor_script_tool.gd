@@ -76,7 +76,7 @@ var _last_compile_error: String = ""
 
 func _init() -> void:
 	tool_name = "run_editor_script"
-	tool_description = "Executes a custom Editor script. THIS TOOL REQUIRES USER PERMISSION TO BE USED. OTHERWISE, IT WILL NOT FUNCTION PROPERLY."
+	tool_description = "Executes a custom Editor script. This tool is disabled by default."
 
 
 # --- Public Functions ---

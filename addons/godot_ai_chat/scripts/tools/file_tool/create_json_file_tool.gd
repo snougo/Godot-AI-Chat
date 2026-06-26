@@ -1,21 +1,21 @@
 @tool
 extends AiTool
 
-## 着色器文件创建工具。
-## 用于创建 .gdshader 着色器文件。
+## JSON 文件创建工具。
+## 用于创建 .json 数据文件。
 ## 注意：目标文件夹必须已存在，不会自动创建。
 
 
 # --- Enums / Constants ---
 
-const VALID_EXTENSIONS: Array[String] = ["gdshader"]
+const VALID_EXTENSIONS: Array[String] = ["json"]
 
 
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "create_shader"
-	tool_description = "Creates a `.gdshader` shader file."
+	tool_name = "create_json_file"
+	tool_description = "Creates a new `.json` file."
 
 
 # --- Public Functions ---
@@ -30,11 +30,11 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"file_name": {
 				"type": "string",
-				"description": "File name with .gdshader extension (e.g., 'xxx.gdshader')."
+				"description": "File name with .json extension (e.g., 'xxx.json')."
 			},
 			"content": {
 				"type": "string",
-				"description": "Initial shader code content."
+				"description": "Initial JSON content."
 			}
 		},
 		"required": ["path", "file_name", "content"]
@@ -65,7 +65,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	var ext: String = full_path.get_extension().to_lower()
 	if ext not in VALID_EXTENSIONS:
-		return {"success": false, "data": "Error: Invalid extension '.%s'. Shader files must use: .gdshader." % ext}
+		return {"success": false, "data": "Error: Invalid extension '.%s'. JSON files must use: .json." % ext}
 	
 	var content: String = p_args.get("content", "")
 	if content.is_empty():
@@ -80,4 +80,4 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	ToolBox.update_editor_filesystem(full_path)
 	
-	return {"success": true, "data": "Shader file created: %s" % full_path}
+	return {"success": true, "data": "JSON file created: %s" % full_path}

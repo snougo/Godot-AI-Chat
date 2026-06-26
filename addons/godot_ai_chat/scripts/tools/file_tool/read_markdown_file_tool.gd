@@ -9,7 +9,7 @@ extends AiTool
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "read_markdown"
+	tool_name = "read_markdown_file"
 	tool_description = "Reads the content of a Markdown (.md) file."
 
 
