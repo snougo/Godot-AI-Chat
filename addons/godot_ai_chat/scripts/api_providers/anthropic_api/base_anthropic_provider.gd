@@ -21,8 +21,8 @@ func get_stream_parser_type() -> StreamParserType:
 func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	_stream_tool_index_map.clear()
 	
-	# kimi-k2.5 模型只接受固定温度值 1，强制覆盖用户设置
-	if p_model_name == "kimi-k2.5":
+	# kimi-k2.6 模型只接受固定温度值 1，强制覆盖用户设置
+	if p_model_name == "kimi-k2.6":
 		p_temperature = 1.0
 	
 	var system_prompt: String = ""
@@ -50,14 +50,14 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		"stream": p_stream
 	}
 	
-	if not system_prompt.is_empty():
-		body["system"] = system_prompt
+	#if not system_prompt.is_empty():
+		#body["system"] = system_prompt
 	
-	#if not p_tool_definitions.is_empty():
-		#var anthropic_tools: Array = []
-		#for tool_def in p_tool_definitions:
-			#anthropic_tools.append(_convert_tool_definition(tool_def))
-		#body["tools"] = anthropic_tools
+	if not system_prompt.is_empty():
+		# 使用数组格式并标记 cache_control，启用 Anthropic Prompt Caching
+		body["system"] = [
+			{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
+		]
 	
 	# 工具定义：仅在工具结果回传时跳过，其他情况正常发送
 	if not p_tool_definitions.is_empty():
@@ -70,10 +70,18 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 			skip_tools = (msg.role == ChatMessage.ROLE_TOOL)
 			break
 		
+		#if not skip_tools:
+			#var anthropic_tools: Array = []
+			#for tool_def in p_tool_definitions:
+				#anthropic_tools.append(_convert_tool_definition(tool_def))
+			#body["tools"] = anthropic_tools
+		
 		if not skip_tools:
 			var anthropic_tools: Array = []
 			for tool_def in p_tool_definitions:
-				anthropic_tools.append(_convert_tool_definition(tool_def))
+				var tool: Dictionary = _convert_tool_definition(tool_def)
+				tool["cache_control"] = {"type": "ephemeral"}
+				anthropic_tools.append(tool)
 			body["tools"] = anthropic_tools
 	
 	return body
