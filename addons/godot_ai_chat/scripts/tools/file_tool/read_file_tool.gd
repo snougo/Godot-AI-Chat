@@ -22,7 +22,7 @@ const EXTENSION_MAP: Dictionary = {
 
 func _init() -> void:
 	tool_name = "read_file"
-	tool_description = "Reads the content of a file."
+	tool_description = "Reads the content of a file by file type. the `text` type only support [md, json, cfg, txt]"
 
 
 # --- Public Functions ---

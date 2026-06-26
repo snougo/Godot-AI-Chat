@@ -52,7 +52,9 @@ const FILEACCESS_PATH_METHODS: Array[String] = [
 
 ## Whitelist of file extensions that the EditorScript is allowed to create/modify.
 const ALLOWED_EXTENSIONS: Array[String] = [
-	"md", "json", "txt", "csv", "xml", "yaml", "yml", "gdshader", "glsl",
+	"md", "json", "txt", "csv", 
+	"gdshader", "glsl",
+	"tscn", "tres",
 ]
 
 ## Restricted zones — files inside these directories are off-limits regardless of format.
@@ -62,15 +64,19 @@ const RESTRICTED_PATH_PATTERNS: Array[String] = [
 	"res://.git/",
 	"res://.import/",
 	"res://android/",
-	"res://test/"
 ]
+
+# --- Private Vars ---
+
+# Stores the exact compiler error text captured from EditorLog.
+var _last_compile_error: String = ""
 
 
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "run_editor_script"
-	tool_description = "Generates and executes a custom Editor script. Use for complex, non-standard operations only — DO NOT ABUSE!"
+	tool_description = "Executes a custom Editor script. THIS TOOL REQUIRES USER PERMISSION TO BE USED. OTHERWISE, IT WILL NOT FUNCTION PROPERLY."
 
 
 # --- Public Functions ---
@@ -123,7 +129,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var wrapped_code: String = _wrap_code(code)
 	var script: GDScript = _compile_script(wrapped_code)
 	if not script:
-		return {"success": false, "data": "❌ **Script compilation failed.** Check syntax and Godot API usage."}
+		return {"success": false, "data": "❌ **Script compilation failed.** " + (_last_compile_error if not _last_compile_error.is_empty() else "Check syntax and Godot API usage.")}
 	
 	var instance: Variant = script.new()
 	if not instance or not instance is EditorScript:
@@ -553,12 +559,25 @@ func _wrap_code(p_code: String) -> String:
 
 
 func _compile_script(p_code: String) -> GDScript:
+	_last_compile_error = ""
+	
+	var editor_log: RichTextLabel = _get_editor_log()
+	var before_text: String = editor_log.get_parsed_text() if editor_log else ""
+	
 	var script: GDScript = GDScript.new()
 	script.source_code = p_code
 	var err: Error = script.reload()
+	
 	if err != OK:
+		if editor_log:
+			var after_text: String = editor_log.get_parsed_text()
+			var captured: String = _capture_editor_log_error(before_text, after_text)
+			if not captured.is_empty():
+				_last_compile_error = captured
+		
 		printerr("[run_editor_script] Compilation error: ", err)
 		return null
+	
 	return script
 
 
@@ -617,3 +636,71 @@ func _diff_snapshots(p_before: Dictionary, p_after: Dictionary) -> Dictionary:
 
 func _is_empty(p_dict: Dictionary) -> bool:
 	return p_dict.created.is_empty() and p_dict.modified.is_empty() and p_dict.deleted.is_empty()
+
+
+# --- Private Functions: EditorLog Error Capture ---
+
+# Retrieves the EditorLog RichTextLabel node from the editor UI tree.
+# Returns null if not in editor mode or if the node cannot be found.
+func _get_editor_log() -> RichTextLabel:
+	if not Engine.is_editor_hint():
+		return null
+	var base_control: Control = EditorInterface.get_base_control()
+	if not base_control:
+		return null
+	
+	# Strategy 1: Find EditorLog by class name (works in 4.7+)
+	var logs: Array[Node] = base_control.find_children("*", "EditorLog", true, false)
+	for log_node in logs:
+		var rtls: Array[Node] = log_node.find_children("*", "RichTextLabel", true, false)
+		if rtls.size() > 0:
+			return rtls[0] as RichTextLabel
+	
+	# Strategy 2: Find by node name "Output" (fallback)
+	var output_node: Node = base_control.find_child("Output", true, false)
+	if output_node:
+		var rtls: Array[Node] = output_node.find_children("*", "RichTextLabel", true, false)
+		if rtls.size() > 0:
+			return rtls[0] as RichTextLabel
+	
+	# Strategy 3: Old name fallback
+	var log: RichTextLabel = base_control.find_child("EditorLog", true, false) as RichTextLabel
+	if log:
+		return log
+	
+	return null
+
+
+# Extracts newly appended text from EditorLog by comparing before/after snapshots.
+# The new text typically contains Godot's exact compiler error message,
+# e.g. "res://.gd:5: Parse Error: Expected ')'"
+func _capture_editor_log_error(p_before: String, p_after: String) -> String:
+	var new_text: String = ""
+	if p_after.length() > p_before.length():
+		new_text = p_after.substr(p_before.length())
+	elif p_before.is_empty():
+		new_text = p_after
+	
+	new_text = new_text.strip_edges()
+	if new_text.is_empty():
+		return ""
+	
+	# Filter out noise: only keep lines that look like compile errors
+	var lines: PackedStringArray = new_text.split("\n")
+	var filtered: PackedStringArray = []
+	for line in lines:
+		var trimmed: String = line.strip_edges()
+		if trimmed.is_empty():
+			continue
+		if "Parse Error" in trimmed \
+		or "Parse error" in trimmed \
+		or "Compile Error" in trimmed \
+		or "SCRIPT ERROR" in trimmed \
+		or trimmed.begins_with("  ") \
+		or trimmed.begins_with("at:"):
+			filtered.append(trimmed)
+	
+	if filtered.is_empty():
+		return new_text
+	
+	return "\n".join(filtered)
