@@ -60,7 +60,7 @@ static func print_structured_context(p_title: String, p_messages: Array, p_conte
 			var snippet: String = content.replace("\n", "\\n")
 			if snippet.length() > 100:
 				snippet = snippet.left(100) + "..."
-				
+			
 			AIChatLogger.debug("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [i, role, snippet])
 	
 	AIChatLogger.debug("--- 报告结束 ---\n")
@@ -105,30 +105,30 @@ static func refresh_editor_filesystem() -> void:
 	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
 
 
-## 从 AI 响应中移除  thinking... response 标签块
+## 从 AI 响应中移除 <think thinking... </think response> 标签块
 static func remove_think_tags(p_text: String) -> String:
 	if p_text.is_empty():
 		return ""
-	var think_regex: RegEx = RegEx.create_from_string("(?s) thinking.*? response")
+	var think_regex: RegEx = RegEx.create_from_string("(?s)<think thinking.*? </think response>")
 	var cleaned_text: String = think_regex.sub(p_text, "", true)
 	return cleaned_text.strip_edges()
 
 
-## 过滤掉那些在  thinking 标签尚未闭合时产生的工具调用
+## 过滤掉那些在 <think thinking 标签尚未闭合时产生的工具调用
 static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Array) -> Array:
-	if p_tool_calls.is_empty() or " thinking" not in p_content:
+	if p_tool_calls.is_empty() or "<think thinking" not in p_content:
 		return p_tool_calls
 	
-	var think_start: int = p_content.find(" thinking")
-	var think_end: int = p_content.find(" response")
+	var think_start: int = p_content.find("<think thinking")
+	var think_end: int = p_content.find("</think response>")
 	
-	# 如果找到了  thinking 但没找到  response，说明思考过程尚未结束
+	# 如果找到了 <think thinking 但没找到 </think response>，说明思考过程尚未结束
 	# 此时产生的所有工具调用都应视为不稳定或幻觉，予以拦截
 	if think_start != -1 and think_end == -1:
-		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed  thinking block." % p_tool_calls.size())
+		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed <think thinking block." % p_tool_calls.size())
 		return []
 	
-	# 如果  thinking 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
+	# 如果 <think thinking 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
 	# 直接放行，不再做内容匹配（防止误杀）
 	return p_tool_calls
 
@@ -151,11 +151,9 @@ static func is_valid_tool_name(p_name: String) -> bool:
 
 
 ## 清洗、过滤工具调用，并将被服务端误判的纯文本"抢救"回消息内容中
-static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
-	# 防御：确保 ToolRegistry 已初始化
-	if ToolRegistry.main_agent_tool.is_empty():
-		ToolRegistry.load_default_tools()
-	
+## [param p_msg]: 要清洗的助手消息
+## [param p_valid_tools]: 当前可用的工具名字典 { "tool_name": true }
+static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dictionary) -> void:
 	var valid_calls: Array = []
 	var salvaged_text: String = ""
 	
@@ -163,12 +161,12 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 		var raw_name: String = tc.get("function", {}).get("name", "")
 		var args: String = tc.get("function", {}).get("arguments", "")
 		
-		# Step 1: 检测 XML 伪标签（<tool_call>/<function_call> 等），提取内部文本
+		# Step 1: 检测 XML 伪标签（<function_call>/<function> 等），提取内部文本
 		var extract_result: Dictionary = _extract_from_xml_wrapper(raw_name)
 		var clean_name: String = extract_result.clean_name
 		
-		# Step 2: 判断 — 必须在 ToolRegistry 中注册才是合法工具（注意 Sub-Agent 的工具和 Main-Agent 的工具注册是隔离的）
-		if not clean_name.is_empty() and (ToolRegistry.main_agent_tool.has(clean_name) or ToolRegistry.sub_agent_tool.has(clean_name)):
+		# Step 2: 判断 — 必须在可用工具集中才是合法工具
+		if not clean_name.is_empty() and p_valid_tools.has(clean_name):
 			# 合法工具：更新清洗后的名称，补充 ID
 			tc.function["name"] = clean_name
 			if tc.get("id", "").is_empty():
@@ -192,7 +190,7 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 # --- Private Functions ---
 
 # 从 raw_name 中检测并提取 XML 伪标签
-# 处理服务端懒惰解析场景：<tool_call>xxx（无闭合）、xxx</tool_call>、完整闭合等
+# 处理服务端懒惰解析场景：<function>xxx（无闭合）、xxx</function>、完整闭合等
 # [return]: {"clean_name": String, "has_xml_wrapper": bool}
 static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
 	var result := {
@@ -200,8 +198,8 @@ static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
 		"has_xml_wrapper": false
 	}
 	
-	# 检测开放标签前缀（服务端看到 <tool_call> 就懒惰解析的典型场景）
-	var open_patterns: Array[String] = ["<tool_call>", "<function_call>", "<function>"]
+	# 检测开放标签前缀（服务端看到 < 就懒惰解析的典型场景）
+	var open_patterns: Array[String] = ["<function_call>", "<function>"]
 	for pattern in open_patterns:
 		if p_raw_name.begins_with(pattern):
 			result.has_xml_wrapper = true
@@ -209,7 +207,7 @@ static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
 			break
 	
 	# 检测闭合标签后缀（即使前面没有开放标签，仅后缀也算伪信号）
-	var close_patterns: Array[String] = ["</tool_call>", "</function_call>", "</function>"]
+	var close_patterns: Array[String] = ["</function_call>", "</function>"]
 	for pattern in close_patterns:
 		if result.clean_name.ends_with(pattern):
 			result.has_xml_wrapper = true

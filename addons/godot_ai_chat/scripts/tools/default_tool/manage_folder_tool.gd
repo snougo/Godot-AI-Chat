@@ -9,6 +9,7 @@ extends AiTool
 func _init() -> void:
 	tool_name = "manage_folder"
 	tool_description = "Lists and creates folders and directories."
+	security_level = SecurityLevel.READ_ONLY
 
 
 # --- Public Functions ---
@@ -35,7 +36,7 @@ func get_parameters_schema() -> Dictionary:
 ## 执行文件夹操作
 ## [param p_args]: 包含 action 及相关参数的字典
 ## [return]: 操作结果字典
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var action: String = p_args.get("action", "")
 	
 	match action:
@@ -44,54 +45,52 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"create":
 			return _handle_create(p_args)
 		_:
-			return {"success": false, "data": "Error: Unknown action '%s'. Valid actions: list, create." % action}
+			return ToolResult.fail("Error: Unknown action '%s'. Valid actions: list, create." % action)
 
 
-# --- Private Functions ---
-
-# 处理文件夹结构列出操作
-func _handle_list(p_args: Dictionary) -> Dictionary:
+func _handle_list(p_args: Dictionary) -> ToolResult:
 	var path: String = p_args.get("path", "")
 	if path.is_empty():
-		return {"success": false, "data": "Error: 'path' parameter is required for action 'list'."}
+		return ToolResult.fail("Error: 'path' parameter is required for action 'list'.")
 	
 	var dir := DirAccess.open(path)
 	if dir == null:
-		return {"success": false, "data": "Failed to access directory: " + path}
+		return ToolResult.fail("Failed to access directory: " + path)
 	
 	var md: String = "Context for Folder: `%s`\n\n" % path
 	md += "Folder File Structure:\n```\n"
 	md += "%s/\n" % path.get_file()
 	md += _build_folder_tree(path, "  ")
 	md += "```\n"
-	return {"success": true, "data": md}
+	return ToolResult.ok(md)
 
 
-# 处理文件夹创建操作
-func _handle_create(p_args: Dictionary) -> Dictionary:
+func _handle_create(p_args: Dictionary) -> ToolResult:
 	var path: String = p_args.get("path", "")
 	if path.is_empty():
-		return {"success": false, "data": "Error: 'path' parameter is required for action 'create'."}
+		return ToolResult.fail("Error: 'path' parameter is required for action 'create'.")
 	
 	path = _normalize_path(path)
 	
+	# create 操作需要额外的黑名单检查
 	var security_error: String = validate_path_safety(path)
 	if not security_error.is_empty():
-		return {"success": false, "data": security_error}
+		return ToolResult.fail(security_error)
 	
+	# 路径安全检查已由中间件统一处理
 	var dir := DirAccess.open("res://")
 	if dir == null:
-		return {"success": false, "data": "Failed to access file system."}
+		return ToolResult.fail("Failed to access file system.")
 	
 	if dir.dir_exists(path):
-		return {"success": true, "data": "Folder already exists: %s" % path}
+		return ToolResult.ok("Folder already exists: %s" % path)
 	
 	var err: Error = dir.make_dir_recursive(path)
 	if err == OK:
 		ToolBox.refresh_editor_filesystem()
-		return {"success": true, "data": "Successfully created folder: %s" % path}
+		return ToolResult.ok("Successfully created folder: %s" % path)
 	else:
-		return {"success": false, "data": "Failed to create folder. Error code: %s" % str(err)}
+		return ToolResult.fail("Failed to create folder. Error code: %s" % str(err))
 
 
 # === Utility Functions ===

@@ -88,8 +88,8 @@ func run_task() -> String:
 		assistant_msg.reasoning_content = reasoning
 		assistant_msg.tool_calls = raw_tool_calls
 		
-		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
-		ToolBox.salvage_and_clean_tool_calls(assistant_msg)
+		# 清洗工具调用：基于本地 _tools 字典校验合法性
+		ToolBox.salvage_and_clean_tool_calls(assistant_msg, _tools)
 		_history.add_message(assistant_msg)
 		
 		var clean_tool_calls = assistant_msg.tool_calls
@@ -122,16 +122,14 @@ func run_task() -> String:
 			
 			var t_result = ""
 			if tool_inst:
-				var res = await tool_inst.execute(t_args)
+				var res = await _execute_tool_safely(tool_inst, t_args)
 				
-				# 先获取结果文本
-				t_result = JSON.stringify(res.get("data", res), "\t")
+				t_result = res.data
 				
 				AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 				
 				# 多模态支持：检测工具返回的图片附件
-				var has_image_attachment: bool = res.has("attachments") \
-					and res.attachments is Dictionary \
+				var has_image_attachment: bool = not res.attachments.is_empty() \
 					and res.attachments.has("image_data") \
 					and res.attachments.image_data is PackedByteArray \
 					and not res.attachments.image_data.is_empty()
@@ -172,10 +170,47 @@ func run_task() -> String:
 	
 	_remove_sub_agent_node_from_root()
 	AIChatLogger.warn("[Sub Agent] Exceeded max turns.")
-	return """Sub Agent reached the maximum execution step limit and was forcibly terminated. 
-	Its task has been partially completed. 
+	return """Sub Agent reached the maximum execution step limit and was forcibly terminated.
+	Its task has been partially completed.
 	Please re-invoke the Sub Agent to continue from where it left off.
 	"""
+
+
+# 安全中间件：在执行工具前统一进行安全检查
+# [param p_tool]: 工具实例
+# [param p_args]: 工具参数
+# [return]: ToolResult
+func _execute_tool_safely(p_tool: Object, p_args: Dictionary) -> ToolResult:
+	if p_tool is AiTool:
+		# READ_ONLY: 仅检查路径前缀和遍历，不检查黑名单
+		if p_tool.security_level == AiTool.SecurityLevel.READ_ONLY:
+			var path: String = p_args.get("path", "")
+			if path.is_empty():
+				path = p_args.get("scene_path", "")
+			if not path.is_empty():
+				if not path.begins_with("res://"):
+					return ToolResult.fail("Path must start with 'res://'.")
+				if ".." in path:
+					return ToolResult.fail("Path traversal ('..') is not allowed.")
+		
+		# PATH_VALIDATED: 完整检查（前缀 + 遍历 + 黑名单）
+		elif p_tool.security_level == AiTool.SecurityLevel.PATH_VALIDATED:
+			var path: String = p_args.get("path", "")
+			if path.is_empty():
+				path = p_args.get("scene_path", "")
+			if not path.is_empty():
+				var err: String = p_tool.validate_path_safety(path)
+				if not err.is_empty():
+					return ToolResult.fail(err)
+	
+	# 兼容适配
+	var raw_result: Variant = await p_tool.execute(p_args)
+	if raw_result is ToolResult:
+		return raw_result
+	elif raw_result is Dictionary:
+		return ToolResult.from_dict(raw_result)
+	else:
+		return ToolResult.fail("Tool returned unexpected type: %s" % typeof(raw_result))
 
 
 # 使用 HTTPClient 在主线程轮询流式响应

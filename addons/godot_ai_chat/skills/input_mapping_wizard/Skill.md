@@ -18,4 +18,4 @@
 - 执行过程中遇到错误最多尝试2次，如果依然失败，直接跳过错误部分继续执行后面的部分。
 
 ## 帮助文档
-`manage_input_map` 工具的详细使用说明，请查阅文档：`res://addons/godot_ai_chat/skills/input_mapping_wizard/reference/manage_input_map_guide.md`
+- `manage_input_map` 工具的详细使用说明，请查阅文档：`res://addons/godot_ai_chat/skills/input_mapping_wizard/reference/manage_input_map_guide.md`

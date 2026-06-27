@@ -14,6 +14,7 @@ const SKILLS_BASE_PATH: String = "res://addons/godot_ai_chat/skills/"
 func _init() -> void:
 	tool_name = "create_new_skill"
 	tool_description = "Creates a new custom Skill. Skills folder path: `res://addons/godot_ai_chat/skills`"
+	security_level = SecurityLevel.PATH_VALIDATED
 
 
 # --- Public Functions ---
@@ -39,28 +40,29 @@ func get_parameters_schema() -> Dictionary:
 ## 执行创建技能结构操作
 ## [param p_args]: 包含 skill_folder_name 和 skill_md_content 的参数字典
 ## [return]: 操作结果字典
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var skill_folder_name: String = p_args.get("skill_folder_name", "")
 	var skill_md_content: String = p_args.get("skill_md_content", "")
-	
+
 	if skill_folder_name.is_empty():
-		return {"success": false, "data": "Error: skill_folder_name is required."}
-	
+		return ToolResult.fail("Error: skill_folder_name is required.")
+
 	var validation_result: Dictionary = _validate_folder_name(skill_folder_name)
 	if not validation_result.get("success", false):
-		return validation_result
-	
+		return ToolResult.fail(validation_result.data)
+
 	var target_folder: String = SKILLS_BASE_PATH.path_join(skill_folder_name)
-	
+
 	var base_check_result: Dictionary = _check_base_directory()
 	if not base_check_result.get("success", false):
-		return base_check_result
-	
+		return ToolResult.fail(base_check_result.data)
+
 	var create_result: Dictionary = _create_skill_structure(target_folder, skill_md_content)
 	if create_result.get("success", false):
 		EditorInterface.get_resource_filesystem().scan()
-	
-	return create_result
+		return ToolResult.ok(create_result.data)
+	else:
+		return ToolResult.fail(create_result.data)
 
 
 # --- Private Functions ---

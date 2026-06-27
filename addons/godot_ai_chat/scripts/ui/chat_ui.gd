@@ -171,6 +171,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = false
 			_new_chat_button.disabled = false
 			_reconnect_button.disabled = false
+			_workspace_select_button.disabled = false
 		
 		UIState.CONNECTING:
 			_status_label.modulate = Color.WHITE
@@ -183,6 +184,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
+			_workspace_select_button.disabled = false
 		
 		UIState.WAITING_RESPONSE:
 			_status_label.modulate = Color.AQUAMARINE
@@ -195,6 +197,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
+			_workspace_select_button.disabled = true
 		
 		UIState.RESPONSE_GENERATING:
 			_status_label.modulate = Color.AQUAMARINE
@@ -207,6 +210,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
+			_workspace_select_button.disabled = true
 		
 		UIState.TOOLCALLING:
 			_status_label.modulate = Color.GOLD
@@ -219,6 +223,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
+			_workspace_select_button.disabled = true
 		
 		UIState.COMPRESSING:
 			_status_label.modulate = Color.GOLD
@@ -231,6 +236,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = true
 			_new_chat_button.disabled = true
 			_reconnect_button.disabled = true
+			_workspace_select_button.disabled = true
 		
 		UIState.ERROR:
 			_status_label.modulate = Color.RED
@@ -243,6 +249,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 			_save_as_markdown_button.disabled = false
 			_new_chat_button.disabled = false
 			_reconnect_button.disabled = false
+			_workspace_select_button.disabled = false
 			
 			if not p_payload.is_empty():
 				_show_error_dialog(p_payload)

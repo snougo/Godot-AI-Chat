@@ -4,18 +4,25 @@ extends RefCounted
 
 ## AI 工具的基类
 ##
-## 定义了 AI 工具必须实现的接口以及通用的安全检查逻辑。
+## 定义了 AI 工具必须实现的接口、安全级别声明以及通用的安全检查逻辑。
 
 # --- Enums / Constants ---
+
+## 安全级别枚举
+enum SecurityLevel {
+	NONE,            ## 无安全限制（如 search_web）
+	READ_ONLY,       ## 只读操作，校验路径前缀和遍历
+	PATH_VALIDATED,  ## 写操作，检查路径黑名单 + 遍历检查
+}
 
 ## 统一的安全路径黑名单
 ## 这些目录包含 Godot 内部文件、插件源码或版本控制文件，禁止 AI 修改以免破坏项目结构
 const PATH_BLACKLIST: Array[String] = [
-	"/.git/", 
-	"/.import/", 
+	"/.git/",
+	"/.import/",
 	"/.godot/",
-	"/android/", 
-	"/addons/" 
+	"/android/",
+	"/addons/"
 ]
 
 # --- Public Vars ---
@@ -25,6 +32,9 @@ var tool_name: String = ""
 
 ## 工具的描述，提供给 AI 阅读
 var tool_description: String = ""
+
+## 安全级别，子类在 _init() 中声明
+var security_level: int = SecurityLevel.NONE
 
 # --- Public Functions ---
 
@@ -36,9 +46,9 @@ func get_parameters_schema() -> Dictionary:
 
 ## [必须重写] 执行工具逻辑
 ## [param p_args]: AI 传入的参数字典
-## 返回: {"success": bool, "data": String}
-func execute(_p_args: Dictionary) -> Dictionary:
-	return {"success": false, "data": "Not implemented"}
+## 返回: ToolResult
+func execute(_p_args: Dictionary) -> ToolResult:
+	return ToolResult.fail("Not implemented")
 
 
 ## 统一的路径安全检查函数
@@ -50,13 +60,14 @@ func validate_path_safety(p_path: String) -> String:
 	if not p_path.begins_with("res://"):
 		return "Path must start with 'res://'."
 	
+	# 防止路径遍历
+	if ".." in p_path:
+		return "Path traversal ('..') is not allowed."
+	
 	# 标准化路径：移除 res:// 前缀，统一使用正斜杠
-	# 例如: "res://my_folder\script.gd" -> "/my_folder/script.gd"
 	var check_path: String = p_path.replace("res://", "/").replace("\\", "/")
 	
 	# 确保路径以斜杠结尾，以便精确匹配目录
-	# 这能防止 "res://addons_test" (预期通过) 被误判为 "/addons/" (黑名单)
-	# 同时也能拦截 "res://addons" (预期拦截) 这种未带斜杠的目录创建请求
 	if not check_path.ends_with("/"):
 		check_path += "/"
 	

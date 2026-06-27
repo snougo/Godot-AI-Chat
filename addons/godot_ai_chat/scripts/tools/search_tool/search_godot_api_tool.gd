@@ -16,6 +16,7 @@ const LOCAL_DOC_PATH: String = "res://godot_doc"
 func _init() -> void:
 	tool_name = "search_godot_api"
 	tool_description = "Searches Godot ClassDB, custom global classes, and local API docs."
+	security_level = SecurityLevel.NONE
 
 
 # --- Public Functions ---
@@ -33,12 +34,12 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var raw_keywords: Variant = p_args.get("keyword", "")
 	var keywords_list: PackedStringArray = _parse_keywords(raw_keywords)
 	
 	if keywords_list.is_empty():
-		return {"success": false, "data": "Error: Keywords cannot be empty."}
+		return ToolResult.fail("Error: Keywords cannot be empty.")
 	
 	var output: Array[String] = []
 	var found_any: bool = false
@@ -63,9 +64,9 @@ func execute(p_args: Dictionary) -> Dictionary:
 		output.append("\n---\n" + file_result)
 	
 	if not found_any:
-		return {"success": false, "data": "No API definition or local docs found for: %s" % ", ".join(keywords_list)}
+		return ToolResult.fail("No API definition or local docs found for: %s" % ", ".join(keywords_list))
 	
-	return {"success": true, "data": "\n".join(output)}
+	return ToolResult.ok("\n".join(output))
 
 
 # --- Private Functions: Parsing ---
@@ -83,6 +84,98 @@ func _parse_keywords(p_keyword_input: Variant) -> PackedStringArray:
 			result.append(p.strip_edges())
 	
 	return result
+
+
+# --- Private Functions: Custom Class Parsing ---
+
+## 解析自定义 GDScript 类的 ## 文档注释和 static func 签名
+static func _parse_custom_class_script(p_path: String) -> Dictionary:
+	var f: FileAccess = FileAccess.open(p_path, FileAccess.READ)
+	if not f:
+		return {}
+	
+	var lines: PackedStringArray = f.get_as_text().split("\n")
+	f.close()
+	
+	var methods: Array[Dictionary] = []
+	var current_doc: Array[String] = []
+	var class_desc: Array[String] = []
+	var found_first_func: bool = false
+	
+	for line in lines:
+		var trimmed := line.strip_edges()
+		
+		if trimmed.begins_with("##"):
+			current_doc.append(trimmed.trim_prefix("##").strip_edges())
+			continue
+		
+		if trimmed.begins_with("static func ") and not current_doc.is_empty():
+			found_first_func = true
+			var method := _parse_static_func_sig(trimmed, current_doc)
+			if not method.is_empty():
+				methods.append(method)
+			current_doc = []
+			continue
+		
+		# 遇到非 ##、非 static func 的行
+		if not current_doc.is_empty():
+			if not found_first_func:
+				class_desc = current_doc  # 第一个函数前的 ## → 类描述
+			current_doc = []
+	
+	return {
+		"class_description": "\n".join(class_desc),
+		"methods": methods
+	}
+
+
+## 解析单行 static func 签名
+static func _parse_static_func_sig(p_line: String, p_doc: Array[String]) -> Dictionary:
+	var sig_re: RegEx = RegEx.create_from_string(
+		"static func (\\w+)\\s*\\(([^)]*)\\)\\s*(?:->\\s*(\\w+))?\\s*:"
+	)
+	var m: RegExMatch = sig_re.search(p_line)
+	if not m:
+		return {}
+	
+	var name: String = m.get_string(1)
+	var raw_params: String = m.get_string(2)
+	var return_type: String = m.get_string(3) if m.get_string(3) != "" else "void"
+	
+	# 解析参数
+	var params: Array[Dictionary] = []
+	if not raw_params.is_empty():
+		for part in raw_params.split(","):
+			part = part.strip_edges()
+			var p_re: RegEx = RegEx.create_from_string("(\\w+)\\s*(?::\\s*(\\w+))?")
+			var pm: RegExMatch = p_re.search(part)
+			if pm:
+				params.append({
+					"name": pm.get_string(1),
+					"type": pm.get_string(2) if pm.get_string(2) != "" else "Variant"
+				})
+	
+	return {
+		"name": name,
+		"params": params,
+		"return_type": return_type,
+		"doc": "\n".join(p_doc)
+	}
+
+
+## 格式化自定义类方法（模仿内置类格式）
+func _format_custom_method(p_method: Dictionary) -> String:
+	var args_str: Array[String] = []
+	for arg in p_method["params"]:
+		args_str.append("%s: %s" % [arg["name"], arg["type"]])
+	
+	var lines: Array[String] = []
+	lines.append("- `%s(%s) → %s`" % [p_method["name"], ", ".join(args_str), p_method["return_type"]])
+	
+	if not p_method["doc"].is_empty():
+		lines.append("    %s" % p_method["doc"])
+	
+	return "\n".join(lines)
 
 
 # --- Private Functions: Main Search ---
@@ -479,6 +572,7 @@ func _format_class_detailed(p_class: String) -> String:
 			global_script_info = cls_dict
 			break
 	
+	# 原来的代码（第 483~497 行）替换为：
 	if is_global_script_class:
 		lines.append("**Type:** Custom Global Script Class")
 		var base_class: String = global_script_info.get("base", "")
@@ -492,7 +586,22 @@ func _format_class_detailed(p_class: String) -> String:
 			lines.append("**Language:** %s" % language)
 		if global_script_info.get("is_tool", false):
 			lines.append("**Tool:** `@tool`")
-		lines.append("\n💡 This is a custom global class. Use `open_file` to open its script or `read_file` to view its source.")
+		
+		# === 解析自定义类 ===
+		if not script_path.is_empty() and FileAccess.file_exists(script_path):
+			var parsed: Dictionary = _parse_custom_class_script(script_path)
+			if not parsed.is_empty():
+				# 显示类描述
+				if parsed.has("class_description") and not parsed.class_description.is_empty():
+					lines.append("\n%s" % parsed.class_description)
+				
+				# 显示方法
+				if parsed.has("methods") and not parsed.methods.is_empty():
+					lines.append("\n**Methods:**")
+					for m in parsed.methods:
+						lines.append(_format_custom_method(m))
+						lines.append("")
+		
 		return "\n".join(lines)
 	# -------------------------------------------------
 	

@@ -16,6 +16,7 @@ const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 func _init() -> void:
 	tool_name = "get_resource_properties"
 	tool_description = "Lists all editable properties of a Resource (.tres/.res) file with their current values and types."
+	security_level = SecurityLevel.NONE
 
 
 # --- Public Functions ---
@@ -33,27 +34,27 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var file_path: String = p_args.get("path", "").strip_edges()
 	if file_path.is_empty():
-		return {"success": false, "data": "Error: 'path' is required."}
+		return ToolResult.fail("Error: 'path' is required.")
 
 	# 安全校验
 	var safety_err: String = validate_path_safety(file_path)
 	if not safety_err.is_empty():
-		return {"success": false, "data": safety_err}
+		return ToolResult.fail(safety_err)
 
 	if not FileAccess.file_exists(file_path):
-		return {"success": false, "data": "Error: File not found at %s." % file_path}
+		return ToolResult.fail("Error: File not found at %s." % file_path)
 
 	var ext: String = file_path.get_extension().to_lower()
 	if ext not in RESOURCE_EXTENSIONS:
-		return {"success": false, "data": "Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext}
+		return ToolResult.fail("Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext)
 
 	# 加载资源
 	var resource: Resource = load(file_path)
 	if not resource:
-		return {"success": false, "data": "Error: Failed to load resource from %s." % file_path}
+		return ToolResult.fail("Error: Failed to load resource from %s." % file_path)
 
 	# 收集属性
 	var properties: Array[Dictionary] = []
@@ -83,7 +84,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		})
 
 	if properties.is_empty():
-		return {"success": true, "data": "No editable properties found for this resource."}
+		return ToolResult.ok("No editable properties found for this resource.")
 
 	# 格式化输出
 	var lines: PackedStringArray = []
@@ -108,7 +109,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	lines.append("")
 	lines.append("💡 Use `edit_resource` to modify these properties.")
 
-	return {"success": true, "data": "\n".join(lines)}
+	return ToolResult.ok("\n".join(lines))
 
 
 # --- Private Functions ---

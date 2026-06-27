@@ -7,6 +7,7 @@ extends AiTool
 func _init() -> void:
 	tool_name = "create_sub_agent"
 	tool_description = "Creates a background Sub Agent equipped with a specific Skill to accomplish a sub-task. You will wait for its final report."
+	security_level = SecurityLevel.NONE
 
 
 func get_parameters_schema() -> Dictionary:
@@ -26,23 +27,21 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(args: Dictionary) -> Dictionary:
+func execute(args: Dictionary) -> ToolResult:
 	var skill_name = args.get("skill_name", "")
 	var task_desc = args.get("task_description", "")
 	
 	if not ToolRegistry.available_skills.has(skill_name):
-		# 如果找不到，返回可用列表以引导 AI 纠正
 		var available = ", ".join(ToolRegistry.available_skills.keys())
-		return {"success": false, "data": "Skill '%s' not found. Available skills are: [%s]" % [skill_name, available]}
+		return ToolResult.fail("Skill '%s' not found. Available skills are: [%s]" % [skill_name, available])
 	
 	var sub_agent_orchestrator: SubAgentOrchestrator = SubAgentOrchestrator.new()
 	sub_agent_orchestrator.name = "SubAgentOrchestrator"
 	sub_agent_orchestrator.skill_name = skill_name
 	sub_agent_orchestrator.task_description = task_desc
 	
-	var root: Window = Engine.get_main_loop().root # 找到编辑器的根节点
+	var root: Window = Engine.get_main_loop().root
 	root.add_child(sub_agent_orchestrator)
 	
-	# 阻塞等待 Sub Agent 后台循环结束
 	var result_summary = await sub_agent_orchestrator.run_task()
-	return {"success": true, "data": result_summary}
+	return ToolResult.ok(result_summary)

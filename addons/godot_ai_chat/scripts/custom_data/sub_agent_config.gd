@@ -5,7 +5,7 @@ extends Resource
 ## Sub Agent 独立配置文件
 
 @export_enum("OpenAI-ChatCompletions", "Anthropic-Compatible") var api_provider: String = "OpenAI-ChatCompletions"
-@export var api_base_url: String = "http://127.0.0.1:1234"
+@export var api_base_url: String = ""
 @export var api_key: String = ""
 @export var model_name: String = ""
 @export var supports_vision: bool = false

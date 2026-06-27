@@ -57,14 +57,14 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		if last_msg.tool_calls.is_empty():
 			break
 		
-		# 过滤 <think> 标签里的幻觉工具调用
+		# 过滤 <think thinking> 标签里的幻觉工具调用
 		var is_gemini: bool = (network_manager.current_provider is GeminiProvider)
-		if not is_gemini and "<think>" in last_msg.content:
+		if not is_gemini and "<think thinking" in last_msg.content:
 			last_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(last_msg.content, last_msg.tool_calls)
 		
 		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
 		var old_content_len: int = last_msg.content.length()
-		ToolBox.salvage_and_clean_tool_calls(last_msg)
+		ToolBox.salvage_and_clean_tool_calls(last_msg, ToolRegistry.main_agent_tool)
 		
 		# 如果发生了文本抢救，强制刷新 UI，把隐藏的文字显示出来
 		if last_msg.content.length() > old_content_len:
@@ -103,25 +103,21 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 				result_str = "[SYSTEM ERROR] Tool '%s' not found." % tool_name
 				AIChatLogger.error(result_str)
 			else:
-				var result_dict: Dictionary = await tool_instance.execute(args)
+				var result: ToolResult = await _execute_tool_safely(tool_instance, args)
 				if is_cancelled: break
 				
-				var data_val: Variant = result_dict.get("data", "")
-				if data_val is Dictionary or data_val is Array:
-					result_str = JSON.stringify(data_val, "\t")
-				else:
-					result_str = str(data_val)
+				result_str = result.data
 				
-				if result_dict.has("attachments"):
-					var att: Dictionary = result_dict.attachments
-					if att.has("image_data"):
-						image_data = att.image_data
-						image_mime = att.get("mime", "image/png")
-						
-						if not is_gemini and not image_data.is_empty():
-							if result_str == "Image successfully read and attached to this message.":
-								result_str = "Image content has been uploaded to the context as a new user message."
-							# 暂不清空 image_data，等 append_tool_message 后再处理
+				if not result.attachments.is_empty() \
+						and result.attachments.has("image_data") \
+						and result.attachments.image_data is PackedByteArray \
+						and not result.attachments.image_data.is_empty():
+					image_data = result.attachments.image_data
+					image_mime = result.attachments.get("mime", "image/png")
+					
+					if not is_gemini:
+						if result_str == "Image successfully read and attached to this message.":
+							result_str = "Image content has been uploaded to the context as a new user message."
 			
 			current_chat_window.append_tool_message(tool_name, result_str, call_id,
 				image_data if is_gemini else PackedByteArray(),
@@ -130,3 +126,41 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 			# 将图片数据作为独立的 User 消息插入
 			if not is_gemini and not image_data.is_empty():
 				current_chat_window.append_user_message("Image content from tool: " + tool_name, [{"data": image_data, "mime": image_mime}])
+
+
+# --- Private Functions ---
+
+# 安全中间件：在执行工具前统一进行安全检查
+# [param p_tool]: 工具实例
+# [param p_args]: 工具参数
+# [return]: ToolResult
+func _execute_tool_safely(p_tool: AiTool, p_args: Dictionary) -> ToolResult:
+	# READ_ONLY: 仅检查路径前缀和遍历，不检查黑名单
+	if p_tool.security_level == AiTool.SecurityLevel.READ_ONLY:
+		var path: String = p_args.get("path", "")
+		if path.is_empty():
+			path = p_args.get("scene_path", "")
+		if not path.is_empty():
+			if not path.begins_with("res://"):
+				return ToolResult.fail("Path must start with 'res://'.")
+			if ".." in path:
+				return ToolResult.fail("Path traversal ('..') is not allowed.")
+	
+	# PATH_VALIDATED: 完整检查（前缀 + 遍历 + 黑名单）
+	elif p_tool.security_level == AiTool.SecurityLevel.PATH_VALIDATED:
+		var path: String = p_args.get("path", "")
+		if path.is_empty():
+			path = p_args.get("scene_path", "")
+		if not path.is_empty():
+			var err: String = p_tool.validate_path_safety(path)
+			if not err.is_empty():
+				return ToolResult.fail(err)
+	
+	# 兼容适配
+	var raw_result: Variant = await p_tool.execute(p_args)
+	if raw_result is ToolResult:
+		return raw_result
+	elif raw_result is Dictionary:
+		return ToolResult.from_dict(raw_result)
+	else:
+		return ToolResult.fail("Tool returned unexpected type: %s" % typeof(raw_result))

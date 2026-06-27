@@ -55,6 +55,7 @@ const ALLOWED_EXTENSIONS: Array[String] = [
 	"md", "json", "txt", "csv", 
 	"gdshader", "glsl",
 	"tscn", "tres",
+	"gltf", "obj", "fbx"
 ]
 
 ## Restricted zones — files inside these directories are off-limits regardless of format.
@@ -77,6 +78,7 @@ var _last_compile_error: String = ""
 func _init() -> void:
 	tool_name = "run_editor_script"
 	tool_description = "Executes a custom Editor script. This tool is disabled by default."
+	security_level = SecurityLevel.NONE
 
 
 # --- Public Functions ---
@@ -94,34 +96,31 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	# === Layer 0: Master switch ===
 	var _cfg: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	if not _cfg.allow_editor_script_execution:
-		return {
-			"success": false,
-			"data": "⛔ **Editor Script execution is disabled.**\n\n"
-				  + "Please describe to the user what you intend to do, "
-				  + "and ask them to enable the **PandoraBox** CheckButton in the Chat UI."
-		}
+		return ToolResult.fail("⛔ **Editor Script execution is disabled.**\n\n"
+			  + "Please describe to the user what you intend to do, "
+			  + "and ask them to enable the **PandoraBox** CheckButton in the Chat UI.")
 	
 	# === Layer 1: Static code analysis (L2 — call extraction + alias tracking) ===
 	var code: String = p_args.get("code", "")
 	if code.is_empty():
-		return {"success": false, "data": "Error: 'code' parameter is required."}
+		return ToolResult.fail("Error: 'code' parameter is required.")
 	
 	var static_result: Dictionary = _static_analysis_l2(code)
 	if not static_result.success:
-		return static_result
+		return ToolResult.fail(static_result.data)
 	
 	# === Layer 1.5: Pre-execution format whitelist (static scan) ===
 	var whitelist_result: Dictionary = _check_format_whitelist(code)
 	if not whitelist_result.success:
-		return whitelist_result
+		return ToolResult.fail(whitelist_result.data)
 	
 	# === Layer 2: Pre-execution file system snapshot ===
 	if not Engine.is_editor_hint():
-		return {"success": false, "data": "Error: run_editor_script can only be used in the Godot editor."}
+		return ToolResult.fail("Error: run_editor_script can only be used in the Godot editor.")
 	
 	var snapshot_before: Dictionary = _collect_file_snapshot()
 	
@@ -129,11 +128,11 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var wrapped_code: String = _wrap_code(code)
 	var script: GDScript = _compile_script(wrapped_code)
 	if not script:
-		return {"success": false, "data": "❌ **Script compilation failed.** " + (_last_compile_error if not _last_compile_error.is_empty() else "Check syntax and Godot API usage.")}
+		return ToolResult.fail("❌ **Script compilation failed.** " + (_last_compile_error if not _last_compile_error.is_empty() else "Check syntax and Godot API usage."))
 	
 	var instance: Variant = script.new()
 	if not instance or not instance is EditorScript:
-		return {"success": false, "data": "❌ **Script instantiation failed.** Code must extend EditorScript."}
+		return ToolResult.fail("❌ **Script instantiation failed.** Code must extend EditorScript.")
 	
 	instance._run()
 	
@@ -169,9 +168,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		var ext_list: String = ""
 		for e in ALLOWED_EXTENSIONS:
 			ext_list += "- `.%s`\n" % e
-		return {
-			"success": false,
-			"data": "⛔ **Security violations detected after execution.**\n\n"
+		return ToolResult.fail("⛔ **Security violations detected after execution.**\n\n"
 				  + "The following unauthorized file operations were detected:\n"
 				  + "\n".join(post_violations) + "\n\n"
 				  + "**Allowed file formats:**\n"
@@ -182,7 +179,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 				  + "- `res://.git/`\n"
 				  + "- `res://.import/`\n"
 				  + "- `res://android/`\n"
-		}
+		)
 	
 	# --- Report normal changes ---
 	var result_text: String = "✅ **Editor Script executed successfully.**\n\n"
@@ -213,7 +210,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		for w in static_result.warnings:
 			result_text += "- %s\n" % w
 	
-	return {"success": true, "data": result_text}
+	return ToolResult.ok(result_text)
 
 
 # --- Private Functions: L2 Static Analysis ---
