@@ -26,7 +26,7 @@ func cancel_workflow() -> void:
 
 ## 运行聊天循环
 ## [param p_base_history]: 基础历史记录
-##[param p_settings]: 插件设置
+## [param p_settings]: 插件设置
 func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsConfig) -> void:
 	is_cancelled = false
 	
