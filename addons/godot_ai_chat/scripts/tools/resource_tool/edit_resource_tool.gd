@@ -18,7 +18,6 @@ const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 func _init() -> void:
 	tool_name = "edit_resource"
 	tool_description = "Edits properties of an existing Resource (.tres/.res) file."
-	security_level = SecurityLevel.PATH_VALIDATED
 
 
 # --- Public Functions ---
@@ -40,36 +39,36 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var file_path: String = p_args.get("path", "").strip_edges()
 	if file_path.is_empty():
-		return ToolResult.fail("Error: 'path' is required.")
+		return {"success": false, "data": "Error: 'path' is required."}
 
 	# 安全校验
 	var safety_err: String = validate_path_safety(file_path)
 	if not safety_err.is_empty():
-		return ToolResult.fail(safety_err)
+		return {"success": false, "data": safety_err}
 
 	# 检查文件是否存在
 	if not FileAccess.file_exists(file_path):
-		return ToolResult.fail("Error: File not found at %s." % file_path)
+		return {"success": false, "data": "Error: File not found at %s." % file_path}
 
 	# 校验扩展名
 	var ext: String = file_path.get_extension().to_lower()
 	if ext not in RESOURCE_EXTENSIONS:
-		return ToolResult.fail("Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext)
+		return {"success": false, "data": "Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext}
 
 	# 加载资源
 	var resource: Resource = load(file_path)
 	if not resource:
-		return ToolResult.fail("Error: Failed to load resource from %s." % file_path)
+		return {"success": false, "data": "Error: Failed to load resource from %s." % file_path}
 
 	var properties_raw: Variant = p_args.get("properties", {})
 	if not (properties_raw is Dictionary):
-		return ToolResult.fail("Error: 'properties' must be a dictionary (object), got %s." % typeof(properties_raw))
+		return {"success": false, "data": "Error: 'properties' must be a dictionary (object), got %s." % typeof(properties_raw)}
 	var properties: Dictionary = properties_raw as Dictionary
 	if properties.is_empty():
-		return ToolResult.fail("Error: 'properties' is required and cannot be empty.")
+		return {"success": false, "data": "Error: 'properties' is required and cannot be empty."}
 
 
 	# 记录变更
@@ -85,16 +84,22 @@ func execute(p_args: Dictionary) -> ToolResult:
 			errors.append(result.get("error", "Unknown error setting '%s'." % prop_name))
 
 	if not errors.is_empty():
-		return ToolResult.fail("Failed to set some properties:\n" + "\n".join(errors))
+		return {
+			"success": false,
+			"data": "Failed to set some properties:\n" + "\n".join(errors)
+		}
 
 	# 保存资源
 	var save_err: Error = ResourceSaver.save(resource, file_path)
 	if save_err != OK:
-		return ToolResult.fail("Error: Failed to save resource. Error code: %d" % save_err)
+		return {"success": false, "data": "Error: Failed to save resource. Error code: %d" % save_err}
 
 	ToolBox.update_editor_filesystem(file_path)
 
-	return ToolResult.ok("Resource updated: %s\nChanges applied:\n  %s" % [file_path, "\n  ".join(changes)])
+	return {
+		"success": true,
+		"data": "Resource updated: %s\nChanges applied:\n  %s" % [file_path, "\n  ".join(changes)]
+	}
 
 
 # --- Private Functions ---

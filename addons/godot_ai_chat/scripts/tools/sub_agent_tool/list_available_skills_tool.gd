@@ -10,7 +10,6 @@ extends AiTool
 func _init() -> void:
 	tool_name = "list_available_skills"
 	tool_description = "Lists all available AI skills and their current status."
-	security_level = SecurityLevel.NONE
 
 
 # --- Public Functions ---
@@ -27,21 +26,25 @@ func get_parameters_schema() -> Dictionary:
 ## 执行工具逻辑，列出所有可用技能
 ## [param p_args]: 参数字典（此工具不需要参数）
 ## [return]: 包含成功状态和技能列表的字典
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var all_skills: Array = ToolRegistry.get_available_skill_names()
 	
 	if all_skills.is_empty():
-		return ToolResult.ok("No specialized skills found in the registry.")
+		return {"success": true, "data": "No specialized skills found in the registry."}
 	
 	var output: String = "## Available Skills\n"
 	
 	for skill_name in all_skills:
+		var is_active: bool = ToolRegistry.is_skill_active(skill_name)
+		var status_text: String = "**Active (Used by Sub-Agent)**" if is_active else "Inactive (Not Used by Sub-Agent)"
+		
 		var skill_res = ToolRegistry.available_skills.get(skill_name)
 		var desc := ""
 		if skill_res and "description" in skill_res:
 			desc = skill_res.description
 		
 		output += "### %s\n" % skill_name
+		output += "**Status**: %s\n" % status_text
 		if not desc.is_empty():
 			output += "**Description**: %s\n" % desc
 		
@@ -64,7 +67,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		
 		output += "\n"
 	output += "---\n"
-	return ToolResult.ok(output)
+	return {"success": true, "data": output}
 
 
 # --- Private Functions ---

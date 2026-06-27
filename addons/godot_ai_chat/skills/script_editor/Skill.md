@@ -18,4 +18,4 @@
 - `insert_code` 和 `delete_code` 依赖正确的上下文行号工作，因此不适合进行批量调用。
 
 ## 帮助文档
-- `multi_replace` 工具的详细使用说明，请查阅文档 `res://addons/godot_ai_chat/skills/script_editor/reference/multi_replace_tool_guide.md`
+`multi_replace` 工具的详细使用说明，请查阅文档 `res://addons/godot_ai_chat/skills/script_editor/reference/multi_replace_tool_guide.md`

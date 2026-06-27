@@ -4,8 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "delete_memory"
-	tool_description = "Delete a memory entry by its ID. ALWAYS USE `search_memories` to get memory ID first"
-	security_level = SecurityLevel.NONE
+	tool_description = "Delete a memory entry by its ID. Use `search_memories` to get memory ID"
 
 
 func get_parameters_schema() -> Dictionary:
@@ -21,11 +20,11 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var mem_id: int = p_args.get("id", -1)
 	
 	if mem_id < 1:
-		return ToolResult.fail("Error: A valid 'id' (positive integer) is required.")
+		return {"success": false, "data": "Error: A valid 'id' (positive integer) is required."}
 	
 	var store := _load_or_create_store()
 	
@@ -37,7 +36,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 			break
 	
 	if not target_entry:
-		return ToolResult.fail("Error: No memory found with ID '%d'." % mem_id)
+		return {"success": false, "data": "Error: No memory found with ID '%d'." % mem_id}
 	
 	var deleted_title: String = target_entry.title
 	var deleted_topic: String = target_entry.topic
@@ -46,11 +45,11 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	var success: bool = store.delete_entry(mem_id)
 	if not success:
-		return ToolResult.fail("Error: Failed to delete memory with ID '%d'." % mem_id)
+		return {"success": false, "data": "Error: Failed to delete memory with ID '%d'." % mem_id}
 	
 	var err := store.save()
 	if err != OK:
-		return ToolResult.fail("Error: Failed to save memory store after deletion: %s" % error_string(err))
+		return {"success": false, "data": "Error: Failed to save memory store after deletion: %s" % error_string(err)}
 	
 	var result: String = "Memory deleted successfully.\n"
 	result += "ID: %d\n" % mem_id
@@ -59,7 +58,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	result += "Type: %s\n" % deleted_type
 	result += "Scope: %s" % deleted_scope
 	
-	return ToolResult.ok(result)
+	return {"success": true, "data": result}
 
 
 func _load_or_create_store() -> MemoryStore:

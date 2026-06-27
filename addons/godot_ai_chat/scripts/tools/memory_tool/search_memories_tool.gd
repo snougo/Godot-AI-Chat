@@ -5,7 +5,6 @@ extends AiTool
 func _init() -> void:
 	tool_name = "search_memories"
 	tool_description = "Search stored memories by workspace and topic."
-	security_level = SecurityLevel.NONE
 
 
 func get_parameters_schema() -> Dictionary:
@@ -31,16 +30,16 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var workspace_path: String = p_args.get("workspace_path", "").strip_edges()
 	var topic: String = p_args.get("topic", "").strip_edges()
 	var limit: int = p_args.get("limit", 10)
 	
 	if workspace_path.is_empty():
-		return ToolResult.fail("Error: workspace_path is required. Use the current workspace path from the system prompt.")
+		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
 	
 	if topic.is_empty():
-		return ToolResult.fail("Error: topic is required. Use get_memory_topics to see available topics.")
+		return {"success": false, "data": "Error: topic is required. Use get_memory_topics to see available topics."}
 	
 	limit = clampi(limit, 1, 50)
 	
@@ -48,7 +47,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var results := store.search(workspace_path, topic, limit)
 	
 	if results.is_empty():
-		return ToolResult.fail("No memories found matching the criteria.")
+		return {"success": true, "data": "No memories found matching the criteria."}
 	
 	var lines: PackedStringArray = []
 	lines.append("Found %d memories (showing top %d):" % [results.size(), limit])
@@ -67,7 +66,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	# 保存更新后的访问计数
 	store.save()
 	
-	return ToolResult.ok("\n".join(lines))
+	return {"success": true, "data": "\n".join(lines)}
 
 
 func _load_or_create_store() -> MemoryStore:

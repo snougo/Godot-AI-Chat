@@ -16,7 +16,6 @@ const VALID_EXTENSIONS: Array[String] = ["gdshader"]
 func _init() -> void:
 	tool_name = "create_gdshader_file"
 	tool_description = "Creates a `.gdshader` shader file."
-	security_level = SecurityLevel.PATH_VALIDATED
 
 
 # --- Public Functions ---
@@ -42,12 +41,12 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var folder_path: String = p_args.get("path", "")
 	var file_name: String = p_args.get("file_name", "")
 	
 	if folder_path.is_empty() or file_name.is_empty():
-		return ToolResult.fail("Error: 'path' and 'file_name' are required.")
+		return {"success": false, "data": "Error: 'path' and 'file_name' are required."}
 	
 	if not folder_path.ends_with("/"):
 		folder_path += "/"
@@ -56,29 +55,29 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	var safety_err: String = validate_path_safety(full_path)
 	if not safety_err.is_empty():
-		return ToolResult.fail(safety_err)
+		return {"success": false, "data": safety_err}
 	
 	if FileAccess.file_exists(full_path):
-		return ToolResult.fail("Error: File already exists at %s. Overwriting is not allowed." % full_path)
+		return {"success": false, "data": "Error: File already exists at %s. Overwriting is not allowed." % full_path}
 	
 	if not DirAccess.dir_exists_absolute(folder_path):
-		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path)
+		return {"success": false, "data": "Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path}
 	
 	var ext: String = full_path.get_extension().to_lower()
 	if ext not in VALID_EXTENSIONS:
-		return ToolResult.fail("Error: Invalid extension '.%s'. Shader files must use: .gdshader." % ext)
+		return {"success": false, "data": "Error: Invalid extension '.%s'. Shader files must use: .gdshader." % ext}
 	
 	var content: String = p_args.get("content", "")
 	if content.is_empty():
-		return ToolResult.fail("Error: 'content' is required.")
+		return {"success": false, "data": "Error: 'content' is required."}
 	
 	var file := FileAccess.open(full_path, FileAccess.WRITE)
 	if not file:
-		return ToolResult.fail("Failed to create file: " + str(FileAccess.get_open_error()))
+		return {"success": false, "data": "Failed to create file: " + str(FileAccess.get_open_error())}
 	
 	file.store_string(content)
 	file.close()
 	
 	ToolBox.update_editor_filesystem(full_path)
 	
-	return ToolResult.ok("Shader file created: %s" % full_path)
+	return {"success": true, "data": "Shader file created: %s" % full_path}

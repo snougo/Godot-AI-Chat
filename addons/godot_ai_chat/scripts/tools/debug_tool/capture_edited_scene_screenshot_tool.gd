@@ -2,7 +2,7 @@
 extends BaseSceneTool
 
 ## 捕获场景视窗截图工具
-##
+## 
 ## 捕获当前编辑器3D或2D视窗的画面，返回截图数据供AI分析。
 ## 根据场景根节点类型自动选择视窗（Node2D/Control → 2D，Node3D → 3D），
 ## 也可通过 viewport_type 参数手动指定。
@@ -12,7 +12,6 @@ extends BaseSceneTool
 func _init() -> void:
 	tool_name = "capture_edited_scene_screenshot"
 	tool_description = "Captures a screenshot of the current edited scene viewport in the Godot Editor."
-	security_level = SecurityLevel.NONE
 
 
 # --- Public Functions ---
@@ -31,14 +30,14 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	if not Engine.is_editor_hint():
-		return ToolResult.fail("Editor only tool.")
+		return {"success": false, "data": "Editor only tool."}
 	
 	# 获取当前编辑的场景根节点
 	var root: Node = get_active_scene_root()
 	if not root:
-		return ToolResult.fail("No active scene in editor.")
+		return {"success": false, "data": "No active scene in editor."}
 	
 	var viewport: SubViewport = null
 	var viewport_type: String = ""
@@ -62,7 +61,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 			EditorInterface.set_main_screen_editor("3D")
 	
 	if not viewport:
-		return ToolResult.fail("No %s viewport available." % viewport_type)
+		return {"success": false, "data": "No %s viewport available." % viewport_type}
 	
 	# 等待渲染完成
 	await RenderingServer.frame_post_draw
@@ -78,8 +77,11 @@ func execute(p_args: Dictionary) -> ToolResult:
 	# 将图像编码为 PNG
 	var png_buffer: PackedByteArray = image.save_png_to_buffer()
 	
-	return ToolResult.ok_with_image(
-		"Viewport screenshot captured successfully. Type: %s, Resolution: %dx%d. The image is attached to this message." % [viewport_type, width, height],
-		png_buffer,
-		"image/png"
-	)
+	return {
+		"success": true,
+		"data": "Viewport screenshot captured successfully. Type: %s, Resolution: %dx%d. The image is attached to this message." % [viewport_type, width, height],
+		"attachments": {
+			"image_data": png_buffer,
+			"mime": "image/png"
+		}
+	}

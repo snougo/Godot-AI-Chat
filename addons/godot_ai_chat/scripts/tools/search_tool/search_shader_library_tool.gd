@@ -11,7 +11,6 @@ const CACHE_FILE_PATH: String = "user://shader_library_cache/shaders.json"
 func _init() -> void:
 	tool_name = "search_shader_library"
 	tool_description = "Search the Shader Library cache database for shaders."
-	security_level = SecurityLevel.NONE
 
 
 func get_parameters_schema() -> Dictionary:
@@ -50,25 +49,25 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	# 1. Read cache file
 	if not FileAccess.file_exists(CACHE_FILE_PATH):
-		return ToolResult.fail("Shader Library cache not found. Open the ShaderLib tab in the editor first to load the cache.")
+		return {"success": false, "data": "Shader Library cache not found. Open the ShaderLib tab in the editor first to load the cache."}
 	
 	var file := FileAccess.open(CACHE_FILE_PATH, FileAccess.READ)
 	if file == null:
-		return ToolResult.fail("Failed to open Shader Library cache file.")
+		return {"success": false, "data": "Failed to open Shader Library cache file."}
 	
 	var json_str: String = file.get_as_text()
 	file.close()
 	
 	var parsed = JSON.parse_string(json_str)
 	if typeof(parsed) != TYPE_DICTIONARY:
-		return ToolResult.fail("Invalid cache file format.")
+		return {"success": false, "data": "Invalid cache file format."}
 	
 	var all_shaders: Array = parsed.get("shaders", [])
 	if all_shaders.is_empty():
-		return ToolResult.fail("No shaders found in cache.")
+		return {"success": false, "data": "No shaders found in cache."}
 	
 	# 2. Extract parameters
 	var query: String = p_args.get("query", "").strip_edges().to_lower()
@@ -94,7 +93,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		filtered.append(s)
 	
 	if filtered.is_empty():
-		return ToolResult.ok("No matching shaders found.")
+		return {"success": true, "data": "No matching shaders found."}
 	
 	# 4. Sort
 	match sort_by:
@@ -130,4 +129,4 @@ func execute(p_args: Dictionary) -> ToolResult:
 		lines.append("   URL: %s%s" % [s.get("url", ""), tags_str])
 		lines.append("")
 	
-	return ToolResult.ok("\n".join(lines).strip_edges())
+	return {"success": true, "data": "\n".join(lines).strip_edges()}

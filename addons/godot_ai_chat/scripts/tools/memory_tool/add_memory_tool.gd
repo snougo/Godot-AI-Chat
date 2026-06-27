@@ -5,7 +5,6 @@ extends AiTool
 func _init() -> void:
 	tool_name = "add_memory"
 	tool_description = "Store an important memory that the AI should remember for future conversations. Use 'topic' to group related memories under a common topic name."
-	security_level = SecurityLevel.NONE
 
 
 func get_parameters_schema() -> Dictionary:
@@ -43,7 +42,7 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var workspace_path: String = p_args.get("workspace_path", "").strip_edges()
 	var scope: String = p_args.get("scope", "").strip_edges()
 	var title: String = p_args.get("title", "").strip_edges()
@@ -53,32 +52,38 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	# Validation
 	if workspace_path.is_empty():
-		return ToolResult.fail("Error: workspace_path is required. Use the current workspace path from the system prompt.")
+		return {"success": false, "data": "Error: workspace_path is required. Use the current workspace path from the system prompt."}
 	
 	if scope.is_empty():
-		return ToolResult.fail("Error: scope is required. Use 'workspace' for module-level or 'global' for project-level memories.")
+		return {"success": false, "data": "Error: scope is required. Use 'workspace' for module-level or 'global' for project-level memories."}
 	
 	if not MemoryEntry.is_valid_scope(scope):
-		return ToolResult.fail("Error: Invalid scope '%s'. Valid options: %s" % [scope, MemoryEntry.get_valid_scopes()])
+		return {
+			"success": false,
+			"data": "Error: Invalid scope '%s'. Valid options: %s" % [scope, MemoryEntry.get_valid_scopes()]
+		}
 	
 	if title.is_empty() or content.is_empty() or memory_type.is_empty():
-		return ToolResult.fail("Error: Title, Content, and Memory Type are required!")
+		return {"success": false, "data": "Error: Title, Content, and Memory Type are required!"}
 	
 	if not MemoryEntry.is_valid_type(memory_type):
-		return ToolResult.fail("Error: Invalid memory type '%s'. Valid options: %s" % [memory_type, MemoryEntry.get_valid_types()])
+		return {
+			"success": false,
+			"data": "Error: Invalid memory type '%s'. Valid options: %s" % [memory_type, MemoryEntry.get_valid_types()]
+		}
 	
 	if topic.is_empty():
-		return ToolResult.fail("Error: topic is required. Use get_memory_topics to see existing topics or create a new one.")
+		return {"success": false, "data": "Error: topic is required. Use get_memory_topics to see existing topics or create a new one."}
 	
 	var store := _load_or_create_store()
 	var entry := store.add_entry(title, content, memory_type, scope, workspace_path, "", topic)
 	
 	if not entry:
-		return ToolResult.fail("Error: Failed to add memory entry.")
+		return {"success": false, "data": "Error: Failed to add memory entry."}
 	
 	var err := store.save()
 	if err != OK:
-		return ToolResult.fail("Error: Failed to save memory store: %s" % error_string(err))
+		return {"success": false, "data": "Error: Failed to save memory store: %s" % error_string(err)}
 	
 	var result: String = "Memory stored successfully.\n"
 	result += "Scope: %s\n" % entry.scope
@@ -88,7 +93,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	result += "Type: %s\n" % entry.memory_type
 	result += "Content: %s" % entry.content
 	
-	return ToolResult.ok(result)
+	return {"success": true, "data": result}
 
 
 func _load_or_create_store() -> MemoryStore:

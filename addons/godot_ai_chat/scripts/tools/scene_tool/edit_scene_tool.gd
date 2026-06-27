@@ -5,7 +5,6 @@ extends BaseSceneTool
 func _init() -> void:
 	tool_name = "edit_scene"
 	tool_description = "Adds, deletes, moves node to modify the SceneTree hierarchy."
-	security_level = SecurityLevel.PATH_VALIDATED
 
 
 func get_parameters_schema() -> Dictionary:
@@ -38,13 +37,13 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	if not Engine.is_editor_hint():
-		return ToolResult.fail("Editor only tool.")
+		return {"success": false, "data": "Editor only tool."}
 	
 	var root: Node = get_active_scene_root()
 	if not root:
-		return ToolResult.fail("No active scene in editor.")
+		return {"success": false, "data": "No active scene in editor."}
 	
 	var action: String = p_args.get("action", "")
 	var result: Dictionary = {}
@@ -57,15 +56,14 @@ func execute(p_args: Dictionary) -> ToolResult:
 		"move_node":
 			result = _execute_move_node(root, p_args)
 		_:
-			return ToolResult.fail("Unknown action.")
+			return {"success": false, "data": "Unknown action."}
 	
 	if result.get("success", false):
 		# Return the updated tree structure
 		var tree_info: String = get_scene_tree_string(root)
 		result["data"] = result["data"] + "\n\nUpdated Scene Tree:\n```\n" + tree_info + "\n```"
-		return ToolResult.ok(result.data)
-	else:
-		return ToolResult.fail(result.data)
+	
+	return result
 
 
 func _execute_add_node(root: Node, p_args: Dictionary) -> Dictionary:
@@ -158,7 +156,7 @@ func _execute_move_node(root: Node, p_args: Dictionary) -> Dictionary:
 	# Do: Remove from old -> Add to new -> Set owner
 	ur.add_do_method(old_parent, "remove_child", node)
 	ur.add_do_method(new_parent, "add_child", node)
-	ur.add_do_property(node, "owner", root)
+	ur.add_do_property(node, "owner", root) # Re-assign owner just in case
 	
 	# Undo: Remove from new -> Add to old -> Set owner
 	ur.add_undo_method(new_parent, "remove_child", node)

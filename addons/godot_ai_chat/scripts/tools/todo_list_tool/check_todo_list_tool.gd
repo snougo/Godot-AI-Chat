@@ -8,7 +8,6 @@ extends AiTool
 func _init() -> void:
 	tool_name = "check_todo_list"
 	tool_description = "Check pending TODO items in current workspace."
-	security_level = SecurityLevel.NONE
 
 
 func get_parameters_schema() -> Dictionary:
@@ -24,12 +23,12 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> ToolResult:
+func execute(p_args: Dictionary) -> Dictionary:
 	var workspace_path: String = p_args.get("path", "")
 	
 	# 参数校验
 	if workspace_path.is_empty():
-		return ToolResult.fail("Error: 'path' parameter is required (e.g., current folder path).")
+		return {"success": false, "data": "Error: 'path' parameter is required (e.g., current folder path)."}
 	
 	# 统一路径格式
 	if not workspace_path.ends_with("/"):
@@ -38,7 +37,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	# 加载 TodoList 资源（自动创建空文件）
 	var todo_list := _load_or_create_todo_list(workspace_path)
 	if todo_list == null:
-		return ToolResult.fail("Error: Failed to initialize TodoList.")
+		return {"success": false, "data": "Error: Failed to initialize TodoList."}
 	
 	# 获取并返回待办列表
 	return _list_pending_tasks(todo_list, workspace_path)
@@ -71,7 +70,7 @@ func _load_or_create_todo_list(p_workspace_path: String) -> AiTodoList:
 	return todo_list
 
 
-func _list_pending_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> ToolResult:
+func _list_pending_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> Dictionary:
 	var items: Array[AiTodoItem] = p_todo_list.get_items(p_workspace_path)
 	var md_lines: PackedStringArray = []
 	
@@ -100,7 +99,7 @@ func _list_pending_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> T
 	md_lines.append("\n---")
 	md_lines.append("📊 **Stats**: Pending %d | Completed %d | Total %d" % [pending_tasks.size(), completed_count, items.size()])
 	
-	return ToolResult.ok("\n".join(md_lines))
+	return {"success": true, "data": "\n".join(md_lines)}
 
 
 func _save_resource(p_res: Resource, p_workspace_path: String) -> String:
