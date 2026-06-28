@@ -37,8 +37,8 @@ func get_parameters_schema() -> Dictionary:
 ## [必须重写] 执行工具逻辑
 ## [param p_args]: AI 传入的参数字典
 ## 返回: {"success": bool, "data": String}
-func execute(_p_args: Dictionary) -> Dictionary:
-	return {"success": false, "data": "Not implemented"}
+func execute(_p_args: Dictionary) -> ToolResult:
+	return ToolResult.fail("Not implemented")
 
 
 ## 统一的路径安全检查函数

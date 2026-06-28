@@ -30,14 +30,14 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	if not Engine.is_editor_hint():
-		return {"success": false, "data": "Editor only tool."}
+		return ToolResult.fail("Error: editor only tool.")
 	
 	# 获取当前编辑的场景根节点
 	var root: Node = get_active_scene_root()
 	if not root:
-		return {"success": false, "data": "No active scene in editor."}
+		return ToolResult.fail("Error: no active scene in editor.")
 	
 	var viewport: SubViewport = null
 	var viewport_type: String = ""
@@ -61,7 +61,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 			EditorInterface.set_main_screen_editor("3D")
 	
 	if not viewport:
-		return {"success": false, "data": "No %s viewport available." % viewport_type}
+		return ToolResult.fail("Error: no %s viewport available." % viewport_type)
 	
 	# 等待渲染完成
 	await RenderingServer.frame_post_draw
@@ -77,11 +77,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 将图像编码为 PNG
 	var png_buffer: PackedByteArray = image.save_png_to_buffer()
 	
-	return {
-		"success": true,
-		"data": "Viewport screenshot captured successfully. Type: %s, Resolution: %dx%d. The image is attached to this message." % [viewport_type, width, height],
-		"attachments": {
-			"image_data": png_buffer,
-			"mime": "image/png"
-		}
-	}
+	return ToolResult.ok_with_image("Viewport screenshot captured successfully. Type: %s, Resolution: %dx%d. The image is attached to this message." % [viewport_type, width, height],
+		png_buffer,
+		"image/png"
+	)

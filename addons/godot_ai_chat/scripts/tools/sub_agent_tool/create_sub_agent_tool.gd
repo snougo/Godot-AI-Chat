@@ -26,14 +26,14 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(args: Dictionary) -> Dictionary:
+func execute(args: Dictionary) -> ToolResult:
 	var skill_name = args.get("skill_name", "")
 	var task_desc = args.get("task_description", "")
 	
 	if not ToolRegistry.available_skills.has(skill_name):
 		# 如果找不到，返回可用列表以引导 AI 纠正
 		var available = ", ".join(ToolRegistry.available_skills.keys())
-		return {"success": false, "data": "Skill '%s' not found. Available skills are: [%s]" % [skill_name, available]}
+		return ToolResult.fail("Error: Skill '%s' not found. Available skills are: [%s]" % [skill_name, available])
 	
 	var sub_agent_orchestrator: SubAgentOrchestrator = SubAgentOrchestrator.new()
 	sub_agent_orchestrator.name = "SubAgentOrchestrator"
@@ -45,4 +45,4 @@ func execute(args: Dictionary) -> Dictionary:
 	
 	# 阻塞等待 Sub Agent 后台循环结束
 	var result_summary = await sub_agent_orchestrator.run_task()
-	return {"success": true, "data": result_summary}
+	return ToolResult.ok(result_summary)

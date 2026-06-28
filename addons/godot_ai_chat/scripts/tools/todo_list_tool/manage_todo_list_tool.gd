@@ -31,14 +31,14 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var action: String = p_args.get("action", "")
 	var content: String = p_args.get("content", "")
 	var workspace_path: String = p_args.get("path", "")
 	
 	# 参数校验
 	if workspace_path.is_empty():
-		return {"success": false, "data": "Error: 'path' parameter is required (e.g. current folder path)."}
+		return ToolResult.fail("Error: 'path' parameter is required (e.g. current folder path).")
 	
 	# 统一路径格式
 	if not workspace_path.ends_with("/"):
@@ -47,7 +47,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 加载或创建 TodoList 资源（使用动态路径）
 	var todo_list := _load_or_create_todo_list(action == "add", workspace_path)
 	if todo_list == null:
-		return {"success": false, "data": "Error: Failed to initialize TodoList."}
+		return ToolResult.fail("Error: Failed to initialize TodoList.")
 	
 	# 执行操作
 	match action:
@@ -56,7 +56,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"complete":
 			return _complete_task(todo_list, content, workspace_path)
 		_:
-			return {"success": false, "data": "Unknown action: " + action}
+			return ToolResult.fail("Error: Unknown action: " + action)
 
 
 func _load_or_create_todo_list(p_create_if_missing: bool, p_workspace_path: String) -> AiTodoList:
@@ -101,45 +101,45 @@ func _list_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> Dictionar
 	return {"success": true, "data": "\n".join(md_lines)}
 
 
-func _add_task(p_todo_list: AiTodoList, p_content: String, p_workspace_path: String) -> Dictionary:
+func _add_task(p_todo_list: AiTodoList, p_content: String, p_workspace_path: String) -> ToolResult:
 	if p_content.strip_edges().is_empty():
-		return {"success": false, "data": "Error: Content cannot be empty."}
+		return ToolResult.fail("Error: Content cannot be empty.")
 	
 	p_todo_list.add_item(p_content, p_workspace_path)
 	p_todo_list.emit_changed()
 	
 	var save_error := _save_resource(p_todo_list, p_workspace_path)
 	if not save_error.is_empty():
-		return {"success": false, "data": "Error saving resource: " + save_error}
+		return ToolResult.fail("Error saving resource: " + save_error)
 	
 	# 添加成功后，返回当前所有未完成待办
 	var result_msg: String = "✅ Added task to Workspace '%s'\n\n---\n\n" % p_workspace_path
 	var list_result: Dictionary = _list_tasks(p_todo_list, p_workspace_path)
 	result_msg += list_result.data
 	
-	return {"success": true, "data": result_msg}
+	return ToolResult.ok(result_msg)
 
 
-func _complete_task(p_todo_list: AiTodoList, p_content_match: String, p_workspace_path: String) -> Dictionary:
+func _complete_task(p_todo_list: AiTodoList, p_content_match: String, p_workspace_path: String) -> ToolResult:
 	if p_content_match.strip_edges().is_empty():
-		return {"success": false, "data": "Error: Content match string cannot be empty."}
+		return ToolResult.fail("Error: Content match string cannot be empty.")
 	
 	var found := p_todo_list.mark_as_completed(p_content_match)
 	if not found:
-		return {"success": false, "data": "Error: Task containing '%s' not found." % p_content_match}
+		return ToolResult.fail("Error: Task containing '%s' not found." % p_content_match)
 	
 	p_todo_list.emit_changed()
 	
 	var save_error := _save_resource(p_todo_list, p_workspace_path)
 	if not save_error.is_empty():
-		return {"success": false, "data": "Error saving resource: " + save_error}
+		return ToolResult.fail("Error: saving resource: " + save_error)
 	
 	# 完成后，返回当前所有未完成待办（显示被标记完成的任务）
 	var result_msg: String = "✅ `%s` task marked as completed in Workspace '%s'\n\n---\n\n" % [p_content_match, p_workspace_path]
 	var list_result: Dictionary = _list_tasks(p_todo_list, p_workspace_path)
 	result_msg += list_result.data
 	
-	return {"success": true, "data": result_msg}
+	return ToolResult.ok(result_msg)
 
 
 func _save_resource(p_res: Resource, p_workspace_path: String) -> String:

@@ -54,7 +54,9 @@ const FILEACCESS_PATH_METHODS: Array[String] = [
 const ALLOWED_EXTENSIONS: Array[String] = [
 	"md", "json", "txt", "csv", 
 	"gdshader", "glsl",
-	"tscn", "tres",
+	"tres",
+	"tscn", "gd",
+	"svg"
 ]
 
 ## Restricted zones — files inside these directories are off-limits regardless of format.
@@ -94,34 +96,32 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	# === Layer 0: Master switch ===
 	var _cfg: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	if not _cfg.allow_editor_script_execution:
-		return {
-			"success": false,
-			"data": "⛔ **Editor Script execution is disabled.**\n\n"
-				  + "Please describe to the user what you intend to do, "
-				  + "and ask them to enable the **PandoraBox** CheckButton in the Chat UI."
-		}
+		return ToolResult.fail(
+			"**Editor Script execution is disabled.**\n\n"
+			+ "Please describe to the user what you intend to do, and ask them to enable the **PandoraBox** CheckButton in the Chat UI."
+		)
 	
 	# === Layer 1: Static code analysis (L2 — call extraction + alias tracking) ===
 	var code: String = p_args.get("code", "")
 	if code.is_empty():
-		return {"success": false, "data": "Error: 'code' parameter is required."}
+		return ToolResult.fail("Error: 'code' parameter is required.")
 	
-	var static_result: Dictionary = _static_analysis_l2(code)
-	if not static_result.success:
+	var static_result: ToolResult = _static_analysis_l2(code)
+	if static_result.is_fail():
 		return static_result
 	
 	# === Layer 1.5: Pre-execution format whitelist (static scan) ===
-	var whitelist_result: Dictionary = _check_format_whitelist(code)
-	if not whitelist_result.success:
+	var whitelist_result: ToolResult = _check_format_whitelist(code)
+	if whitelist_result.is_fail():
 		return whitelist_result
 	
 	# === Layer 2: Pre-execution file system snapshot ===
 	if not Engine.is_editor_hint():
-		return {"success": false, "data": "Error: run_editor_script can only be used in the Godot editor."}
+		return ToolResult.fail("Error: run_editor_script can only be used in the Godot editor.")
 	
 	var snapshot_before: Dictionary = _collect_file_snapshot()
 	
@@ -129,11 +129,11 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var wrapped_code: String = _wrap_code(code)
 	var script: GDScript = _compile_script(wrapped_code)
 	if not script:
-		return {"success": false, "data": "❌ **Script compilation failed.** " + (_last_compile_error if not _last_compile_error.is_empty() else "Check syntax and Godot API usage.")}
+		return ToolResult.fail("**Script compilation failed.** " + (_last_compile_error if not _last_compile_error.is_empty() else "Check syntax and Godot API usage."))
 	
 	var instance: Variant = script.new()
 	if not instance or not instance is EditorScript:
-		return {"success": false, "data": "❌ **Script instantiation failed.** Code must extend EditorScript."}
+		return ToolResult.fail("**Script instantiation failed.** Code must extend EditorScript.")
 	
 	instance._run()
 	
@@ -169,23 +169,22 @@ func execute(p_args: Dictionary) -> Dictionary:
 		var ext_list: String = ""
 		for e in ALLOWED_EXTENSIONS:
 			ext_list += "- `.%s`\n" % e
-		return {
-			"success": false,
-			"data": "⛔ **Security violations detected after execution.**\n\n"
-				  + "The following unauthorized file operations were detected:\n"
-				  + "\n".join(post_violations) + "\n\n"
-				  + "**Allowed file formats:**\n"
-				  + ext_list
-				  + "\n**Restricted zones:**\n"
-				  + "- `res://addons/`\n"
-				  + "- `res://.godot/`\n"
-				  + "- `res://.git/`\n"
-				  + "- `res://.import/`\n"
-				  + "- `res://android/`\n"
-		}
+		return ToolResult.fail(
+			"**Security violations detected after execution.**\n\n"
+			+ "The following unauthorized file operations were detected:\n"
+			+ "\n".join(post_violations) + "\n\n"
+			+ "**Allowed file formats:**\n"
+			+ ext_list
+			+ "\n**Restricted zones:**\n"
+			+ "- `res://addons/`\n"
+			+ "- `res://.godot/`\n"
+			+ "- `res://.git/`\n"
+			+ "- `res://.import/`\n"
+			+ "- `res://android/`\n"
+		)
 	
 	# --- Report normal changes ---
-	var result_text: String = "✅ **Editor Script executed successfully.**\n\n"
+	var result_text: String = "**Editor Script executed successfully.**\n\n"
 	
 	if not audit.created.is_empty():
 		result_text += "**Files Created:**\n"
@@ -208,12 +207,13 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	ToolBox.refresh_editor_filesystem()
 	
-	if static_result.has("warnings") and not static_result.warnings.is_empty():
+	var warnings: Array = static_result.get_extra("warnings", [])
+	if not warnings.is_empty():
 		result_text += "**Static Analysis Warnings:**\n"
-		for w in static_result.warnings:
+		for w in warnings:
 			result_text += "- %s\n" % w
 	
-	return {"success": true, "data": result_text}
+	return ToolResult.ok(result_text)
 
 
 # --- Private Functions: L2 Static Analysis ---
@@ -319,7 +319,7 @@ func _extract_calls(p_code: String) -> Array[Dictionary]:
 
 
 # L2 static analysis: preprocess → symbol table → call extraction → danger check.
-func _static_analysis_l2(p_code: String) -> Dictionary:
+func _static_analysis_l2(p_code: String) -> ToolResult:
 	var blocks: Array[String] = []
 	var warns: Array[String] = []
 	
@@ -377,12 +377,12 @@ func _static_analysis_l2(p_code: String) -> Dictionary:
 				break
 	
 	# 5. Check FileAccess path whitelist — restrict to res:// only
-	var fa_result: Dictionary = _check_fileaccess_paths(p_code, symbol_table)
-	if not fa_result.success:
+	var fa_result: ToolResult = _check_fileaccess_paths(p_code, symbol_table)
+	if fa_result.is_fail():
 		return fa_result
-	if fa_result.has("warnings"):
-		for w in fa_result["warnings"]:
-			warns.append(w)
+	var fa_warnings: Array = fa_result.get_extra("warnings", [])
+	for w in fa_warnings:
+		warns.append(w)
 	
 	# 6. Build result
 	if not blocks.is_empty():
@@ -390,12 +390,11 @@ func _static_analysis_l2(p_code: String) -> Dictionary:
 		for b in blocks:
 			msg += "- %s\n" % b
 		msg += "\nRewrite the code without these operations."
-		return {"success": false, "data": msg}
+		return ToolResult.fail(msg)
 	
-	var result: Dictionary = {"success": true}
 	if not warns.is_empty():
-		result["warnings"] = warns
-	return result
+		return ToolResult.ok("", {"warnings": warns})
+	return ToolResult.ok("")
 
 
 # --- Private Functions: FileAccess Path Whitelist (Layer 1) ---
@@ -403,7 +402,7 @@ func _static_analysis_l2(p_code: String) -> Dictionary:
 # Checks that all FileAccess path-taking methods use res:// paths only.
 # Runs on original code (not stripped) to inspect string literal arguments.
 # Also checks aliases resolved to FileAccess via the symbol table.
-func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> Dictionary:
+func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> ToolResult:
 	var blocks: Array[String] = []
 	var warns: Array[String] = []
 	
@@ -450,17 +449,16 @@ func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> Dict
 		for b in blocks:
 			msg += "- %s\n" % b
 		msg += "\nFileAccess is restricted to res:// paths only."
-		return {"success": false, "data": msg}
+		return ToolResult.fail(msg)
 	
-	var result: Dictionary = {"success": true}
 	if not warns.is_empty():
-		result["warnings"] = warns
-	return result
+		return ToolResult.ok("", {"warnings": warns})
+	return ToolResult.ok("")
 
 
 # --- Private Functions: Format Whitelist (Layer 1.5) ---
 
-func _check_format_whitelist(p_code: String) -> Dictionary:
+func _check_format_whitelist(p_code: String) -> ToolResult:
 	# Scans code for all string literals containing file-like paths (both
 	# full res:// paths and relative filenames) and validates extensions
 	# against the whitelist. Also detects format-string bypass attempts
@@ -520,22 +518,21 @@ func _check_format_whitelist(p_code: String) -> Dictionary:
 			violations.append("- `%s` (扩展名含动态格式符，无法确定最终格式)" % ["'" + path + "'"])
 	
 	if violations.is_empty():
-		return {"success": true}
+		return ToolResult.ok("")
 	
 	var ext_list: String = ""
 	for e in ALLOWED_EXTENSIONS:
 		ext_list += "- `.%s`\n" % e
 	
-	return {
-		"success": false,
-		"data": "⛔ **Permission Denied: Unsupported file format.**\n\n"
-			  + "The generated code references file formats not in the allowed whitelist.\n"
-			  + "**Violations:**\n"
-			  + "\n".join(violations) + "\n\n"
-			  + "**Allowed file formats:**\n"
-			  + ext_list
-			  + "\nPlease rewrite the code to only work with allowed file formats."
-	}
+	return ToolResult.fail(
+		"**Permission Denied: Unsupported file format.**\n\n"
+		+ "The generated code references file formats not in the allowed whitelist.\n"
+		+ "**Violations:**\n"
+		+ "\n".join(violations) + "\n\n"
+		+ "**Allowed file formats:**\n"
+		+ ext_list
+		+ "\nPlease rewrite the code to only work with allowed file formats."
+	)
 
 
 # --- Private Functions: Code Wrapping & Compilation ---

@@ -84,21 +84,21 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	# --- 提取参数 ---
 	var prompt: String = p_args.get("prompt", "").strip_edges()
 	if prompt.is_empty():
-		return {"success": false, "data": "Error: 'prompt' parameter is required and cannot be empty."}
+		return ToolResult.fail("Error: 'prompt' parameter is required and cannot be empty.")
 	
 	var negative_prompt: String = p_args.get("negative_prompt", "")
 	var output_path: String = p_args.get("output_path", "").strip_edges()
 	if output_path.is_empty():
-		return {"success": false, "data": "Error: 'output_path' parameter is required and cannot be empty."}
+		return ToolResult.fail("Error: 'output_path' parameter is required and cannot be empty.")
 	
 	# 路径安全检查
 	var safety_err: String = validate_path_safety(output_path)
 	if not safety_err.is_empty():
-		return {"success": false, "data": safety_err}
+		return ToolResult.fail(safety_err)
 	
 	var width: int = p_args.get("width", 1024)
 	var height: int = p_args.get("height", 1024)
@@ -106,9 +106,9 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	# --- 参数校验 ---
 	if width < 64 or width > MAX_WIDTH:
-		return {"success": false, "data": "Error: 'width' must be between 64 and %d." % MAX_WIDTH}
+		return ToolResult.fail("Error: 'width' must be between 64 and %d." % MAX_WIDTH)
 	if height < 64 or height > MAX_HEIGHT:
-		return {"success": false, "data": "Error: 'height' must be between 64 and %d." % MAX_HEIGHT}
+		return ToolResult.fail("Error: 'height' must be between 64 and %d." % MAX_HEIGHT)
 	
 	# --- 构建请求 Payload（steps 和 cfg_scale 使用固定推荐值）---
 	var payload: Dictionary = {
@@ -128,15 +128,12 @@ func execute(p_args: Dictionary) -> Dictionary:
 
 ## 异步发送 HTTP POST 请求到 Draw Things API
 ## 使用 await 协程，不阻塞编辑器主线程
-func _send_request(p_payload: Dictionary, p_output_path: String) -> Dictionary:
+func _send_request(p_payload: Dictionary, p_output_path: String) -> ToolResult:
 	var client := HTTPClient.new()
 	var err := client.connect_to_host(DEFAULT_HOST, DEFAULT_PORT)
 	
 	if err != OK:
-		return {
-			"success": false,
-			"data": "Error: Cannot connect to Draw Things at %s:%d — %s. Make sure Draw Things is running and API Server is enabled." % [DEFAULT_HOST, DEFAULT_PORT, error_string(err)]
-		}
+		return ToolResult.fail("Error: Cannot connect to Draw Things at %s:%d — %s. Make sure Draw Things is running and API Server is enabled." % [DEFAULT_HOST, DEFAULT_PORT, error_string(err)])
 	
 	# --- 等待连接完成（异步）---
 	var timer: float = 0.0
@@ -146,11 +143,11 @@ func _send_request(p_payload: Dictionary, p_output_path: String) -> Dictionary:
 		timer += POLL_DELAY
 		if timer >= 10.0:
 			client.close()
-			return {"success": false, "data": "Error: Connection to Draw Things timed out after 10 seconds."}
+			return ToolResult.fail("Error: Connection to Draw Things timed out after 10 seconds.")
 	
 	if client.get_status() != HTTPClient.STATUS_CONNECTED:
 		client.close()
-		return {"success": false, "data": "Error: Failed to connect to Draw Things. Status: %d. Is the app running?" % client.get_status()}
+		return ToolResult.fail("Error: Failed to connect to Draw Things. Status: %d. Is the app running?" % client.get_status())
 	
 	# --- 发送请求 ---
 	var body: String = JSON.stringify(p_payload)
@@ -159,7 +156,7 @@ func _send_request(p_payload: Dictionary, p_output_path: String) -> Dictionary:
 	err = client.request(HTTPClient.METHOD_POST, TXT2IMG_ENDPOINT, headers, body)
 	if err != OK:
 		client.close()
-		return {"success": false, "data": "Error: HTTP request failed — %s." % error_string(err)}
+		return ToolResult.fail("Error: HTTP request failed — %s." % error_string(err))
 	
 	# --- 等待响应（异步）---
 	timer = 0.0
@@ -169,7 +166,7 @@ func _send_request(p_payload: Dictionary, p_output_path: String) -> Dictionary:
 		timer += POLL_DELAY
 		if timer >= REQUEST_TIMEOUT:
 			client.close()
-			return {"success": false, "data": "Error: Image generation timed out after %.0f seconds. The model may be taking too long." % REQUEST_TIMEOUT}
+			return ToolResult.fail("Error: Image generation timed out after %.0f seconds. The model may be taking too long." % REQUEST_TIMEOUT)
 	
 	# --- 读取响应体 ---
 	var response_code: int = client.get_response_code()
@@ -187,36 +184,36 @@ func _send_request(p_payload: Dictionary, p_output_path: String) -> Dictionary:
 	
 	if response_code != 200:
 		var error_body: String = response_body.get_string_from_utf8()
-		return {"success": false, "data": "Error: Draw Things API returned HTTP %d — %s" % [response_code, error_body]}
+		return ToolResult.fail("Error: Draw Things API returned HTTP %d — %s" % [response_code, error_body])
 	
 	# --- 解析 JSON ---
 	var json := JSON.new()
 	var parse_err: Error = json.parse(response_body.get_string_from_utf8())
 	if parse_err != OK:
-		return {"success": false, "data": "Error: Failed to parse API response JSON — %s." % error_string(parse_err)}
+		return ToolResult.fail("Error: Failed to parse API response JSON — %s." % error_string(parse_err))
 	
 	return _save_image(json.data, p_output_path)
 
 
 ## 解码 Base64 图片并保存到指定路径
-func _save_image(p_response_data: Variant, p_output_path: String) -> Dictionary:
+func _save_image(p_response_data: Variant, p_output_path: String) -> ToolResult:
 	var images_raw = p_response_data.get("images", [])
 	if images_raw.is_empty():
-		return {"success": false, "data": "Error: API returned no images in response."}
+		return ToolResult.fail("Error: API returned no images in response.")
 	
 	# --- 检查同名文件冲突 ---
 	if FileAccess.file_exists(p_output_path):
-		return {"success": false, "data": "Error: File already exists at %s." % p_output_path}
+		return ToolResult.fail("Error: File already exists at %s." % p_output_path)
 	
 	var base64_str: String = images_raw[0]
 	var raw_data: PackedByteArray = Marshalls.base64_to_raw(base64_str)
 	if raw_data.is_empty():
-		return {"success": false, "data": "Error: Failed to decode base64 image data."}
+		return ToolResult.fail("Error: Failed to decode base64 image data.")
 	
 	# 直接将原始 PNG 数据写入指定路径
 	var file := FileAccess.open(p_output_path, FileAccess.WRITE)
 	if not file:
-		return {"success": false, "data": "Error: Cannot open file for writing: %s" % p_output_path}
+		return ToolResult.fail("Error: Cannot open file for writing: %s" % p_output_path)
 	file.store_buffer(raw_data)
 	file.close()
 	
@@ -228,13 +225,9 @@ func _save_image(p_response_data: Variant, p_output_path: String) -> Dictionary:
 	var check := Image.new()
 	var load_err: Error = check.load(p_output_path)
 	if load_err != OK:
-		return {"success": false, "data": "Error: Saved file at %s failed validation." % p_output_path}
+		return ToolResult.fail("Error: Saved file at %s failed validation." % p_output_path)
 	
-	return {
-		"success": true,
-		"data": "Image generated and saved successfully: %s" % p_output_path,
-		"attachments": {
-			"image_data": raw_data,
-			"mime": "image/png"
-		}
-	}
+	return ToolResult.ok_with_image("Image generated and saved successfully: %s" % p_output_path,
+		raw_data,
+		"image/png"
+	)

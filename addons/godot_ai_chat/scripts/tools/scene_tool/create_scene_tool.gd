@@ -40,12 +40,12 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var folder_path: String = p_args.get("path", "")
 	var file_name: String = p_args.get("file_name", "")
 	
 	if folder_path.is_empty() or file_name.is_empty():
-		return {"success": false, "data": "Error: 'path' and 'file_name' are required."}
+		return ToolResult.fail("Error: 'path' and 'file_name' are required.")
 	
 	# 确保文件夹路径以 / 结尾
 	if not folder_path.ends_with("/"):
@@ -56,20 +56,20 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 安全校验
 	var safety_err: String = validate_path_safety(full_path)
 	if not safety_err.is_empty():
-		return {"success": false, "data": safety_err}
+		return ToolResult.fail(safety_err)
 	
 	# 检查文件是否已存在
 	if FileAccess.file_exists(full_path):
-		return {"success": false, "data": "Error: File already exists at %s. Overwriting is not allowed." % full_path}
+		return ToolResult.fail("Error: File already exists at %s. Overwriting is not allowed." % full_path)
 	
 	# 检查目标文件夹是否存在（禁止越权创建文件夹）
 	if not DirAccess.dir_exists_absolute(folder_path):
-		return {"success": false, "data": "Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path}
+		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path)
 	
 	# 强制校验扩展名
 	var ext: String = full_path.get_extension().to_lower()
 	if ext != "tscn":
-		return {"success": false, "data": "Error: Invalid extension '.%s'. Scene files must use '.tscn'." % ext}
+		return ToolResult.fail("Error: Invalid extension '.%s'. Scene files must use '.tscn'." % ext)
 	
 	# 创建场景
 	var type: String = p_args.get("root_node_type", "Node")
@@ -79,7 +79,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	var root: Node = _instantiate_node(type)
 	if not root:
-		return {"success": false, "data": "Error: Invalid root class/type: '%s'. Must be a Node subclass." % type}
+		return ToolResult.fail("Error: Invalid root class/type: '%s'. Must be a Node subclass." % type)
 	
 	root.name = name
 	var packed: PackedScene = PackedScene.new()
@@ -87,7 +87,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	if pack_result != OK:
 		root.free()
-		return {"success": false, "data": "Failed to pack scene. Error code: %d" % pack_result}
+		return ToolResult.fail("Failed to pack scene. Error code: %d" % pack_result)
 	
 	var err: Error = ResourceSaver.save(packed, full_path)
 	if is_instance_valid(root):
@@ -95,9 +95,9 @@ func execute(p_args: Dictionary) -> Dictionary:
 	
 	if err == OK:
 		ToolBox.update_editor_filesystem(full_path)
-		return {"success": true, "data": "Scene created: %s. Use `open_file` to open it." % full_path}
+		return ToolResult.ok("Scene created: %s. Use `open_file` to open it." % full_path)
 	
-	return {"success": false, "data": "Failed to save scene. Error code: %d" % err}
+	return ToolResult.fail("Failed to save scene. Error code: %d" % err)
 
 
 # --- Private Functions ---

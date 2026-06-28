@@ -8,8 +8,8 @@ var skill_name: String = ""
 var task_description: String = ""
 
 var _config: SubAgentConfig
-var _tools: Dictionary = {}
 var _history: ChatMessageHistory
+var _sub_agent_tools: Dictionary = {}
 
 
 func _exit_tree():
@@ -89,7 +89,7 @@ func run_task() -> String:
 		assistant_msg.tool_calls = raw_tool_calls
 		
 		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
-		ToolBox.salvage_and_clean_tool_calls(assistant_msg)
+		ToolBox.salvage_and_clean_tool_calls(assistant_msg, _sub_agent_tools)
 		_history.add_message(assistant_msg)
 		
 		var clean_tool_calls = assistant_msg.tool_calls
@@ -118,30 +118,23 @@ func run_task() -> String:
 				has_reported = true
 				break
 			
-			var tool_inst = _tools.get(t_name)
+			var tool_inst = _sub_agent_tools.get(t_name)
 			
 			var t_result = ""
 			if tool_inst:
-				var res = await tool_inst.execute(t_args)
+				var res: ToolResult = await tool_inst.execute(t_args)
 				
 				# 先获取结果文本
-				t_result = JSON.stringify(res.get("data", res), "\t")
+				t_result = res.get_data()
 				
 				AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 				
-				# 多模态支持：检测工具返回的图片附件
-				var has_image_attachment: bool = res.has("attachments") \
-					and res.attachments is Dictionary \
-					and res.attachments.has("image_data") \
-					and res.attachments.image_data is PackedByteArray \
-					and not res.attachments.image_data.is_empty()
-				
-				if has_image_attachment:
+				if res.has_image():
 					if is_gemini:
 						# Gemini: 图片直接放入 tool 消息（原生支持）
 						var tool_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, t_result, t_name)
 						tool_msg.tool_call_id = call_id
-						tool_msg.add_image(res.attachments.image_data, res.attachments.get("mime", "image/png"))
+						tool_msg.add_image(res.attachments.image_data, res.attachments.mime)
 						_history.add_message(tool_msg)
 					else:
 						# 非 Gemini: 收集图片，稍后通过新增 User 消息承载
@@ -333,10 +326,10 @@ func _parse_sse_lines(p_text: String, p_result: Dictionary) -> void:
 
 
 func _load_isolated_tools() -> void:
-	_tools.clear()
+	_sub_agent_tools.clear()
 	if REPORT_TASK_TOOL_SCRIPT:
 		var inst = REPORT_TASK_TOOL_SCRIPT.new()
-		_tools[inst.tool_name] = inst
+		_sub_agent_tools[inst.tool_name] = inst
 	
 	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
 	if skill_res and "tools" in skill_res:
@@ -346,12 +339,12 @@ func _load_isolated_tools() -> void:
 				if script and script is GDScript:
 					var inst = script.new()
 					if inst.has_method("execute"):
-						_tools[inst.tool_name] = inst
+						_sub_agent_tools[inst.tool_name] = inst
 
 
 func _get_tool_definitions(p_is_gemini: bool) -> Array:
 	var defs = []
-	for tool_inst in _tools.values():
+	for tool_inst in _sub_agent_tools.values():
 		var schema = tool_inst.get_parameters_schema()
 		if p_is_gemini:
 			schema = ToolRegistry.convert_schema_to_gemini(schema)
@@ -381,6 +374,6 @@ func _remove_sub_agent_node_from_root() -> void:
 
 
 func _clean_reference() -> void:
-	_tools.clear()
+	_sub_agent_tools.clear()
 	if is_instance_valid(_history):
 		_history = null

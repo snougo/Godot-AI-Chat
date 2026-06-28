@@ -48,9 +48,9 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	if not Engine.is_editor_hint():
-		return {"success": false, "data": "Editor only tool."}
+		return ToolResult.fail("Error: editor only tool.")
 	
 	# 校验：至少需要一个相机操作参数
 	var has_position: bool = p_args.has("position") and not p_args["position"] == null
@@ -59,22 +59,22 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var has_projection: bool = p_args.has("projection") and not p_args["projection"] == null
 	
 	if not (has_position or has_look_at or has_fov or has_projection):
-		return {"success": false, "data": "At least one parameter is required. Use 'position' + 'look_at' together to set camera view. Example: position: [0, 5, 10], look_at: [0, 0, 0]"}
+		return ToolResult.fail("Error: at least one parameter is required. Use 'position' + 'look_at' together to set camera view. Example: position: [0, 5, 10], look_at: [0, 0, 0]")
 	
 	# 校验：look_at 必须搭配 position
 	if has_look_at and not has_position:
-		return {"success": false, "data": "'look_at' must be used together with 'position'. The camera stays in place if only 'look_at' is provided. Example: position: [0, 5, 10], look_at: [0, 0, 0]"}
+		return ToolResult.fail("Error: 'look_at' must be used together with 'position'. The camera stays in place if only 'look_at' is provided. Example: position: [0, 5, 10], look_at: [0, 0, 0]")
 	
 	var viewport_index: int = p_args.get("viewport_index", 0)
 	
 	EditorInterface.set_main_screen_editor("3D")
 	var viewport: SubViewport = EditorInterface.get_editor_viewport_3d(viewport_index)
 	if not viewport:
-		return {"success": false, "data": "No 3D viewport found at index %d." % viewport_index}
+		return ToolResult.fail("Error: no 3D viewport found at index %d." % viewport_index)
 	
 	var camera: Camera3D = viewport.get_camera_3d()
 	if not camera:
-		return {"success": false, "data": "No active Camera3D in viewport %d." % viewport_index}
+		return ToolResult.fail("Error: no active Camera3D in viewport %d." % viewport_index)
 	
 	var changes: Array[String] = []
 	
@@ -89,13 +89,13 @@ func execute(p_args: Dictionary) -> Dictionary:
 				camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 				changes.append("projection → orthogonal")
 			_:
-				return {"success": false, "data": "Invalid projection mode: '%s'. Use 'perspective' or 'orthogonal'." % proj}
+				return ToolResult.fail("Error: invalid projection mode: '%s'. Use 'perspective' or 'orthogonal'." % proj)
 	
 	# 2. 设置 FOV
 	if p_args.has("fov") and not p_args["fov"] == null:
 		var fov_val: float = float(p_args["fov"])
 		if fov_val <= 0 or fov_val > 179:
-			return {"success": false, "data": "FOV must be in range (0, 179], got %f." % fov_val}
+			return ToolResult.fail("Error: FOV must be in range (0, 179], got %f." % fov_val)
 		camera.fov = fov_val
 		changes.append("fov → %.1f°" % fov_val)
 	
@@ -103,7 +103,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if p_args.has("position") and not p_args["position"] == null:
 		var pos: Array = p_args["position"]
 		if pos.size() < 3:
-			return {"success": false, "data": "Position requires 3 values [x, y, z], got %d." % pos.size()}
+			return ToolResult.fail("Error: position requires 3 values [x, y, z], got %d." % pos.size())
 		camera.global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
 		changes.append("position → (%.2f, %.2f, %.2f)" % [float(pos[0]), float(pos[1]), float(pos[2])])
 	
@@ -111,7 +111,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if p_args.has("look_at") and not p_args["look_at"] == null:
 		var target: Array = p_args["look_at"]
 		if target.size() < 3:
-			return {"success": false, "data": "look_at requires 3 values [x, y, z], got %d." % target.size()}
+			return ToolResult.fail("error: look_at requires 3 values [x, y, z], got %d." % target.size())
 		var target_pos := Vector3(float(target[0]), float(target[1]), float(target[2]))
 		# 如果没有提供 position，保持相机原地
 		var dir := target_pos - camera.global_position
@@ -123,6 +123,6 @@ func execute(p_args: Dictionary) -> Dictionary:
 		changes.append("look_at → (%.2f, %.2f, %.2f)" % [float(target[0]), float(target[1]), float(target[2])])
 	
 	if changes.is_empty():
-		return {"success": true, "data": "No parameters provided. Camera unchanged. Current position: %s, rotation: %s, fov: %.1f°" % [str(camera.global_position), str(camera.global_rotation_degrees), camera.fov]}
+		return ToolResult.ok("No parameters provided. Camera unchanged. Current position: %s, rotation: %s, fov: %.1f°" % [str(camera.global_position), str(camera.global_rotation_degrees), camera.fov])
 	
-	return {"success": true, "data": "3D viewport camera updated (viewport %d): %s" % [viewport_index, ", ".join(changes)]}
+	return ToolResult.ok("3D viewport camera updated (viewport %d): %s" % [viewport_index, ", ".join(changes)])

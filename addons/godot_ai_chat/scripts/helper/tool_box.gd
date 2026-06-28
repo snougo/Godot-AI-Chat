@@ -114,22 +114,32 @@ static func remove_think_tags(p_text: String) -> String:
 	return cleaned_text.strip_edges()
 
 
-## 过滤掉那些在  thinking 标签尚未闭合时产生的工具调用
+## 过滤掉那些在 thinking 标签尚未闭合时产生的工具调用
 static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Array) -> Array:
-	if p_tool_calls.is_empty() or " thinking" not in p_content:
+	if p_tool_calls.is_empty():
 		return p_tool_calls
 	
-	var think_start: int = p_content.find(" thinking")
-	var think_end: int = p_content.find(" response")
+	# 同时检测 <think> 和  thinking 两种格式
+	var has_think_open: bool = "<think>" in p_content or " thinking" in p_content
+	if not has_think_open:
+		return p_tool_calls
 	
-	# 如果找到了  thinking 但没找到  response，说明思考过程尚未结束
-	# 此时产生的所有工具调用都应视为不稳定或幻觉，予以拦截
+	# 查找 thinking 开始位置（支持两种格式）
+	var think_start: int = p_content.find(" thinking")
+	if think_start == -1:
+		think_start = p_content.find("<think>")
+	
+	# 查找闭合位置（支持两种格式）
+	var think_end: int = p_content.find(" response")
+	if think_end == -1:
+		think_end = p_content.find("</think>")
+	
+	# 如果找到了 thinking 开始但没找到闭合 → 思考未结束，全部拦截
 	if think_start != -1 and think_end == -1:
-		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed  thinking block." % p_tool_calls.size())
+		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed thinking block." % p_tool_calls.size())
 		return []
 	
-	# 如果  thinking 已闭合，或者是其他情况，则认为工具调用是安全的（思考后的产物）
-	# 直接放行，不再做内容匹配（防止误杀）
+	# thinking 已闭合 → 放行
 	return p_tool_calls
 
 
@@ -151,9 +161,9 @@ static func is_valid_tool_name(p_name: String) -> bool:
 
 
 ## 清洗、过滤工具调用，并将被服务端误判的纯文本"抢救"回消息内容中
-static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
+static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dictionary = {}) -> void:
 	# 防御：确保 ToolRegistry 已初始化
-	if ToolRegistry.main_agent_tool.is_empty():
+	if ToolRegistry.main_agent_tools.is_empty():
 		ToolRegistry.load_default_tools()
 	
 	var valid_calls: Array = []
@@ -163,12 +173,21 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage) -> void:
 		var raw_name: String = tc.get("function", {}).get("name", "")
 		var args: String = tc.get("function", {}).get("arguments", "")
 		
-		# Step 1: 检测 XML 伪标签（<tool_call>/<function_call> 等），提取内部文本
+		# Step 1: 检测 XML 伪标签
 		var extract_result: Dictionary = _extract_from_xml_wrapper(raw_name)
 		var clean_name: String = extract_result.clean_name
 		
-		# Step 2: 判断 — 必须在 ToolRegistry 中注册才是合法工具（注意 Sub-Agent 的工具和 Main-Agent 的工具注册是隔离的）
-		if not clean_name.is_empty() and (ToolRegistry.main_agent_tool.has(clean_name) or ToolRegistry.sub_agent_tool.has(clean_name)):
+		# Step 2: 判断工具合法性
+		#   子Agent路径 → 使用自己的 _sub_agent_tools 字典精确校验
+		#   主Agent路径 → 使用核心工具集校验
+		var is_valid := false
+		if not clean_name.is_empty():
+			if not p_valid_tools.is_empty():
+				is_valid = p_valid_tools.has(clean_name)
+			else:
+				is_valid = ToolRegistry.main_agent_tools.has(clean_name)
+		
+		if is_valid:
 			# 合法工具：更新清洗后的名称，补充 ID
 			tc.function["name"] = clean_name
 			if tc.get("id", "").is_empty():

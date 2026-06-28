@@ -39,26 +39,23 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var file_path: String = p_args.get("file_path", "")
 	if file_path.is_empty():
-		return {"success": false, "data": "Error: 'file_path' parameter is required."}
+		return ToolResult.fail("Error: 'file_path' parameter is required.")
 	
 	# 安全校验
 	var safety_err: String = validate_path_safety(file_path)
 	if not safety_err.is_empty():
-		return {"success": false, "data": safety_err}
+		return ToolResult.fail(safety_err)
 	
 	if not FileAccess.file_exists(file_path):
-		return {"success": false, "data": "Error: File not found at " + file_path}
+		return ToolResult.fail("Error: File not found at " + file_path)
 	
 	# 根据扩展名路由
 	var ext: String = file_path.get_extension().to_lower()
 	if not SUPPORTED_EXTENSIONS.has(ext):
-		return {
-			"success": false,
-			"data": "Error: Unsupported file extension '.%s'. Supported: %s" % [ext, ", ".join(SUPPORTED_EXTENSIONS.keys())]
-		}
+		return ToolResult.fail("Error: Unsupported file extension '.%s'. Supported: %s" % [ext, ", ".join(SUPPORTED_EXTENSIONS.keys())])
 	
 	var file_type: String = SUPPORTED_EXTENSIONS[ext]
 	match file_type:
@@ -67,28 +64,28 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"script", "shader":
 			return _open_script(file_path)
 		_:
-			return {"success": false, "data": "Internal Error: Unknown file type '%s'." % file_type}
+			return ToolResult.fail("Error: Unknown file type '%s'." % file_type)
 
 
 # --- Private Functions ---
 
 # 在场景编辑器中打开场景文件
-func _open_scene(p_path: String) -> Dictionary:
+func _open_scene(p_path: String) -> ToolResult:
 	EditorInterface.open_scene_from_path(p_path)
-	return {"success": true, "data": "Opened/Switched to scene: %s" % p_path}
+	return ToolResult.ok("Opened/Switched to scene: %s" % p_path)
 
 
 # 在脚本/着色器编辑器中打开脚本或着色器文件
-func _open_script(p_path: String) -> Dictionary:
+func _open_script(p_path: String) -> ToolResult:
 	var res = load(p_path)
 	if res is Script:
 		EditorInterface.edit_script(res)
 	elif res is Shader:
 		EditorInterface.edit_resource(res)
 		EditorInterface.set_main_screen_editor("Script")
-		return {"success": true, "data": "Shader opened successfully: %s" % p_path}
+		return ToolResult.ok("Shader opened successfully: %s" % p_path)
 	else:
-		return {"success": false, "data": "The specified file is not a valid script or shader: %s" % p_path}
+		return ToolResult.fail("Error: The specified file is not a valid script or shader: %s" % p_path)
 	
 	EditorInterface.set_main_screen_editor("Script")
-	return {"success": true, "data": "Script opened successfully: %s" % p_path}
+	return ToolResult.ok("Script opened successfully: %s" % p_path)

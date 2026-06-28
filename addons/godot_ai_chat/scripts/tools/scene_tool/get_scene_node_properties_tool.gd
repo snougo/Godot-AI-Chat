@@ -20,19 +20,19 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var root: Node = get_active_scene_root()
 	if not root:
-		return {"success": false, "data": "No active scene."}
+		return ToolResult.fail("No active scene.")
 	
 	var node_path: String = p_args.get("node_path", ".")
 	var target: Node = get_node_from_root(root, node_path)
 	
 	if not target:
 		var hint = get_node_path_error_hint(root, node_path)
-		return {"success": false, "data": hint}
+		return ToolResult.fail(hint)
 	
 	# 返回完整节点属性（含 Resource）
 	var all_properties := get_all_node_properties(target)
 	
-	return {"success": true, "data": all_properties}
+	return ToolResult.ok(JSON.stringify(all_properties, "\t"))

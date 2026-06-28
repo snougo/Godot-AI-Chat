@@ -44,15 +44,15 @@ func get_parameters_schema() -> Dictionary:
 ## 执行文件读取
 ## [param p_args]: 包含 path 的参数字典
 ## [return]: 包含成功状态和文件内容的字典
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var path: String = p_args.get("path", "")
 	
 	if path.is_empty():
-		return {"success": false, "data": "Missing parameter: path"}
+		return ToolResult.fail("Missing parameter: path")
 	
 	var validation_result: String = _validate_path(path)
 	if not validation_result.is_empty():
-		return {"success": false, "data": validation_result}
+		return ToolResult.fail(validation_result)
 	
 	# 自动检测文件类型
 	var file_type: String = _auto_detect_file_type(path)
@@ -60,7 +60,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		var supported := ""
 		for ft in EXTENSION_MAP.keys():
 			supported += ft + ": [" + ", ".join(EXTENSION_MAP[ft]) + "]\n"
-		return {"success": false, "data": "Error: Could not auto-detect file type. Unsupported extension.\nSupported types:\n" + supported}
+		return ToolResult.fail("Error: Could not auto-detect file type. Unsupported extension.\nSupported types:\n" + supported)
 	
 	# 安全拦截：禁止读取指定的敏感资源文件
 	if file_type == "resource" and (
@@ -68,7 +68,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		path == PluginPaths.PLUGIN_DIR + "sub_agent_config.tres" or
 		path == PluginPaths.PLUGIN_DIR + "sketchfab_config.tres"
 	):
-		return {"success": false, "data": "Error: Due to security reasons, reading this file is prohibited. Please do not attempt again."}
+		return ToolResult.fail("Error: Due to security reasons, reading this file is prohibited. Please do not attempt again.")
 	
 	return _read_file_content(file_type, path)
 
@@ -101,21 +101,30 @@ static func _auto_detect_file_type(p_path: String) -> String:
 # [param p_file_type]: 上下文类型
 # [param p_path]: 文件路径
 # [return]: 读取结果字典
-func _read_file_content(p_file_type: String, p_path: String) -> Dictionary:
-	# 统一文件存在性检查
+func _read_file_content(p_file_type: String, p_path: String) -> ToolResult:
 	if not FileAccess.file_exists(p_path):
-		return {"success": false, "data": "Error: File not found: " + p_path}
+		return ToolResult.fail("Error: File not found: " + p_path)
 	
 	match p_file_type:
 		"scene":
-			return FileContentReader.read_scene_content(p_path)
+			return _wrap_reader_result(FileContentReader.read_scene_content(p_path))
 		"script":
-			return FileContentReader.read_script_content(p_path)
+			return _wrap_reader_result(FileContentReader.read_script_content(p_path))
 		"text":
-			return FileContentReader.read_text_content(p_path)
+			return _wrap_reader_result(FileContentReader.read_text_content(p_path))
 		"resource":
-			return FileContentReader.read_resource_content(p_path)
+			return _wrap_reader_result(FileContentReader.read_resource_content(p_path))
 		"image_meta":
-			return FileContentReader.read_image_metadata(p_path)
+			return _wrap_reader_result(FileContentReader.read_image_metadata(p_path))
 		_:
-			return {"success": false, "data": "File Type Error: Unsupport file type."}
+			return ToolResult.fail("File Type Error: Unsupport file type.")
+
+
+func _wrap_reader_result(p_dict: Dictionary) -> ToolResult:
+	var img_data: PackedByteArray = p_dict.get("image_data", PackedByteArray())
+	if not img_data.is_empty():
+		return ToolResult.ok_with_image(p_dict.get("data", ""), img_data, p_dict.get("mime", "image/png"))
+	elif p_dict.get("success", false):
+		return ToolResult.ok(p_dict.get("data", ""))
+	else:
+		return ToolResult.fail(p_dict.get("data", "Unknown error"))

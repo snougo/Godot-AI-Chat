@@ -28,9 +28,9 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	if not Engine.is_editor_hint():
-		return {"success": false, "data": "Editor only tool."}
+		return ToolResult.fail("Error: editor only tool.")
 	
 	var file_type: String = p_args.get("file_type", "")
 	
@@ -40,38 +40,38 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"script":
 			return _save_script()
 		_:
-			return {"success": false, "data": "Invalid file_type '%s'. Must be 'scene' or 'script'." % file_type}
+			return ToolResult.fail("Invalid file_type '%s'. Must be 'scene' or 'script'." % file_type)
 
 
 # --- Private Functions ---
 
-func _save_scene() -> Dictionary:
+func _save_scene() -> ToolResult:
 	var root: Node = EditorInterface.get_edited_scene_root()
 	if not root:
-		return {"success": false, "data": "No active scene to save."}
+		return ToolResult.fail("Error: no active scene to save.")
 	
 	var path: String = root.scene_file_path
 	if path.is_empty():
-		return {"success": false, "data": "Scene has never been saved. Save it manually in the editor first, or use 'create_scene' tool."}
+		return ToolResult.fail("Error: scene has never been saved. Save it manually in the editor first, or use 'create_scene' tool.")
 	
 	var err: Error = EditorInterface.save_scene()
 	if err == OK:
-		return {"success": true, "data": "Scene saved: %s" % path}
+		return ToolResult.ok("Scene saved: %s" % path)
 	
-	return {"success": false, "data": "Failed to save scene. Error: %d" % err}
+	return ToolResult.fail("Error: failed to save scene. Error: %d" % err)
 
 
-func _save_script() -> Dictionary:
+func _save_script() -> ToolResult:
 	var se: ScriptEditor = EditorInterface.get_script_editor()
 	var current_script: Script = se.get_current_script()
 	if not current_script:
-		return {"success": false, "data": "No active script to save."}
+		return ToolResult.fail("Error: no active script to save.")
 	
 	var path: String = current_script.resource_path
 	if path.is_empty():
-		return {"success": false, "data": "Script has never been saved. Use 'create_script' first."}
+		return ToolResult.fail("Error: script has never been saved. Use 'create_script' first.")
 	
 	# ScriptEditor 原生保存 — 自动处理 CodeEdit→Script 同步并清除 dirty flag
 	se.save_all_scripts()
 	
-	return {"success": true, "data": "Script saved: %s" % path}
+	return ToolResult.ok("Script saved: %s" % path)

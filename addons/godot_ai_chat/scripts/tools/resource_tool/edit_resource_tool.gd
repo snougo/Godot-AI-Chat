@@ -39,37 +39,36 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var file_path: String = p_args.get("path", "").strip_edges()
 	if file_path.is_empty():
-		return {"success": false, "data": "Error: 'path' is required."}
+		return ToolResult.fail("Error: 'path' is required.")
 
 	# 安全校验
 	var safety_err: String = validate_path_safety(file_path)
 	if not safety_err.is_empty():
-		return {"success": false, "data": safety_err}
+		return ToolResult.fail(safety_err)
 
 	# 检查文件是否存在
 	if not FileAccess.file_exists(file_path):
-		return {"success": false, "data": "Error: File not found at %s." % file_path}
+		return ToolResult.fail("Error: File not found at %s." % file_path)
 
 	# 校验扩展名
 	var ext: String = file_path.get_extension().to_lower()
 	if ext not in RESOURCE_EXTENSIONS:
-		return {"success": false, "data": "Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext}
+		return ToolResult.fail("Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext)
 
 	# 加载资源
 	var resource: Resource = load(file_path)
 	if not resource:
-		return {"success": false, "data": "Error: Failed to load resource from %s." % file_path}
+		return ToolResult.fail("Error: Failed to load resource from %s." % file_path)
 
 	var properties_raw: Variant = p_args.get("properties", {})
 	if not (properties_raw is Dictionary):
-		return {"success": false, "data": "Error: 'properties' must be a dictionary (object), got %s." % typeof(properties_raw)}
+		return ToolResult.fail("Error: 'properties' must be a dictionary (object), got %s." % typeof(properties_raw))
 	var properties: Dictionary = properties_raw as Dictionary
 	if properties.is_empty():
-		return {"success": false, "data": "Error: 'properties' is required and cannot be empty."}
-
+		return ToolResult.fail("Error: 'properties' is required and cannot be empty.")
 
 	# 记录变更
 	var changes: Array[String] = []
@@ -77,29 +76,23 @@ func execute(p_args: Dictionary) -> Dictionary:
 
 	for prop_name in properties:
 		var raw_val: Variant = properties[prop_name]
-		var result: Dictionary = _set_resource_property(resource, prop_name, raw_val)
-		if result.get("success", false):
-			changes.append("%s → %s" % [prop_name, str(result.get("resolved_value", raw_val))])
+		var result: ToolResult = _set_resource_property(resource, prop_name, raw_val)
+		if result.is_ok():
+			changes.append("%s → %s" % [prop_name, result.get_data()])
 		else:
-			errors.append(result.get("error", "Unknown error setting '%s'." % prop_name))
+			errors.append(result.get_data())
 
 	if not errors.is_empty():
-		return {
-			"success": false,
-			"data": "Failed to set some properties:\n" + "\n".join(errors)
-		}
+		return ToolResult.fail("Error: Failed to set some properties:\n" + "\n".join(errors))
 
 	# 保存资源
 	var save_err: Error = ResourceSaver.save(resource, file_path)
 	if save_err != OK:
-		return {"success": false, "data": "Error: Failed to save resource. Error code: %d" % save_err}
+		return ToolResult.fail("Error: Failed to save resource. Error code: %d" % save_err)
 
 	ToolBox.update_editor_filesystem(file_path)
 
-	return {
-		"success": true,
-		"data": "Resource updated: %s\nChanges applied:\n  %s" % [file_path, "\n  ".join(changes)]
-	}
+	return ToolResult.ok("Resource updated: %s\nChanges applied:\n  %s" % [file_path, "\n  ".join(changes)])
 
 
 # --- Private Functions ---
@@ -108,8 +101,8 @@ func execute(p_args: Dictionary) -> Dictionary:
 # [param p_resource]: 目标资源对象
 # [param p_prop_name]: 属性名（支持 ":" 嵌套路径）
 # [param p_raw_value]: 原始值
-# [return]: {"success": bool, "resolved_value": Variant, "error": String}
-func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_value: Variant) -> Dictionary:
+# [return]: ToolResult，成功时 data 为转换后的值的字符串表示
+func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_value: Variant) -> ToolResult:
 	# 确定目标类型
 	var target_type: int = TYPE_NIL
 	var found: bool = false
@@ -135,12 +128,12 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 			found = true
 
 	if not found:
-		return {"success": false, "error": "Property '%s' not found on resource type '%s'." % [p_prop_name, p_resource.get_class()], "resolved_value": null}
+		return ToolResult.fail("Property '%s' not found on resource type '%s'." % [p_prop_name, p_resource.get_class()])
 
 	# 类型转换
 	var final_val: Variant = _coerce_value(p_raw_value, target_type)
 	if final_val == null and p_raw_value != null:
-		return {"success": false, "error": "Failed to convert value for '%s'. Expected type: %s" % [p_prop_name, _type_name(target_type)], "resolved_value": null}
+		return ToolResult.fail("Failed to convert value for '%s'. Expected type: %s" % [p_prop_name, _type_name(target_type)])
 
 	# 特殊处理 Texture 等资源引用
 	if target_type == TYPE_OBJECT and final_val is String:
@@ -149,7 +142,7 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 			if ResourceLoader.exists(path_str):
 				final_val = load(path_str)
 			else:
-				return {"success": false, "error": "Resource not found at '%s'." % path_str, "resolved_value": null}
+				return ToolResult.fail("Resource not found at '%s'." % path_str)
 
 	# 应用属性
 	if ":" in p_prop_name:
@@ -157,7 +150,7 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 	else:
 		p_resource.set(p_prop_name, final_val)
 
-	return {"success": true, "resolved_value": final_val}
+	return ToolResult.ok(str(final_val))
 
 
 # 将值转换为目标类型

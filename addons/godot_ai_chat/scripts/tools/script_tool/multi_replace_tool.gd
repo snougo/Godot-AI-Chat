@@ -34,14 +34,14 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var operations: Array = p_args.get("operations", [])
 	if operations.is_empty():
-		return {"success": false, "data": "No operations provided."}
+		return ToolResult.fail("No operations provided.")
 
 	var code_edit := _get_code_edit("")
 	if not code_edit:
-		return {"success": false, "data": "No active script editor."}
+		return ToolResult.fail("No active script editor.")
 
 	# Step 1: Read original full text
 	var total_lines := code_edit.get_line_count()
@@ -80,12 +80,12 @@ func execute(p_args: Dictionary) -> Dictionary:
 		var msg: String = "No replacements performed."
 		if not skipped.is_empty():
 			msg += "\n" + "\n".join(skipped)
-		return {"success": false, "data": msg}
+		return ToolResult.fail(msg)
 
 	# Step 3: Validate cross-operation overlaps
 	var overlap_error := _validate_overlaps(all_occurrences)
 	if not overlap_error.is_empty():
-		return {"success": false, "data": overlap_error}
+		return ToolResult.fail(overlap_error)
 
 	# Step 4: Sort by start position
 	all_occurrences.sort_custom(func(a, b):
@@ -123,7 +123,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	var view := get_full_script_with_line_numbers(code_edit)
 	report += "\n\n" + view
 
-	return {"success": true, "data": report}
+	return ToolResult.ok(report)
 
 
 # --- Private Functions ---

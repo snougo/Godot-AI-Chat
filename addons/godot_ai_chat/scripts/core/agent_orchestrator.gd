@@ -57,10 +57,11 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		if last_msg.tool_calls.is_empty():
 			break
 		
-		# 过滤 <think> 标签里的幻觉工具调用
 		var is_gemini: bool = (network_manager.current_provider is GeminiProvider)
-		if not is_gemini and "<think>" in last_msg.content:
-			last_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(last_msg.content, last_msg.tool_calls)
+		
+		# 过滤 <think> 标签里的幻觉工具调用
+		#if not is_gemini and "<think>" in last_msg.content:
+			#last_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(last_msg.content, last_msg.tool_calls)
 		
 		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
 		var old_content_len: int = last_msg.content.length()
@@ -103,25 +104,18 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 				result_str = "[SYSTEM ERROR] Tool '%s' not found." % tool_name
 				AIChatLogger.error(result_str)
 			else:
-				var result_dict: Dictionary = await tool_instance.execute(args)
+				var result: ToolResult = await tool_instance.execute(args)
 				if is_cancelled: break
 				
-				var data_val: Variant = result_dict.get("data", "")
-				if data_val is Dictionary or data_val is Array:
-					result_str = JSON.stringify(data_val, "\t")
-				else:
-					result_str = str(data_val)
+				result_str = result.get_data()
 				
-				if result_dict.has("attachments"):
-					var att: Dictionary = result_dict.attachments
-					if att.has("image_data"):
-						image_data = att.image_data
-						image_mime = att.get("mime", "image/png")
-						
-						if not is_gemini and not image_data.is_empty():
-							if result_str == "Image successfully read and attached to this message.":
-								result_str = "Image content has been uploaded to the context as a new user message."
-							# 暂不清空 image_data，等 append_tool_message 后再处理
+				if result.has_image():
+					image_data = result.get_image_data()
+					image_mime = result.get_image_mime()
+					
+					if not is_gemini and not image_data.is_empty():
+						if result_str == "Image successfully read and attached to this message.":
+							result_str = "Image content has been uploaded to the context as a new user message."
 			
 			current_chat_window.append_tool_message(tool_name, result_str, call_id,
 				image_data if is_gemini else PackedByteArray(),

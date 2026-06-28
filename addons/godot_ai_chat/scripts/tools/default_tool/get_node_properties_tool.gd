@@ -34,36 +34,36 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var scene_path: String = p_args.get("scene_path", "")
 	var node_path: String = p_args.get("node_path", ".")
 	
 	# --- 参数验证 ---
 	if scene_path.is_empty():
-		return {"success": false, "data": "❌ Error: 'scene_path' is required."}
+		return ToolResult.fail("Error: 'scene_path' is required.")
 	
 	if not scene_path.begins_with("res://"):
-		return {"success": false, "data": "❌ Error: 'scene_path' must start with 'res://'."}
+		return ToolResult.fail("Error: 'scene_path' must start with 'res://'.")
 	
 	if not ResourceLoader.exists(scene_path):
-		return {"success": false, "data": "❌ Error: Scene file not found: '%s'" % scene_path}
+		return ToolResult.fail("Error: Scene file not found: '%s'" % scene_path)
 	
 	# --- 在内存中加载并实例化场景 ---
 	# instance 是孤立节点，不挂载到任何场景树，用完即 free()
 	var packed_scene: PackedScene = load(scene_path)
 	if not packed_scene:
-		return {"success": false, "data": "❌ Error: Failed to load scene: '%s'" % scene_path}
+		return ToolResult.fail("Error: Failed to load scene: '%s'" % scene_path)
 	
 	var instance: Node = packed_scene.instantiate()
 	if not instance:
-		return {"success": false, "data": "❌ Error: Failed to instantiate scene."}
+		return ToolResult.fail("Error: Failed to instantiate scene.")
 	
 	# --- 查找目标节点 ---
 	var target: Node = _find_node(instance, node_path)
 	if not target:
 		var hint: String = _build_node_hint(instance, node_path)
 		instance.free()
-		return {"success": false, "data": hint}
+		return ToolResult.fail(hint)
 	
 	# --- 获取表层属性（不递归 Resource） ---
 	var properties: Array[Dictionary] = _get_flat_properties(target)
@@ -74,7 +74,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# --- 清理 ---
 	instance.free()
 	
-	return {"success": true, "data": result}
+	return ToolResult.ok(result)
 
 
 # --- Private Functions ---

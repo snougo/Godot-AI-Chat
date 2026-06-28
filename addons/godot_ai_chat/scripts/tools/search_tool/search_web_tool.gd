@@ -30,29 +30,29 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var query: String = p_args.get("query", "")
 	if query.is_empty():
-		return {"success": false, "data": "Error: Query cannot be empty."}
+		return ToolResult.fail("Error: Query cannot be empty.")
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	var api_key: String = settings.tavily_api_key
 	if api_key.is_empty():
-		return {"success": false, "data": "Error: Tavily API Key is not configured."}
+		return ToolResult.fail("Error: Tavily API Key is not configured.")
 	
 	return await _fetch_search_results(query, api_key)
 
 
 # --- Private Functions ---
 
-func _fetch_search_results(p_query: String, p_api_key: String) -> Dictionary:
+func _fetch_search_results(p_query: String, p_api_key: String) -> ToolResult:
 	var client := HTTPClient.new()
 	
 	# 建立 TLS 连接
 	var err := client.connect_to_host("api.tavily.com", 443, TLSOptions.client())
 	if err != OK:
 		client.close()
-		return {"success": false, "data": "Error: Connection init failed (%d)" % err}
+		return ToolResult.fail("Error: Connection init failed (%d)" % err)
 	
 	# 等待连接握手
 	var timer := 0.0
@@ -62,11 +62,11 @@ func _fetch_search_results(p_query: String, p_api_key: String) -> Dictionary:
 		timer += POLL_DELAY
 		if timer >= REQUEST_TIMEOUT:
 			client.close()
-			return {"success": false, "data": "Error: Connection timeout"}
+			return ToolResult.fail("Error: Connection timeout")
 	
 	if client.get_status() != HTTPClient.STATUS_CONNECTED:
 		client.close()
-		return {"success": false, "data": "Error: Connection failed (status: %d)" % client.get_status()}
+		return ToolResult.fail("Error: Connection failed (status: %d)" % client.get_status())
 	
 	# 发送 POST 请求
 	var body := JSON.stringify({
@@ -80,7 +80,7 @@ func _fetch_search_results(p_query: String, p_api_key: String) -> Dictionary:
 	err = client.request(HTTPClient.METHOD_POST, "/search", ["Content-Type: application/json"], body)
 	if err != OK:
 		client.close()
-		return {"success": false, "data": "Error: Request failed (%d)" % err}
+		return ToolResult.fail("Error: Request failed (%d)" % err)
 	
 	# 等待响应
 	timer = 0.0
@@ -90,13 +90,13 @@ func _fetch_search_results(p_query: String, p_api_key: String) -> Dictionary:
 		timer += POLL_DELAY
 		if timer >= REQUEST_TIMEOUT:
 			client.close()
-			return {"success": false, "data": "Error: Request timeout"}
+			return ToolResult.fail("Error: Request timeout")
 	
 	# 检查响应状态码
 	if client.get_response_code() != 200:
 		var code := client.get_response_code()
 		client.close()
-		return {"success": false, "data": "Error: HTTP %d" % code}
+		return ToolResult.fail("Error: HTTP %d" % code)
 	
 	# 读取响应体
 	var response := PackedByteArray()
@@ -110,10 +110,10 @@ func _fetch_search_results(p_query: String, p_api_key: String) -> Dictionary:
 	return _parse_response(response)
 
 
-func _parse_response(p_data: PackedByteArray) -> Dictionary:
+func _parse_response(p_data: PackedByteArray) -> ToolResult:
 	var json := JSON.parse_string(p_data.get_string_from_utf8())
 	if json == null:
-		return {"success": false, "data": "Error: Invalid JSON response"}
+		return ToolResult.fail("Error: Invalid JSON response")
 	
 	var output := ""
 	if json.has("answer") and not str(json.answer).is_empty():
@@ -128,4 +128,4 @@ func _parse_response(p_data: PackedByteArray) -> Dictionary:
 				item.get("content", "")
 			]
 	
-	return {"success": true, "data": output}
+	return ToolResult.ok(output)

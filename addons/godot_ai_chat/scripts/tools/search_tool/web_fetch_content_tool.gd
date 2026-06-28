@@ -66,10 +66,10 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var url: String = p_args.get("url", "").strip_edges()
 	if url.is_empty():
-		return {"success": false, "data": "Error: URL cannot be empty."}
+		return ToolResult.fail("Error: URL cannot be empty.")
 	
 	# 基础 URL 校验
 	if not url.begins_with("http://") and not url.begins_with("https://"):
@@ -82,17 +82,17 @@ func execute(p_args: Dictionary) -> Dictionary:
 	# 1. 获取 HTML
 	var html: String = await _fetch_html(url)
 	if html.is_empty():
-		return {"success": false, "data": "Error: Failed to fetch content from URL."}
+		return ToolResult.fail("Error: Failed to fetch content from URL.")
 	
 	# 2. 解析 HTML 为 DOM
 	var doc: DOMDocument = HTMLParser.parse(html)
 	if not doc:
-		return {"success": false, "data": "Error: Failed to parse HTML."}
+		return ToolResult.fail("Error: Failed to parse HTML.")
 	
 	# 3. 定位内容节点
 	var content_node: DOMNode = _locate_content(doc, selector)
 	if not content_node:
-		return {"success": false, "data": "Error: Could not locate content on the page."}
+		return ToolResult.fail("Error: Could not locate content on the page.")
 	
 	# 4. 清理噪音元素
 	_strip_noise(content_node)
@@ -112,7 +112,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 	if not title.is_empty():
 		meta = "Page Title: %s\n\n" % title
 	
-	return {"success": true, "data": meta + raw_text}
+	return ToolResult.ok(meta + raw_text)
 
 
 # --- Private: Network ---

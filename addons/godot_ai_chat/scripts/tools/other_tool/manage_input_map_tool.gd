@@ -42,10 +42,10 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var operation: String = p_args.get("operation", "")
 	if operation.is_empty():
-		return {"success": false, "data": "Missing required parameter: operation"}
+		return ToolResult.fail("Error: missing required parameter: operation")
 	
 	match operation:
 		"add":
@@ -55,12 +55,12 @@ func execute(p_args: Dictionary) -> Dictionary:
 		"list":
 			return _execute_list()
 		_:
-			return {"success": false, "data": "Unknown operation: %s" % operation}
+			return ToolResult.fail("Error: unknown operation: %s" % operation)
 
 
 # ==================== ADD ====================
 
-func _execute_add(p_args: Dictionary) -> Dictionary:
+func _execute_add(p_args: Dictionary) -> ToolResult:
 	var action_name: String = p_args.get("action_name", "").strip_edges()
 	var events_list: Array = p_args.get("events", [])
 	var deadzone: float = p_args.get("deadzone", 0.5)
@@ -70,10 +70,7 @@ func _execute_add(p_args: Dictionary) -> Dictionary:
 	
 	var path = "input/" + action_name
 	if ProjectSettings.has_setting(path):
-		return {
-			"success": false,
-			"data": "Action '%s' already exists. Use 'list' to see existing actions." % action_name
-		}
+		return ToolResult.fail("Error: action '%s' already exists. Use 'list' to see existing actions." % action_name)
 	
 	# 新建 ProjectSettings 条目
 	var dict: Dictionary = {"deadzone": deadzone, "events": []}
@@ -94,24 +91,24 @@ func _execute_add(p_args: Dictionary) -> Dictionary:
 	ProjectSettings.set_setting(path, dict)
 	
 	if ProjectSettings.save() != OK:
-		return {"success": false, "data": "Failed to save ProjectSettings"}
+		return ToolResult.fail("Error: failed to save ProjectSettings")
 	
 	if bound > 0:
-		return {"success": true, "data": "Created action '%s' with %d event(s)." % [action_name, bound]}
-	return {"success": true, "data": "Created action '%s' (no events)." % action_name}
+		return ToolResult.ok("Created action '%s' with %d event(s)." % [action_name, bound])
+	return ToolResult.ok("Created action '%s' (no events)." % action_name)
 
 
 # ==================== REMOVE ====================
 
-func _execute_remove(p_args: Dictionary) -> Dictionary:
+func _execute_remove(p_args: Dictionary) -> ToolResult:
 	var action_name: String = p_args.get("action_name", "").strip_edges()
 	if action_name.is_empty():
-		return {"success": false, "data": "Missing required parameter: action_name"}
+		return ToolResult.fail("Error: missing required parameter: action_name")
 	
 	var path = "input/" + action_name
 	
 	if not ProjectSettings.has_setting(path) and not InputMap.has_action(action_name):
-		return {"success": false, "data": "Action not found: %s. Use 'list' to see existing actions." % action_name}
+		return ToolResult.fail("Error: action not found: %s. Use 'list' to see existing actions." % action_name)
 	
 	if ProjectSettings.has_setting(path):
 		ProjectSettings.clear(path)
@@ -120,21 +117,21 @@ func _execute_remove(p_args: Dictionary) -> Dictionary:
 		InputMap.erase_action(action_name)
 	
 	if ProjectSettings.save() != OK:
-		return {"success": false, "data": "Action removed from InputMap but failed to save ProjectSettings."}
+		return ToolResult.fail("Error: action removed from InputMap but failed to save ProjectSettings.")
 	
-	return {"success": true, "data": "Removed action: %s" % action_name}
+	return ToolResult.ok("Removed action: %s" % action_name)
 
 
 # ==================== LIST ====================
 
-func _execute_list() -> Dictionary:
+func _execute_list() -> ToolResult:
 	var action_paths: Array[String] = []
 	for prop in ProjectSettings.get_property_list():
 		if prop.name.begins_with("input/") and not prop.name.substr(6).begins_with("ui_"):
 			action_paths.append(prop.name)
 	
 	if action_paths.is_empty():
-		return {"success": true, "data": "No InputMap actions found."}
+		return ToolResult.ok("No InputMap actions found.")
 	
 	var result: String = "Found %d action(s):\n" % action_paths.size()
 	for path in action_paths:
@@ -148,7 +145,7 @@ func _execute_list() -> Dictionary:
 			for ev in events:
 				result += "      -> %s\n" % _event_to_string(ev)
 	
-	return {"success": true, "data": result}
+	return ToolResult.ok(result)
 
 
 # ==================== 事件解析 ====================

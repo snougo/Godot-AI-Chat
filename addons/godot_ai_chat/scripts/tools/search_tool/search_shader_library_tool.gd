@@ -49,25 +49,25 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	# 1. Read cache file
 	if not FileAccess.file_exists(CACHE_FILE_PATH):
-		return {"success": false, "data": "Shader Library cache not found. Open the ShaderLib tab in the editor first to load the cache."}
+		return ToolResult.fail("Error: Shader Library cache not found. Open the ShaderLib tab in the editor first to load the cache.")
 	
 	var file := FileAccess.open(CACHE_FILE_PATH, FileAccess.READ)
 	if file == null:
-		return {"success": false, "data": "Failed to open Shader Library cache file."}
+		return ToolResult.fail("Error: failed to open Shader Library cache file.")
 	
 	var json_str: String = file.get_as_text()
 	file.close()
 	
 	var parsed = JSON.parse_string(json_str)
 	if typeof(parsed) != TYPE_DICTIONARY:
-		return {"success": false, "data": "Invalid cache file format."}
+		return ToolResult.fail("Error: invalid cache file format.")
 	
 	var all_shaders: Array = parsed.get("shaders", [])
 	if all_shaders.is_empty():
-		return {"success": false, "data": "No shaders found in cache."}
+		return ToolResult.fail("Error: no shaders found in cache.")
 	
 	# 2. Extract parameters
 	var query: String = p_args.get("query", "").strip_edges().to_lower()
@@ -93,7 +93,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		filtered.append(s)
 	
 	if filtered.is_empty():
-		return {"success": true, "data": "No matching shaders found."}
+		return ToolResult.ok("No matching shaders found.")
 	
 	# 4. Sort
 	match sort_by:
@@ -129,4 +129,4 @@ func execute(p_args: Dictionary) -> Dictionary:
 		lines.append("   URL: %s%s" % [s.get("url", ""), tags_str])
 		lines.append("")
 	
-	return {"success": true, "data": "\n".join(lines).strip_edges()}
+	return ToolResult.ok("\n".join(lines).strip_edges())

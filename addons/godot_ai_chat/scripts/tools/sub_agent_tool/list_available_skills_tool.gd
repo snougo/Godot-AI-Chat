@@ -26,17 +26,16 @@ func get_parameters_schema() -> Dictionary:
 ## 执行工具逻辑，列出所有可用技能
 ## [param p_args]: 参数字典（此工具不需要参数）
 ## [return]: 包含成功状态和技能列表的字典
-func execute(p_args: Dictionary) -> Dictionary:
+func execute(p_args: Dictionary) -> ToolResult:
 	var all_skills: Array = ToolRegistry.get_available_skill_names()
 	
 	if all_skills.is_empty():
-		return {"success": true, "data": "No specialized skills found in the registry."}
+		return ToolResult.fail("No specialized skills found in the registry.")
 	
 	var output: String = "## Available Skills\n"
 	
 	for skill_name in all_skills:
-		var is_active: bool = ToolRegistry.is_skill_active(skill_name)
-		var status_text: String = "**Active (Used by Sub-Agent)**" if is_active else "Inactive (Not Used by Sub-Agent)"
+		var status_text: String = "Available for Sub-Agent"
 		
 		var skill_res = ToolRegistry.available_skills.get(skill_name)
 		var desc := ""
@@ -67,7 +66,7 @@ func execute(p_args: Dictionary) -> Dictionary:
 		
 		output += "\n"
 	output += "---\n"
-	return {"success": true, "data": output}
+	return ToolResult.ok(output)
 
 
 # --- Private Functions ---

@@ -25,6 +25,6 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["status", "summary"]
 	}
 
-func execute(_args: Dictionary) -> Dictionary:
+func execute(_args: Dictionary) -> ToolResult:
 	# 这个工具的执行逻辑实际上会被 SubAgentOrchestrator 拦截，这里只是占位
-	return {"success": true, "data": "Report Sent."}
+	return ToolResult.ok("Report Sent.")
