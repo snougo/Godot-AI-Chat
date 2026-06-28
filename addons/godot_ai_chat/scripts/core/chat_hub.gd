@@ -174,6 +174,9 @@ func _on_user_send_message(text: String) -> void:
 	var settings := ToolBox.get_plugin_settings()
 	var compression_config := _get_compression_config()
 	
+	# 同时确保 Sub-Agent 配置文件存在（与压缩配置同一时机创建）
+	SubAgentConfig.get_config()
+	
 	if compression_config and compression_config.enabled:
 		var turn_count := _current_chat_window.chat_history.get_turn_count()
 		if turn_count >= settings.max_chat_turns:
