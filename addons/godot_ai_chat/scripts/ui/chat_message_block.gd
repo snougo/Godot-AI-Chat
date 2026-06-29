@@ -65,6 +65,8 @@ var _current_popup_code_view_window: PopupCodeViewWindow = null
 # 表格渲染状态
 var _in_table: bool = false
 
+# 工具角色专用：单一 CodeEdit，不走 Markdown 解析器
+var _tool_code_edit: CodeEdit = null
 
 # --- Built-in Functions ---
 
@@ -78,14 +80,15 @@ func _ready() -> void:
 # --- Public Functions ---
 
 ## 设置消息内容（静态加载）
-## [param p_role]: 消息角色
-## [param p_content]: 消息正文
-## [param p_model_name]: 模型名称
-## [param p_tool_calls]: 工具调用列表
-## [param p_reasoning]: 思考内容
 func set_content(p_role: String, p_content: String, p_model_name: String = "", p_tool_calls: Array = [], p_reasoning: String = "") -> void:
 	_set_title(p_role, p_model_name)
 	_clear_content()
+	
+	# 工具角色：不走解析器，全部塞入单个 CodeEdit
+	if p_role == ChatMessage.ROLE_TOOL:
+		_create_tool_output_block()
+		_tool_code_edit.text = p_content
+		return
 	
 	if not p_reasoning.is_empty():
 		append_reasoning(p_reasoning)
@@ -100,11 +103,16 @@ func set_content(p_role: String, p_content: String, p_model_name: String = "", p
 
 
 ## 开始流式接收消息
-## [param p_role]: 消息角色
-## [param p_model_name]: 模型名称
 func start_stream(p_role: String, p_model_name: String = "") -> void:
 	_set_title(p_role, p_model_name)
 	_clear_content()
+	
+	# 工具角色流式模式
+	if p_role == ChatMessage.ROLE_TOOL:
+		_create_tool_output_block()
+		_streaming = true
+		return
+	
 	_streaming = true
 	visible = true
 
@@ -114,6 +122,13 @@ func start_stream(p_role: String, p_model_name: String = "") -> void:
 func append_chunk(p_text: String) -> void:
 	if p_text.is_empty():
 		return
+	
+	# 工具模式：追加到 CodeEdit，不走解析器
+	if is_instance_valid(_tool_code_edit):
+		_tool_code_edit.text += p_text
+		_tool_code_edit.scroll_vertical = _tool_code_edit.get_line_count() - 1
+		return
+	
 	_parser.feed(p_text)
 
 
@@ -138,6 +153,10 @@ func append_reasoning(p_text: String) -> void:
 
 ## 结束流式接收，刷新解析器缓冲区
 func finish_stream() -> void:
+	# 工具模式：无需特殊处理
+	if is_instance_valid(_tool_code_edit):
+		return
+	
 	_flush_reasoning_buffer()
 	_parser.flush()
 	_close_table_if_open()
@@ -610,6 +629,19 @@ func _append_to_code(p_text: String) -> void:
 		_last_ui_node.insert_text_at_caret(p_text)
 
 
+func _create_tool_output_block() -> void:
+	_tool_code_edit = CodeEdit.new()
+	_tool_code_edit.editable = false
+	_tool_code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
+	_tool_code_edit.gutters_draw_line_numbers = false
+	_tool_code_edit.minimap_draw = false
+	_tool_code_edit.caret_blink = false
+	_tool_code_edit.highlight_current_line = false
+	_tool_code_edit.custom_minimum_size.y = 300
+	_content_container.add_child(_tool_code_edit)
+	_last_ui_node = _tool_code_edit
+
+
 # 触发打字机效果
 func _trigger_typewriter(p_node: RichTextLabel) -> void:
 	_current_typing_node = p_node
@@ -686,6 +718,9 @@ func _show_code_in_popup_window(p_code_content: String) -> void:
 
 # 清空所有内容
 func _clear_content() -> void:
+	# queue_free 后变量要清掉
+	_tool_code_edit = null
+	
 	for c in _content_container.get_children():
 		c.queue_free()
 	
