@@ -404,18 +404,31 @@ static func parse_gdscript_docs(p_source: String) -> Dictionary:
 	var pending_doc: String = ""
 	var source_lines: PackedStringArray = p_source.split("\n")
 	
+	# 状态追踪：是否在 extends 之后、第一个声明之前的"类头"区域
+	var in_class_header: bool = false
+	
 	var re_doc: RegEx = RegEx.create_from_string("^##\\s?(.*)")
 	var re_const: RegEx = RegEx.create_from_string("^const\\s+([A-Z_][A-Z0-9_]*)\\s*=\\s*(.+)")
-	var re_export_var: RegEx = RegEx.create_from_string("^@export(?:_\\w+)?\\s+var\\s+(\\w+)\\s*:\\s*(\\w+)\\s*(?:=\\s*(.+?))?\\s*$")
+	# 支持 @export_file("*.md"), @export_range(1,100), @export_multiline 等带参注解
+	# 同时支持 Array[String], Dictionary 等复合类型
+	var re_export_var: RegEx = RegEx.create_from_string(
+		"^@export(?:_\\w+)?(?:\\(.*?\\))?\\s+var\\s+(\\w+)\\s*:\\s*([\\w\\[\\]]+)\\s*(?:=\\s*(.+?))?\\s*$"
+	)
+	
 	var re_var: RegEx = RegEx.create_from_string("^var\\s+(\\w+)\\s*:\\s*(\\w+)\\s*(?:=\\s*(.+?))?\\s*$")
 	var re_signal: RegEx = RegEx.create_from_string("^signal\\s+(\\w+)\\s*(?:\\((.*?)\\))?")
-	var re_func: RegEx = RegEx.create_from_string("^(?:static\\s+)?func\\s+(\\w+)\\s*\\((.*?)\\)\\s*(?:->\\s*([\\w\\[\\],\\s]+))?\\s*:?\\s*$")
+	var re_func: RegEx = RegEx.create_from_string(
+		"^(?:static\\s+)?func\\s+(\\w+)\\s*\\((.*?)\\)\\s*(?:->\\s*([\\w\\[\\],\\s]+))?\\s*:?\\s*$"
+	)
+	
 	var re_class_name: RegEx = RegEx.create_from_string("^class_name\\s+\\w+")
 	var re_enum: RegEx = RegEx.create_from_string("^enum\\s+(\\w+)")
+	# 识别 # --- xxx --- 类分隔行
+	var re_separator: RegEx = RegEx.create_from_string("^#\\s*-{3,}")
 	
 	for line in source_lines:
+		# --- Doc comments ---
 		var doc_match: RegExMatch = re_doc.search(line)
-		
 		if doc_match:
 			var doc_text: String = doc_match.get_string(1).strip_edges()
 			if pending_doc.is_empty():
@@ -424,16 +437,42 @@ static func parse_gdscript_docs(p_source: String) -> Dictionary:
 				pending_doc += " " + doc_text
 			continue
 		
+		# --- class_name ---
 		if re_class_name.search(line):
-			if not pending_doc.is_empty():
+			if not pending_doc.is_empty() and result["class_description"].is_empty():
 				result["class_description"] = pending_doc
 				pending_doc = ""
 			continue
 		
-		if line.begins_with("extends") or line.begins_with("@tool") or line.begins_with("@icon"):
+		# --- extends —— 进入类头区域，后续 ## 注释将累积为类描述 ---
+		if line.begins_with("extends"):
+			in_class_header = true
 			pending_doc = ""
 			continue
 		
+		# --- @tool / @icon ---
+		if line.begins_with("@tool") or line.begins_with("@icon"):
+			pending_doc = ""
+			continue
+		
+		# --- 分隔行 (# --- xxx ---) —— 不丢弃 pending_doc，捕获类描述 ---
+		if re_separator.search(line):
+			if in_class_header and not pending_doc.is_empty() \
+					and result["class_description"].is_empty():
+				result["class_description"] = pending_doc.strip_edges()
+				pending_doc = ""
+			in_class_header = false
+			continue
+		
+		# --- 退出类头区域：遇到声明前的非空、非分隔行，保存类描述 ---
+		if in_class_header and not pending_doc.is_empty() \
+				and not line.strip_edges().is_empty():
+			if result["class_description"].is_empty():
+				result["class_description"] = pending_doc.strip_edges()
+			pending_doc = ""
+			in_class_header = false
+		
+		# --- Constants ---
 		var const_match: RegExMatch = re_const.search(line)
 		if const_match:
 			result["constants"].append({
@@ -444,6 +483,7 @@ static func parse_gdscript_docs(p_source: String) -> Dictionary:
 			pending_doc = ""
 			continue
 		
+		# --- Enums ---
 		var enum_match: RegExMatch = re_enum.search(line)
 		if enum_match:
 			result["constants"].append({
@@ -454,27 +494,32 @@ static func parse_gdscript_docs(p_source: String) -> Dictionary:
 			pending_doc = ""
 			continue
 		
+		# --- @export var (支持 @export_file, @export_multiline, @export_range 等) ---
 		var export_match: RegExMatch = re_export_var.search(line)
 		if export_match:
 			result["properties"].append({
 				"name": export_match.get_string(1),
 				"type": export_match.get_string(2),
-				"default": export_match.get_string(3).strip_edges() if export_match.get_string(3) else "",
+				"default": export_match.get_string(3).strip_edges() \
+						if export_match.get_string(3) else "",
 				"description": pending_doc
 			})
 			pending_doc = ""
 			continue
 		
+		# --- Signal ---
 		var signal_match: RegExMatch = re_signal.search(line)
 		if signal_match:
 			result["signals"].append({
 				"name": signal_match.get_string(1),
-				"args": signal_match.get_string(2).strip_edges() if signal_match.get_string(2) else "",
+				"args": signal_match.get_string(2).strip_edges() \
+						if signal_match.get_string(2) else "",
 				"description": pending_doc
 			})
 			pending_doc = ""
 			continue
 		
+		# --- Function ---
 		var func_match: RegExMatch = re_func.search(line)
 		if func_match:
 			result["methods"].append({
@@ -486,17 +531,20 @@ static func parse_gdscript_docs(p_source: String) -> Dictionary:
 			pending_doc = ""
 			continue
 		
+		# --- Non-@export var (仅有 doc 注释时捕获) ---
 		var var_match: RegExMatch = re_var.search(line)
 		if var_match and not pending_doc.is_empty():
 			result["properties"].append({
 				"name": var_match.get_string(1),
 				"type": var_match.get_string(2),
-				"default": var_match.get_string(3).strip_edges() if var_match.get_string(3) else "",
+				"default": var_match.get_string(3).strip_edges() \
+						if var_match.get_string(3) else "",
 				"description": pending_doc
 			})
 			pending_doc = ""
 			continue
 		
+		# --- 非匹配的非空行 → 丢弃累积的 doc ---
 		if not line.strip_edges().is_empty():
 			pending_doc = ""
 	
