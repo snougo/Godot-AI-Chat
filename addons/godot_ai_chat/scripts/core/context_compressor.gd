@@ -62,7 +62,7 @@ func compress_context(p_history: ChatMessageHistory, p_network_manager: NetworkM
 			new_history.add_message(msg)
 	
 	# 5.2 添加摘要作为 User 消息
-	var summary_wrapper := "📎 **[Previous Conversation Summary]**\n\n" + summary_content
+	var summary_wrapper := "**[Previous Conversation Summary]**\n\n" + summary_content
 	new_history.add_user_message(summary_wrapper)
 	
 	return {"success": true, "new_history": new_history}
@@ -70,7 +70,7 @@ func compress_context(p_history: ChatMessageHistory, p_network_manager: NetworkM
 
 # --- Private Functions ---
 
-## 将轮次数组格式化为可读文本（用于摘要请求的输入）
+# 将轮次数组格式化为可读文本（用于摘要请求的输入）
 static func _format_turns_for_summary(p_turns: Array) -> String:
 	var lines: Array[String] = []
 	
@@ -108,12 +108,7 @@ static func _format_turns_for_summary(p_turns: Array) -> String:
 					tool_content = tool_content.substr(0, 2000) + "\n... (truncated)"
 				lines.append("[%s]: %s" % [role_label, tool_content])
 			else:
-				# ↓↓↓ 新增：检测上一轮摘要并添加显式标注 ↓↓↓
-				var content_text: String = msg.content
-				if content_text.contains("📎") and content_text.contains("[Previous Conversation Summary]"):
-					lines.append("[%s]: ⚠️ [THIS IS A PREVIOUS SUMMARY — its contents MUST be fully incorporated into the new summary, do NOT discard] %s" % [role_label, content_text])
-				else:
-					lines.append("[%s]: %s" % [role_label, content_text])
+				lines.append("[%s]: %s" % [role_label, msg.content])
 		
 		lines.append("")
 	

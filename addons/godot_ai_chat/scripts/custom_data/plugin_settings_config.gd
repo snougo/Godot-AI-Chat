@@ -20,7 +20,7 @@ extends Resource
 @export var tavily_api_key: String = ""
 
 ## 每次请求中保留的最大对话轮数
-@export_range(1, 50, 1) var max_chat_turns: int = 20
+@export_range(1, 50, 1) var max_chat_turns: int = 10
 
 ## 网络流式输出请求的超时时间（秒）
 @export var network_timeout: int = 180

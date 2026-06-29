@@ -66,7 +66,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if file_type == "resource" and (
 		path == PluginPaths.PLUGIN_DIR + "plugin_settings_config.tres" or
 		path == PluginPaths.PLUGIN_DIR + "sub_agent_config.tres" or
-		path == PluginPaths.PLUGIN_DIR + "sketchfab_config.tres"
+		path == PluginPaths.PLUGIN_DIR + "context_compression_config.tres"
 	):
 		return ToolResult.fail("Error: Due to security reasons, reading this file is prohibited. Please do not attempt again.")
 	

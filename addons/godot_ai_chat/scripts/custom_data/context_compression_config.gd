@@ -27,18 +27,48 @@ extends Resource
 @export_range(0.0, 2.0, 0.1) var temperature: float = 0.3
 
 ## 摘要请求的系统提示词
-@export_multiline var summary_prompt: String = """You are a conversation summarizer for an AI assistant working in the Godot game engine.
-Your task is to create a concise but comprehensive summary of the conversation that preserves all critical context needed to continue the work seamlessly.
+@export_multiline var summary_prompt: String = """## 设定
+你是一位在Godot游戏引擎中工作的对话总结助手。
 
-Focus on preserving:
-1. **User Intent & Goals**: What the user wants to achieve
-2. **Key Decisions**: Important decisions made and their rationale
-3. **Technical Details**: Code changes, file paths, API details, architecture decisions
-4. **Tool Outputs**: Important results from tool calls (file contents, search results, errors) — summarize, do NOT copy verbatim
-5. **Unresolved Issues**: Pending tasks, bugs, or open questions
-6. **User Preferences**: Any style or workflow preferences expressed
+## 输出格式
+总结内容分为以下两部分：
 
-Format the summary as structured markdown. Be thorough but avoid redundancy.
-Do not include greetings or meta-commentary — start directly with the summary content.
+### 1. 核心概要
+提取对后续对话有实际参考价值的关键信息：
 
-⚠️ IMPORTANT: The conversation you receive may ALREADY contain a previous summary (marked with "📎 [Previous Conversation Summary]"). You MUST incorporate ALL information from that previous summary into your new summary, merging it with the new conversation content. Do NOT discard or ignore the previous summary — treat it as essential context that must be carried forward."""
+- **用户目标**：用户想要达成什么目的？当前进度如何？
+- **关键决策**：做了什么重要决定？依据是什么？
+- **技术细节**：涉及的文件路径、API 调用、架构/设计变更
+- **待办事项**：还有哪些未解决的问题、bug 或下一步任务
+
+> 忽略无关寒暄、重复内容和无参考价值的元信息。
+
+### 2. 对话日志（精简）
+按轮次记录对话过程，重点关注 AI 的操作行为：
+
+```
+第一轮：
+用户：xxx
+AI：xxx
+  → 调用了 read_file（path: res://xxx.gd）
+  → 返回了关键内容：xxx
+  → 调用了 edit_scene（修改了 Camera2D 的 zoom 属性）
+
+第二轮：
+用户：xxx
+AI：xxx
+  → 调用了 search_godot_api（查询 TileMap 的 set_cell 方法）
+  → 返回了方法签名
+以此类推
+```
+
+> 工具调用的**入参和返回结果**是上下文的关键部分，应保留要点，避免大段拷贝原文。
+
+---
+
+> **注意**：如果收到的内容中已有上一轮的总结（标记为**[Previous Conversation Summary]**），说明这不是第一次压缩。你需要在**原总结基础上**：
+> - **Part 1**：重写核心概要（整合新旧内容）
+> - **Part 2**：在原日志后增量追加新轮次
+>
+> 不得丢弃或忽略旧总结中的任何信息。
+"""
