@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://bc2orf1qf8p2o"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_c1qt1"]
+
+[resource]
+script = ExtResource("1_c1qt1")
+skill_name = "Scene Builder"
+description = "本技能用于创建完整的 Godot 场景，支持场景创建、节点层级搭建和节点属性设置。"
+instruction_file = "res://addons/godot_ai_chat/skills/scene_builder/Skill.md"
+tools = Array[String](["uid://clah6obs2tt0x", "uid://c35mseu23cb84", "uid://wp7xufdhqmke", "uid://dmag53k50t7xo", "uid://cvhi0v2o2ah02", "uid://c3ssc1cwopyos", "uid://dkoemiuidfsgi", "uid://ydovvy0q5bci", "uid://dvmrxnee1ybba", "uid://ho4l00iitlui", "uid://j5410tdoskcr", "uid://dkor40h5a6eo0", "uid://dkqn5wywfwo2q"])
+metadata/_custom_type_script = "uid://bx2rijcjhyx38"

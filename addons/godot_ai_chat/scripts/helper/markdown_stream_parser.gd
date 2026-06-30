@@ -40,33 +40,36 @@ enum _ParseState {
 
 # --- Private Vars ---
 
-## 当前解析状态
+# 当前解析状态
 var _state: int = _ParseState.TEXT
 
-## 不完整行的缓冲区（仅包含尚未以 \n 结尾的内容）
+# 不完整行的缓冲区（仅包含尚未以 \n 结尾的内容）
 var _line_buffer: String = ""
 
-## 当前代码块使用的围栏字符串（如 "```" 或 "~~~~"）
+# 当前代码块使用的围栏字符串（如 "```" 或 "~~~~"）
 var _current_fence: String = ""
 
-## 当前围栏的长度（用于判定闭合围栏是否足够长）
+# 当前围栏的长度（用于判定闭合围栏是否足够长）
 var _current_fence_len: int = 0
 
-## 当前围栏的字符类型（"`" 或 "~"）
+# 当前围栏的字符类型（"`" 或 "~"）
 var _fence_char: String = ""
+
+# 围栏嵌套深度计数器（方案A：深度计数法）
+var _nested_depth: int = 0
 
 # --- 正则表达式（预编译） ---
 # CommonMark 规则：
 #   - 开启围栏：0-3 空格缩进 + 3+ 围栏字符 + 可选 info string（不含同种围栏字符）
 #   - 闭合围栏：0-3 空格缩进 + 3+ 围栏字符 + 仅水平空白
 
-## 反引号围栏开始行
+# 反引号围栏开始行
 var _re_open_backtick: RegEx = RegEx.create_from_string("^( {0,3})(`{3,})([^`]*)$")
-## 反引号围栏结束行
+# 反引号围栏结束行
 var _re_close_backtick: RegEx = RegEx.create_from_string("^( {0,3})(`{3,})[ \\t]*$")
-## 波浪线围栏开始行
+# 波浪线围栏开始行
 var _re_open_tilde: RegEx = RegEx.create_from_string("^( {0,3})(~{3,})([^~]*)$")
-## 波浪线围栏结束行
+# 波浪线围栏结束行
 var _re_close_tilde: RegEx = RegEx.create_from_string("^( {0,3})(~{3,})[ \\t]*$")
 
 
@@ -79,6 +82,7 @@ func reset() -> void:
 	_current_fence = ""
 	_current_fence_len = 0
 	_fence_char = ""
+	_nested_depth = 0
 
 
 ## 喂入一段文本，自动提取完整行并解析
@@ -95,14 +99,14 @@ func feed(p_text: String) -> void:
 func flush() -> void:
 	if _line_buffer.is_empty():
 		return
-
+	
 	var remaining: String = _line_buffer
 	_line_buffer = ""
-
+	
 	# \r 兼容处理
 	if remaining.ends_with("\r"):
 		remaining = remaining.left(-1)
-
+	
 	if not remaining.is_empty():
 		_process_line(remaining)
 
@@ -119,25 +123,25 @@ func get_pending_text() -> String:
 
 # --- Private Functions ---
 
-## 从缓冲区中提取并处理所有完整行
-## 完整行 = 以 \n 结尾的行
+# 从缓冲区中提取并处理所有完整行
+# 完整行 = 以 \n 结尾的行
 func _drain_lines() -> void:
 	while true:
 		var nl_pos: int = _line_buffer.find("\n")
 		if nl_pos == -1:
 			break
-
+		
 		var line: String = _line_buffer.substr(0, nl_pos)
 		_line_buffer = _line_buffer.substr(nl_pos + 1)
-
+		
 		# \r\n 兼容：移除行尾的 \r
 		if line.ends_with("\r"):
 			line = line.left(-1)
-
+		
 		_process_line(line)
 
 
-## 处理单行文本（状态机入口）
+# 处理单行文本（状态机入口）
 func _process_line(p_line: String) -> void:
 	match _state:
 		_ParseState.TEXT:
@@ -146,8 +150,8 @@ func _process_line(p_line: String) -> void:
 			_process_code_line(p_line)
 
 
-## 处理 TEXT 模式下的行
-## 检测是否为围栏代码块开始行，否则作为普通文本输出
+# 处理 TEXT 模式下的行
+# 检测是否为围栏代码块开始行，否则作为普通文本输出
 func _process_text_line(p_line: String) -> void:
 	# 1. 尝试匹配反引号围栏开始
 	var m: RegExMatch = _re_open_backtick.search(p_line)
@@ -158,7 +162,7 @@ func _process_text_line(p_line: String) -> void:
 		if not info.contains("`"):
 			_enter_code_block(fence, info, "`")
 			return
-
+	
 	# 2. 尝试匹配波浪线围栏开始
 	m = _re_open_tilde.search(p_line)
 	if m:
@@ -168,45 +172,86 @@ func _process_text_line(p_line: String) -> void:
 		if not info.contains("~"):
 			_enter_code_block(fence, info, "~")
 			return
-
+	
 	# 3. 非围栏行 → 普通文本
 	segment_parsed.emit(SegmentType.TEXT, p_line + "\n", "")
 
 
-## 处理 CODE 模式下的行
-## 检测是否为闭合围栏行，否则作为代码内容输出
-func _process_code_line(p_line: String) -> void:
+# 处理 CODE 模式下的行
+# 检测是否为闭合围栏行，否则作为代码内容输出
+#func _process_code_line(p_line: String) -> void:
 	# 仅检测与当前围栏类型匹配的闭合围栏
+	#var m: RegExMatch
+	#if _fence_char == "`":
+		#m = _re_close_backtick.search(p_line)
+	#else:
+		#m = _re_close_tilde.search(p_line)
+	
+	#if m:
+		#var fence: String = m.get_string(2)
+		# CommonMark：闭合围栏长度必须 >= 开启围栏长度
+		#if fence.length() >= _current_fence_len:
+			#_exit_code_block()
+			#return
+	
+	# 非闭合行 → 代码内容
+	#segment_parsed.emit(SegmentType.CODE_BLOCK_CONTENT, p_line + "\n", "")
+
+func _process_code_line(p_line: String) -> void:
+	# 1 检测"有语言标识符的围栏开始行" → 深度 +1，作为内容输出
+	if _is_fenced_open_with_info(p_line, _fence_char):
+		_nested_depth += 1
+		segment_parsed.emit(SegmentType.CODE_BLOCK_CONTENT, p_line + "\n", "")
+		return
+	
+	# 2 检测闭合围栏
 	var m: RegExMatch
 	if _fence_char == "`":
 		m = _re_close_backtick.search(p_line)
 	else:
 		m = _re_close_tilde.search(p_line)
-
+	
 	if m:
 		var fence: String = m.get_string(2)
-		# CommonMark：闭合围栏长度必须 >= 开启围栏长度
 		if fence.length() >= _current_fence_len:
-			_exit_code_block()
-			return
-
-	# 非闭合行 → 代码内容
+			if _nested_depth > 0:
+				# 有嵌套 → 递减深度，行作为内容输出
+				_nested_depth -= 1
+				segment_parsed.emit(SegmentType.CODE_BLOCK_CONTENT, p_line + "\n", "")
+				return
+			else:
+				# 无嵌套 → 正常退出代码块
+				_exit_code_block()
+				return
+	
+	# 3 其他情况 → 代码内容
 	segment_parsed.emit(SegmentType.CODE_BLOCK_CONTENT, p_line + "\n", "")
 
 
-## 进入代码块状态
+# 进入代码块状态
 func _enter_code_block(p_fence: String, p_lang: String, p_char: String) -> void:
 	_state = _ParseState.CODE
 	_current_fence = p_fence
 	_current_fence_len = p_fence.length()
 	_fence_char = p_char
+	_nested_depth = 0
 	segment_parsed.emit(SegmentType.CODE_BLOCK_START, "", p_lang)
 
 
-## 退出代码块状态
+# 退出代码块状态
 func _exit_code_block() -> void:
 	_state = _ParseState.TEXT
 	_current_fence = ""
 	_current_fence_len = 0
 	_fence_char = ""
 	segment_parsed.emit(SegmentType.CODE_BLOCK_END, "", "")
+
+
+# 检测当前行是否为"有语言标识符的围栏开始行"
+func _is_fenced_open_with_info(p_line: String, p_fence_char: String) -> bool:
+	var regex: RegEx = _re_open_backtick if p_fence_char == "`" else _re_open_tilde
+	var m: RegExMatch = regex.search(p_line)
+	if m:
+		var info: String = m.get_string(3).strip_edges()
+		return not info.is_empty()
+	return false
