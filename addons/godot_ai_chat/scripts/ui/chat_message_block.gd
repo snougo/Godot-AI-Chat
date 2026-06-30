@@ -21,6 +21,12 @@ const TITLE_STYLE_TOOL: StyleBoxFlat = preload("res://addons/godot_ai_chat/asset
 ## 统一背景样式资源
 const BG_STYLE: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/message_background.tres")
 
+## 行内代码颜色
+const INLINE_CODE_COLOR: Color = Color("#d2cf95")
+## 段落实体类型（与 MarkdownToBBCode 保持一致）
+const SEGMENT_PLAIN: int = 0
+const SEGMENT_CODE: int = 1
+
 # --- @onready Vars ---
 
 @onready var _content_container: VBoxContainer = $MarginContainer/VBoxContainer
@@ -67,6 +73,7 @@ var _in_table: bool = false
 
 # 工具角色专用：单一 CodeEdit，不走 Markdown 解析器
 var _tool_code_edit: CodeEdit = null
+
 
 # --- Built-in Functions ---
 
@@ -489,9 +496,10 @@ func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabe
 				OS.shell_open(url)
 	)
 	
-	# 对初始文本去除开头空白行
-	var converted: String = MarkdownToBBCode.convert_line(p_initial_text)
-	rtl.text = converted.lstrip("\n")
+	var segments: Array[Dictionary] = MarkdownToBBCode.convert_line_to_segments(p_initial_text)
+	rtl.clear()
+	_render_segments(rtl, segments)
+	
 	if not p_initial_text.is_empty():
 		_is_first_text = false
 	_previous_line_was_blank = rtl.text.is_empty() or rtl.text == "\n"
@@ -529,14 +537,12 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		_in_table = false
 		_last_ui_node.text += "[/table]\n\n"
 	
-	var converted: String = MarkdownToBBCode.convert_line(p_text)
-	var is_blank: bool = converted == "\n"
+	var segments: Array[Dictionary] = MarkdownToBBCode.convert_line_to_segments(p_text)
+	var is_blank: bool = _is_blank_segments(segments) and p_text.strip_edges().is_empty()
 	
-	# 跳过消息开头的所有空白行
 	if _is_first_text and is_blank:
 		return
 	
-	# 压缩连续空白行
 	if is_blank and _previous_line_was_blank:
 		return
 	
@@ -544,13 +550,12 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 	_is_first_text = false
 	
 	if p_instant:
-		_last_ui_node.text += converted
+		_render_segments(_last_ui_node, segments)
 	else:
 		var old_total: int = _last_ui_node.get_total_character_count()
 		if _last_ui_node.visible_characters == -1:
 			_last_ui_node.visible_characters = old_total
-		
-		_last_ui_node.text += converted
+		_render_segments(_last_ui_node, segments)
 		_trigger_typewriter(_last_ui_node)
 
 
@@ -714,6 +719,24 @@ func _show_code_in_popup_window(p_code_content: String) -> void:
 	var code_edit: CodeEdit = _current_popup_code_view_window.popup_code_edit
 	code_edit.text = p_code_content
 	_current_popup_code_view_window.popup_centered(Vector2i(800, 600))
+
+
+func _render_segments(rtl: RichTextLabel, segments: Array[Dictionary]) -> void:
+	for seg in segments:
+		match seg.type:
+			SEGMENT_PLAIN:
+				rtl.append_text(seg.content)
+			SEGMENT_CODE:
+				rtl.push_color(INLINE_CODE_COLOR)
+				rtl.add_text(seg.content)
+				rtl.pop()
+
+
+static func _is_blank_segments(segments: Array[Dictionary]) -> bool:
+	if segments.size() != 1:
+		return false
+	var seg: Dictionary = segments[0]
+	return seg.type == SEGMENT_PLAIN and seg.content.strip_edges().is_empty()
 
 
 # 清空所有内容

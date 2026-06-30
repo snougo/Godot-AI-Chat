@@ -15,6 +15,10 @@ const BBCODE_TAGS: Array[String] = [
 	"code", "highlight", "br", "p"
 ]
 
+## 段落实体类型
+const SEGMENT_PLAIN: int = 0
+const SEGMENT_CODE: int = 1
+
 # --- Public Static Functions ---
 
 ## 将一行 Markdown 文本转换为 BBCode
@@ -203,7 +207,15 @@ static func make_table_row(p_line: String, p_is_header: bool) -> String:
 			continue
 		
 		if not in_backtick and ch == "|":
-			cells.append(convert_inline(current_cell.strip_edges()))
+			var cell_segments: Array[Dictionary] = _convert_inline_to_segments(current_cell.strip_edges())
+			var cell_bb: String = ""
+			for s in cell_segments:
+				if s.type == SEGMENT_PLAIN:
+					cell_bb += s.content
+				else:
+					cell_bb += "[color=#d2cf95]" + s.content.replace("[", "[lb]").replace("]", "[rb]") + "[/color]"
+			cells.append(cell_bb)
+			
 			current_cell = ""
 			i += 1
 			continue
@@ -211,7 +223,14 @@ static func make_table_row(p_line: String, p_is_header: bool) -> String:
 		current_cell += ch
 		i += 1
 	
-	cells.append(convert_inline(current_cell.strip_edges()))
+	var cell_segments: Array[Dictionary] = _convert_inline_to_segments(current_cell.strip_edges())
+	var cell_bb: String = ""
+	for s in cell_segments:
+		if s.type == SEGMENT_PLAIN:
+			cell_bb += s.content
+		else:
+			cell_bb += "[color=#d2cf95]" + s.content.replace("[", "[lb]").replace("]", "[rb]") + "[/color]"
+	cells.append(cell_bb)
 	
 	var column_count: int = cells.size()
 	
@@ -225,6 +244,32 @@ static func make_table_row(p_line: String, p_is_header: bool) -> String:
 		for c in cells:
 			data_cells.append("[cell]%s[/cell]" % c)
 		return "".join(data_cells) + "\n"
+
+
+static func convert_line_to_segments(p_text: String) -> Array[Dictionary]:
+	var content: String = p_text.trim_suffix("\n")
+	
+	var heading_level: int = 0
+	for level in range(1, 7):
+		var prefix: String = "#".repeat(level) + " "
+		if content.begins_with(prefix):
+			heading_level = level
+			break
+	
+	if heading_level > 0:
+		var heading_text: String = content.substr(heading_level + 1).strip_edges()
+		var inner_segments: Array[Dictionary] = _convert_inline_to_segments(heading_text)
+		var sizes: Array[int] = [28, 24, 20, 18, 16, 14]
+		var result: Array[Dictionary] = []
+		result.append(_seg(SEGMENT_PLAIN, "[font_size=%d][b][color=#ff729c]" % sizes[heading_level - 1]))
+		result.append_array(inner_segments)
+		result.append(_seg(SEGMENT_PLAIN, "[/color][/b][/font_size]\n"))
+		return result
+	
+	var segments: Array[Dictionary] = _convert_inline_to_segments(content)
+	if not content.is_empty():
+		segments.append(_seg(SEGMENT_PLAIN, "\n"))
+	return segments
 
 
 # --- Private Static Functions ---
@@ -283,3 +328,147 @@ static func _find_italic_end(p_text: String, p_start: int) -> int:
 				return j
 		j += 1
 	return -1
+
+
+static func _convert_inline_to_segments(p_text: String) -> Array[Dictionary]:
+	var segments: Array[Dictionary] = []
+	var i: int = 0
+	var len: int = p_text.length()
+	
+	while i < len:
+		var c: String = p_text[i]
+		
+		match c:
+			"*":
+				if i + 2 < len and p_text[i + 1] == "*" and p_text[i + 2] == "*":
+					var end: int = p_text.find("***", i + 3)
+					if end != -1:
+						var inner: String = p_text.substr(i + 3, end - i - 3)
+						var inner_segments: Array[Dictionary] = _convert_inline_to_segments(inner)
+						segments.append(_seg(SEGMENT_PLAIN, "[b][i][color=#c792ea]"))
+						segments.append_array(inner_segments)
+						segments.append(_seg(SEGMENT_PLAIN, "[/color][/i][/b]"))
+						i = end + 3
+						continue
+				
+				if i + 1 < len and p_text[i + 1] == "*":
+					var end: int = p_text.find("**", i + 2)
+					if end != -1:
+						var inner: String = p_text.substr(i + 2, end - i - 2)
+						var inner_segments: Array[Dictionary] = _convert_inline_to_segments(inner)
+						segments.append(_seg(SEGMENT_PLAIN, "[b][color=#94bcff]"))
+						segments.append_array(inner_segments)
+						segments.append(_seg(SEGMENT_PLAIN, "[/color][/b]"))
+						i = end + 2
+						continue
+				
+				var end: int = _find_italic_end(p_text, i)
+				if end != -1:
+					var inner: String = p_text.substr(i + 1, end - i - 1)
+					var inner_segments: Array[Dictionary] = _convert_inline_to_segments(inner)
+					segments.append(_seg(SEGMENT_PLAIN, "[i][color=#569CD6]"))
+					segments.append_array(inner_segments)
+					segments.append(_seg(SEGMENT_PLAIN, "[/color][/i]"))
+					i = end + 1
+					continue
+				
+				segments.append(_seg(SEGMENT_PLAIN, c))
+				i += 1
+			
+			"`":
+				var delim_len: int = 1
+				while i + delim_len < len and p_text[i + delim_len] == "`":
+					delim_len += 1
+				
+				var search_start: int = i + delim_len
+				var found_end: int = -1
+				var j: int = search_start
+				while j < len:
+					if p_text[j] == "`":
+						var match_len: int = 1
+						while j + match_len < len and p_text[j + match_len] == "`":
+							match_len += 1
+						if match_len == delim_len:
+							found_end = j + delim_len - 1
+							break
+						j += match_len
+					else:
+						j += 1
+				
+				if found_end != -1:
+					var inner: String = p_text.substr(search_start, j - search_start)
+					segments.append(_seg(SEGMENT_CODE, inner))
+					i = found_end + 1
+					continue
+				
+				segments.append(_seg(SEGMENT_PLAIN, "`".repeat(delim_len)))
+				i += delim_len
+			
+			"[":
+				var close_bracket: int = p_text.find("]", i + 1)
+				if close_bracket != -1 and close_bracket + 1 < len and p_text[close_bracket + 1] == "(":
+					var close_paren: int = p_text.find(")", close_bracket + 2)
+					if close_paren != -1:
+						var link_text: String = p_text.substr(i + 1, close_bracket - i - 1)
+						var link_url: String = p_text.substr(close_bracket + 2, close_paren - close_bracket - 2)
+						link_url = link_url.replace("[", "[lb]").replace("]", "[rb]")
+						var inner_segments: Array[Dictionary] = _convert_inline_to_segments(link_text)
+						segments.append(_seg(SEGMENT_PLAIN, "[color=#B39DDB][url=" + link_url + "]"))
+						segments.append_array(inner_segments)
+						segments.append(_seg(SEGMENT_PLAIN, "[/url][/color]"))
+						i = close_paren + 1
+						continue
+				
+				var bbcode_len: int = _match_bbcode_tag(p_text, i)
+				if bbcode_len > 0:
+					segments.append(_seg(SEGMENT_PLAIN, p_text.substr(i, bbcode_len)))
+					i += bbcode_len
+					continue
+				
+				segments.append(_seg(SEGMENT_PLAIN, "[lb]"))
+				i += 1
+			
+			"]":
+				segments.append(_seg(SEGMENT_PLAIN, "[rb]"))
+				i += 1
+			
+			"~":
+				if i + 1 < len and p_text[i + 1] == "~":
+					var end: int = p_text.find("~~", i + 2)
+					if end != -1:
+						var inner: String = p_text.substr(i + 2, end - i - 2)
+						var inner_segments: Array[Dictionary] = _convert_inline_to_segments(inner)
+						segments.append(_seg(SEGMENT_PLAIN, "[s]"))
+						segments.append_array(inner_segments)
+						segments.append(_seg(SEGMENT_PLAIN, "[/s]"))
+						i = end + 2
+						continue
+				segments.append(_seg(SEGMENT_PLAIN, c))
+				i += 1
+			
+			"<":
+				var end: int = p_text.find(">", i + 1)
+				if end != -1:
+					var url: String = p_text.substr(i + 1, end - i - 1)
+					if url.begins_with("http://") or url.begins_with("https://") \
+							or url.begins_with("ftp://") or url.begins_with("www.") \
+							or ("@" in url and "." in url):
+						url = url.replace("[", "[lb]").replace("]", "[rb]")
+						segments.append(_seg(SEGMENT_PLAIN, "[color=#B39DDB][url=" + url + "]" + url + "[/url][/color]"))
+						i = end + 1
+						continue
+				segments.append(_seg(SEGMENT_PLAIN, c))
+				i += 1
+			
+			_:
+				var start: int = i
+				while i < len and p_text[i] not in ["*", "`", "[", "]", "~", "<"]:
+					i += 1
+				if i > start:
+					segments.append(_seg(SEGMENT_PLAIN, p_text.substr(start, i - start)))
+	
+	return segments
+
+
+static func _seg(p_type: int, p_content: String) -> Dictionary:
+	return {"type": p_type, "content": p_content}
