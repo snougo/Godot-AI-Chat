@@ -97,7 +97,7 @@ static func convert_inline(p_text: String) -> String:
 						while j + match_len < len and p_text[j + match_len] == "`":
 							match_len += 1
 						# 找到连续 delim_len 个反引号即为闭合
-						if match_len >= delim_len:
+						if match_len == delim_len:
 							found_end = j + delim_len - 1
 							break
 						j += match_len
@@ -105,7 +105,7 @@ static func convert_inline(p_text: String) -> String:
 						j += 1
 				
 				if found_end != -1:
-					var inner: String = p_text.substr(search_start, j - search_start)  # ← 这里
+					var inner: String = p_text.substr(search_start, j - search_start)
 					inner = inner.replace("[", "[lb]").replace("]", "[rb]")
 					result += "[color=#d2cf95]" + inner + "[/color]"
 					i = found_end + 1
