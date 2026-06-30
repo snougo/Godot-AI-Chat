@@ -313,7 +313,8 @@ func _close_table_if_open() -> void:
 	if _in_table:
 		_in_table = false
 		if is_instance_valid(_last_ui_node) and _last_ui_node is RichTextLabel:
-			_last_ui_node.text += "[/table]\n\n"
+			#_last_ui_node.text += "[/table]\n\n"
+			_last_ui_node.append_text("[/table]\n\n")
 
 
 # 解析器信号回调：将解析段落路由到对应的 UI 渲染方法
@@ -529,13 +530,15 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		var bb: String = MarkdownToBBCode.make_table_row(line, is_header)
 		if is_header:
 			_in_table = true
-		_last_ui_node.text += bb
+		#_last_ui_node.text += bb
+		_last_ui_node.append_text(bb)
 		return
 	
 	# 非表格行：先闭合未关闭的表格
 	if _in_table:
 		_in_table = false
-		_last_ui_node.text += "[/table]\n\n"
+		#_last_ui_node.text += "[/table]\n\n"
+		_last_ui_node.append_text("[/table]\n\n")
 	
 	var segments: Array[Dictionary] = MarkdownToBBCode.convert_line_to_segments(p_text)
 	var is_blank: bool = _is_blank_segments(segments) and p_text.strip_edges().is_empty()
