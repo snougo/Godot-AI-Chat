@@ -1,4 +1,5 @@
 class_name MarkdownToBBCode
+extends RefCounted
 ## Markdown 转 BBCode 转换器
 ##
 ## 纯文本处理，无任何 UI 依赖。

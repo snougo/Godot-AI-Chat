@@ -122,7 +122,7 @@ func _ready() -> void:
 	_allow_editor_script_checkbutton.button_pressed = _cfg.allow_editor_script_execution
 	_allow_editor_script_checkbutton.toggled.connect(_on_allow_editor_script_toggled)
 	
-	_update_session_selector()
+	update_session_selector()
 	reset_token_usage_display()
 	update_ui_state(UIState.IDLE)
 	
@@ -143,6 +143,10 @@ func get_chat_scroll_container() -> ScrollContainer:
 
 func get_settings_panel() -> SettingsPanel:
 	return _settings_panel_node
+
+
+func get_current_session_name() -> String:
+	return _current_session_name
 
 
 ## 初始化编辑器依赖
@@ -273,12 +277,37 @@ func get_model_list_request_failed(p_error_message: String) -> void:
 func select_session_by_name(p_session_name: String) -> void:
 	# 记录当前会话文件名
 	_current_session_name = p_session_name
-	_update_session_selector()
+	update_session_selector()
 	
 	for i in range(_session_selector.get_item_count()):
 		if _session_selector.get_item_text(i) == p_session_name:
 			_session_selector.select(i)
 			return
+
+
+func update_session_selector() -> void:
+	var archives: Array[String] = SessionStorage.get_session_list()
+	var previously_selected: String = ""
+	
+	if _session_selector.selected != -1:
+		previously_selected = _session_selector.get_item_text(_session_selector.selected)
+	
+	_session_selector.clear()
+	
+	if archives.is_empty():
+		_session_selector.disabled = true
+	else:
+		_session_selector.disabled = false
+		var new_selection_index: int = -1
+		for i in range(archives.size()):
+			var archive_name: String = archives[i]
+			_session_selector.add_item(archive_name)
+			
+			if archive_name == previously_selected:
+				new_selection_index = i
+		
+		if new_selection_index != -1:
+			_session_selector.select(new_selection_index)
 
 
 ## 清空用户输入框
@@ -414,31 +443,6 @@ func _apply_model_filter() -> void:
 			_on_model_selected(0)
 
 
-func _update_session_selector() -> void:
-	var archives: Array[String] = SessionStorage.get_session_list()
-	var previously_selected: String = ""
-	
-	if _session_selector.selected != -1:
-		previously_selected = _session_selector.get_item_text(_session_selector.selected)
-	
-	_session_selector.clear()
-	
-	if archives.is_empty():
-		_session_selector.disabled = true
-	else:
-		_session_selector.disabled = false
-		var new_selection_index: int = -1
-		for i in range(archives.size()):
-			var archive_name: String = archives[i]
-			_session_selector.add_item(archive_name)
-			
-			if archive_name == previously_selected:
-				new_selection_index = i
-		
-		if new_selection_index != -1:
-			_session_selector.select(new_selection_index)
-
-
 func _generate_default_filename(p_extension: String) -> String:
 	var now: Dictionary = Time.get_datetime_dict_from_system(false)
 	var timestamp_str: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" % [now.year, now.month, now.day, now.hour, now.minute, now.second]
@@ -536,7 +540,7 @@ func _on_settings_save_button_pressed() -> void:
 
 
 func _on_filesystem_changed() -> void:
-	_update_session_selector()
+	update_session_selector()
 
 
 func _on_workspace_select_button_pressed() -> void:

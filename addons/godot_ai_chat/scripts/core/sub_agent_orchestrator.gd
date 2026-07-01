@@ -37,15 +37,15 @@ func run_task() -> String:
 	
 	# 3. 准备 Provider
 	if _config.model_name.is_empty():
-		var err := "Sub Agent 启动失败：模型名称 (model_name) 为空！"
+		var err := "Error: Sub-Agent startup failed: model name is empty. Please configure it before invoking."
 		AIChatLogger.error(err)
-		_remove_sub_agent_node_from_root()
+		_remove_sub_agent()
 		return err
 	
 	var provider = ProviderFactory.create_provider(_config.api_provider)
 	if not provider:
-		_remove_sub_agent_node_from_root()
-		return "Failed to initialize Sub Agent Provider."
+		_remove_sub_agent()
+		return "Error: failed to initialize Sub Agent API Provider."
 	
 	var is_gemini: bool = provider is GeminiProvider
 	
@@ -56,7 +56,6 @@ func run_task() -> String:
 	
 	while turns_taken < _config.max_chat_turns:
 		turns_taken += 1
-		AIChatLogger.info("[Sub Agent] --- Turn %d ---" % turns_taken)
 		
 		# 构建流式请求
 		var tool_defs = _get_tool_definitions(is_gemini)
@@ -69,12 +68,14 @@ func run_task() -> String:
 		
 		if response.has("error"):
 			AIChatLogger.error("[Sub Agent] " + response.error)
-			_remove_sub_agent_node_from_root()
+			_remove_sub_agent()
 			return response.error
 		
 		var content = response.get("content", "")
 		var reasoning = response.get("reasoning_content", "")
 		var raw_tool_calls = response.get("tool_calls", [])
+		
+		AIChatLogger.info("[Sub Agent] --- Turn %d ---" % turns_taken)
 		
 		if not reasoning.is_empty():
 			AIChatLogger.info("[Sub Agent Thinking]:\n" + reasoning)
@@ -95,9 +96,9 @@ func run_task() -> String:
 		var clean_tool_calls = assistant_msg.tool_calls
 		
 		if clean_tool_calls.is_empty():
-			_remove_sub_agent_node_from_root()
-			AIChatLogger.warn("[Sub Agent] Stopped without calling tools.")
-			return "Task aborted: Sub Agent stopped without reporting a result. Its may has completed the task, please check."
+			_remove_sub_agent()
+			AIChatLogger.warn("[Sub Agent] Stopped without reporting.")
+			return "Sub Agent stopped without reporting a result. Please check the status of the relevant files."
 		
 		# 收集本轮工具返回的图片附件
 		var pending_images: Array[Dictionary] = []
@@ -159,16 +160,15 @@ func run_task() -> String:
 			_history.add_message(img_msg)
 		
 		if has_reported:
-			_remove_sub_agent_node_from_root()
+			_remove_sub_agent()
 			AIChatLogger.info("[Sub Agent] Task Finished.")
 			return final_report
 	
-	_remove_sub_agent_node_from_root()
+	_remove_sub_agent()
 	AIChatLogger.warn("[Sub Agent] Exceeded max turns.")
-	return """Sub Agent reached the maximum execution step limit and was forcibly terminated. 
-	Its task has been partially completed. 
-	Please re-invoke the Sub Agent to continue from where it left off.
-	"""
+	return "Sub Agent reached the maximum execution step limit and was forcibly terminated." \
+	+ "Its task has been partially completed." \
+	+ "Please re-invoke the Sub Agent to continue from where it left off."
 
 
 # 使用 HTTPClient 在主线程轮询流式响应
@@ -325,6 +325,7 @@ func _parse_sse_lines(p_text: String, p_result: Dictionary) -> void:
 						target.function.arguments += f.arguments
 
 
+# 加载 Sub-Agent 自己的工具集
 func _load_isolated_tools() -> void:
 	_sub_agent_tools.clear()
 	if REPORT_TASK_TOOL_SCRIPT:
@@ -342,6 +343,7 @@ func _load_isolated_tools() -> void:
 						_sub_agent_tools[inst.tool_name] = inst
 
 
+# 获取工具定义
 func _get_tool_definitions(p_is_gemini: bool) -> Array:
 	var defs = []
 	for tool_inst in _sub_agent_tools.values():
@@ -365,7 +367,8 @@ func _get_tool_definitions(p_is_gemini: bool) -> Array:
 	return defs
 
 
-func _remove_sub_agent_node_from_root() -> void:
+# 从编辑器根节点上移除 Sub-Agent 节点
+func _remove_sub_agent() -> void:
 	var root: Window = Engine.get_main_loop().root
 	for child in root.get_children(false):
 		if "SubAgentOrchestrator" in child.name and child is SubAgentOrchestrator:

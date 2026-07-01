@@ -201,7 +201,9 @@ func _on_stream_chunk(chunk: Dictionary) -> void:
 
 
 func _on_stop_requested() -> void:
-	if _is_performing_cleanup: return
+	if _is_performing_cleanup:
+		return
+	
 	_is_performing_cleanup = true
 	_agent_orchestrator.cancel_workflow()
 	_is_performing_cleanup = false
@@ -251,7 +253,7 @@ func _on_delete_chat_requested(session_name: String) -> void:
 	else:
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted archive: " + session_name)
 	
-	_chat_ui._update_session_selector()
+	_chat_ui.update_session_selector()
 
 
 func _on_export_markdown_requested(path: String) -> void:

@@ -43,6 +43,6 @@ func execute(args: Dictionary) -> ToolResult:
 	var root: Window = Engine.get_main_loop().root # 找到编辑器的根节点
 	root.add_child(sub_agent_orchestrator)
 	
-	# 阻塞等待 Sub Agent 后台循环结束
+	# 阻塞等待 Sub-Agent 后台循环结束
 	var result_summary = await sub_agent_orchestrator.run_task()
 	return ToolResult.ok(result_summary)

@@ -12,7 +12,7 @@ extends Resource
 @export var enabled: bool = true
 
 ## 摘要请求使用的 API 服务提供商类型
-@export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "Google Gemini", "Anthropic-Compatible") var api_provider: String = "OpenAI-ChatCompletions"
+@export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "Anthropic-Compatible") var api_provider: String = "OpenAI-ChatCompletions"
 
 ## API 服务的基地址。留空则使用主对话的配置。
 @export var api_base_url: String = ""

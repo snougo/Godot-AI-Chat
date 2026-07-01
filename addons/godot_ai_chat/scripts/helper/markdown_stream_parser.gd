@@ -1,4 +1,3 @@
-@tool
 class_name MarkdownStreamParser
 extends RefCounted
 
@@ -179,24 +178,6 @@ func _process_text_line(p_line: String) -> void:
 
 # 处理 CODE 模式下的行
 # 检测是否为闭合围栏行，否则作为代码内容输出
-#func _process_code_line(p_line: String) -> void:
-	# 仅检测与当前围栏类型匹配的闭合围栏
-	#var m: RegExMatch
-	#if _fence_char == "`":
-		#m = _re_close_backtick.search(p_line)
-	#else:
-		#m = _re_close_tilde.search(p_line)
-	
-	#if m:
-		#var fence: String = m.get_string(2)
-		# CommonMark：闭合围栏长度必须 >= 开启围栏长度
-		#if fence.length() >= _current_fence_len:
-			#_exit_code_block()
-			#return
-	
-	# 非闭合行 → 代码内容
-	#segment_parsed.emit(SegmentType.CODE_BLOCK_CONTENT, p_line + "\n", "")
-
 func _process_code_line(p_line: String) -> void:
 	# 1 检测"有语言标识符的围栏开始行" → 深度 +1，作为内容输出
 	if _is_fenced_open_with_info(p_line, _fence_char):
