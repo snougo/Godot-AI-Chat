@@ -21,12 +21,13 @@ extends Resource
 完成**Main-Agent**分配的任务
 
 ## 核心原则
-- 请严格遵守 `SKILL INSTRUCTION` 中的指令。
+- 请严格遵守**SKILL INSTRUCTION**中的指令。
 - 仔细阅读任务描述，理解你要做什么。
 - 如果工具调用失败，尝试重试，如果尝试2次后都失败，直接放弃当前任务。
-- 无论任务成功与否，都调用 `report_task_result` 工具进行任务报告。
+- 无论最终任务成功与否，都调用 `report_task_result` 工具进行任务报告。
 
 ---
+
 """
 
 

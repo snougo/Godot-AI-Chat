@@ -641,6 +641,8 @@ func _create_tool_output_block() -> void:
 	_tool_code_edit = CodeEdit.new()
 	_tool_code_edit.editable = false
 	_tool_code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
+	_tool_code_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_tool_code_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tool_code_edit.gutters_draw_line_numbers = false
 	_tool_code_edit.minimap_draw = false
 	_tool_code_edit.caret_blink = false

@@ -1,4 +1,3 @@
-@tool
 class_name ToolRegistry
 extends RefCounted
 
