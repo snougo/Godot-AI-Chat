@@ -313,7 +313,6 @@ func _close_table_if_open() -> void:
 	if _in_table:
 		_in_table = false
 		if is_instance_valid(_last_ui_node) and _last_ui_node is RichTextLabel:
-			#_last_ui_node.text += "[/table]\n\n"
 			_last_ui_node.append_text("[/table]\n\n")
 
 
@@ -530,23 +529,30 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		var bb: String = MarkdownToBBCode.make_table_row(line, is_header)
 		if is_header:
 			_in_table = true
-		#_last_ui_node.text += bb
 		_last_ui_node.append_text(bb)
 		return
 	
 	# 非表格行：先闭合未关闭的表格
 	if _in_table:
 		_in_table = false
-		#_last_ui_node.text += "[/table]\n\n"
 		_last_ui_node.append_text("[/table]\n\n")
 	
 	var segments: Array[Dictionary] = MarkdownToBBCode.convert_line_to_segments(p_text)
-	var is_blank: bool = _is_blank_segments(segments) and p_text.strip_edges().is_empty()
+	var is_blank: bool = (segments.is_empty() or _is_blank_segments(segments)) and p_text.strip_edges().is_empty()
 	
+	# 开头空行 → 跳过（不渲染）
 	if _is_first_text and is_blank:
 		return
 	
+	# 连续多余的空行 → 跳过（压缩为1个）
 	if is_blank and _previous_line_was_blank:
+		return
+	
+	# 需要保留的单个空行（非开头、上一行不是空行）→ 渲染一个换行符
+	if is_blank:
+		_last_ui_node.append_text("\n")
+		_previous_line_was_blank = true
+		_is_first_text = false
 		return
 	
 	_previous_line_was_blank = is_blank
@@ -765,7 +771,7 @@ func _clear_content() -> void:
 	_current_typing_node = null
 	_reasoning_container = null
 	_reasoning_label = null
-	# [优化P1] 清空思考内容缓存
+	# 清空思考内容缓存
 	_reasoning_text_cache = ""
 	_reasoning_write_buffer = ""
 	# 重置时恢复标志位

@@ -32,10 +32,10 @@ static func process_input(p_raw_text: String) -> Dictionary:
 					continue # 路径已提取，不保留在文本
 			
 			# 2. 处理场景文件（.tscn / .scn）
-			elif ext in ["tscn", "scn"]:
-				var scene_md: String = _parse_scene_to_markdown(trimmed)
-				processed_lines.append(scene_md)
-				continue
+			#elif ext in ["tscn", "scn"]:
+				#var scene_md: String = _parse_scene_to_markdown(trimmed)
+				#processed_lines.append(scene_md)
+				#continue
 			
 			# 3. 处理脚本文件
 			#elif ext == "gd":
