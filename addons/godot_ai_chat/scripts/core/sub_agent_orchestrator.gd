@@ -18,7 +18,13 @@ func _exit_tree():
 
 
 func run_task() -> String:
-	_config = SubAgentConfig.get_config()
+	# 优先使用技能级配置，若无则回退到全局配置
+	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
+	if skill_res and skill_res.get("sub_agent_config") != null:
+		_config = skill_res.sub_agent_config
+	else:
+		_config = SubAgentConfig.get_config()
+	
 	_history = ChatMessageHistory.new()
 	
 	AIChatLogger.info("[Sub Agent] Starting task with skill: '%s'" % skill_name)

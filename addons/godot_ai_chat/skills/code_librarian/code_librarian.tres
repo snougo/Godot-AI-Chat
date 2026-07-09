@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://borstk358ww1o"]
+
+[ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_7e3wl"]
+[ext_resource type="Resource" uid="uid://87qldkdbiwkf" path="res://addons/godot_ai_chat/skills/code_librarian/sub_agent_config.tres" id="2_oh7sv"]
+
+[resource]
+script = ExtResource("1_7e3wl")
+skill_name = "Code Librarian"
+description = "本技能通过将代码库分析的脏活交给本地的 Sub-Agent 处理，确保了查找过程中的中间产物不进入上下文，并且大幅节省了token的消耗。
+
+- 按功能意图搜索：只需描述要找什么功能，Sub-Agent 自行定位相关文件，无需提供具体路径线索
+- 只读不写：仅用于代码调研和阅读，不修改任何文件
+- 输出粒度可选：清单模式（仅文件列表+角色说明）/ 摘要模式（路径+核心代码片段）/ 完整模式（指定函数的完整实现）
+- 附带搜索过程简述：说明排查了哪些范围、排除了哪些文件、最终锁定了哪些，方便评估结果完整性
+
+适用场景：代码库调研、功能定位、架构分析。如需修改代码请使用 Script Editor 技能。"
+instruction_file = "res://addons/godot_ai_chat/skills/code_librarian/Skill.md"
+tools = Array[String](["uid://j5410tdoskcr", "uid://cw5xgoi1irsaw", "uid://dkqn5wywfwo2q"])
+sub_agent_config = ExtResource("2_oh7sv")

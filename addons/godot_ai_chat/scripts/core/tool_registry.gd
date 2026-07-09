@@ -132,14 +132,13 @@ static func _load_skill_from_folder(p_folder_path: String) -> void:
 		while file_name != "":
 			if not dir.current_is_dir() and (file_name.ends_with(".tres") or file_name.ends_with(".res")):
 				var resource: Resource = load(p_folder_path.path_join(file_name))
-				if resource:
-					if "skill_name" in resource:
-						available_skills[resource.get("skill_name")] = resource
-						AIChatLogger.debug("[ToolRegistry] -> SUCCESS: Loaded ", resource.get("skill_name"))
+				if resource is AiSkill:
+					if not resource.skill_name.is_empty():
+						available_skills[resource.skill_name] = resource
+						AIChatLogger.debug("[ToolRegistry] -> SUCCESS: Loaded ", resource.skill_name)
 					else:
-						AIChatLogger.error("[ToolRegistry] -> ERROR: Resource has no 'skill_name'")
-				else:
-					AIChatLogger.error("[ToolRegistry] -> ERROR: load() returned null")
+						AIChatLogger.warn("[ToolRegistry] -> AiSkill resource has empty skill_name: ", file_name)
+				# 非 AiSkill 的资源（如 SubAgentConfig）静默跳过，不再报错
 			
 			file_name = dir.get_next()
 		dir.list_dir_end()

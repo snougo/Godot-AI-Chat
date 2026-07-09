@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="SubAgentConfig" format=3 uid="uid://cdgoutbwyev45"]
+
+[ext_resource type="Script" uid="uid://di7cn7pdixy77" path="res://addons/godot_ai_chat/scripts/custom_data/sub_agent_config.gd" id="1_upiut"]
+
+[resource]
+script = ExtResource("1_upiut")
+metadata/_custom_type_script = "uid://di7cn7pdixy77"

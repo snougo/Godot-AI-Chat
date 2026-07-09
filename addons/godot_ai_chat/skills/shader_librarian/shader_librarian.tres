@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="AiSkill" format=3 uid="uid://tpro3g0cblx6"]
 
 [ext_resource type="Script" uid="uid://bx2rijcjhyx38" path="res://addons/godot_ai_chat/scripts/custom_data/ai_skill.gd" id="1_ftmck"]
+[ext_resource type="Resource" uid="uid://c4tmxdk0j7c2n" path="res://addons/godot_ai_chat/skills/shader_librarian/sub_agent_config.tres" id="2_kbuvd"]
 
 [resource]
 script = ExtResource("1_ftmck")
@@ -8,3 +9,4 @@ skill_name = "Shader Librarian"
 description = "本技能用于获取 Godot Shader 着色器代码库中社区用户分享的 shader 代码案例。"
 instruction_file = "res://addons/godot_ai_chat/skills/shader_librarian/Skill.md"
 tools = Array[String](["uid://b3j3ms3yyuwd3", "uid://bceuw80jx3op4", "uid://dexb6w0an5bji", "uid://c0y7yml7ecuvx"])
+sub_agent_config = ExtResource("2_kbuvd")
