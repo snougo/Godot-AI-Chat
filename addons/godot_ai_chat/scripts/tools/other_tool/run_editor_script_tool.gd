@@ -39,6 +39,9 @@ const WARN_METHODS: Array[Dictionary] = [
 	{"method": "set_setting", "message": "set_setting() detected — changes to editor/project settings are not auditable by file snapshot."},
 ]
 
+## ResourceSaver.save — warn (not block) since resource files can carry executable scripts
+const RESOURCE_SAVER_WARNING: String = "ResourceSaver.save() detected — created resource files may contain executable script code. Review output files for safety."
+
 ## Objects whose .call()/.callv() must be blocked (dynamic method invocation bypass).
 const DANGEROUS_DYNAMIC_CALL_OBJECTS: Array[String] = [
 	"OS", "DirAccess", "EditorInterface", "ProjectSettings", "Engine",
@@ -305,7 +308,8 @@ func _resolve_symbol_table(p_table: Dictionary) -> Dictionary:
 func _extract_calls(p_code: String) -> Array[Dictionary]:
 	var calls: Array[Dictionary] = []
 	var seen: Dictionary = {}
-	var call_pattern: RegEx = RegEx.create_from_string("(\\w+)\\.(\\w+)\\s*\\(")
+	#var call_pattern: RegEx = RegEx.create_from_string("(\\w+)\\.(\\w+)\\s*\\(")
+	var call_pattern: RegEx = RegEx.create_from_string("(\\w+|\\))\\.(\\w+)\\s*\\(")
 	
 	for match in call_pattern.search_all(p_code):
 		var obj: String = match.get_string(1)
@@ -355,6 +359,17 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 		if typed_hit:
 			continue
 		
+		# 4b.5 Chain call detection — object type unresolvable via static analysis
+		if resolved_obj == ")":
+			var chain_hit: bool = false
+			for rule in DANGEROUS_TYPED_CALLS:
+				if method == rule["method"]:
+					blocks.append("Chain call with %s() is forbidden — cannot resolve object type via static analysis." % [method])
+					chain_hit = true
+					break
+			if chain_hit:
+				continue
+		
 		# 4c. Check DANGEROUS_METHODS_BLOCK (wildcard method)
 		var method_hit: bool = false
 		for rule in DANGEROUS_METHODS_BLOCK:
@@ -375,6 +390,10 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 			if method == rule["method"]:
 				warns.append(rule["message"])
 				break
+		
+		# 4f. Check ResourceSaver.save — warn for code-bearing resource file creation
+		if resolved_obj == "ResourceSaver" and method == "save":
+			warns.append(RESOURCE_SAVER_WARNING)
 	
 	# 5. Check FileAccess path whitelist — restrict to res:// only
 	var fa_result: ToolResult = _check_fileaccess_paths(p_code, symbol_table)
