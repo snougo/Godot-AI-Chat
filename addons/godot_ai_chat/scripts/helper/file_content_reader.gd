@@ -57,7 +57,7 @@ static func _format_scene_node(p_node_data: Dictionary, p_indent: String, p_is_l
 
 
 # ============================
-#  脚本读取（带行号）
+#  脚本读取
 # ============================
 
 static func read_script_content(p_path: String) -> Dictionary:
@@ -93,20 +93,22 @@ static func read_script_content(p_path: String) -> Dictionary:
 	
 	var md: String = "Content for Script: `%s`\n" % file_name
 	md += "```%s\n" % lang_tag
-	md += _add_line_numbers(source_code)
+	#md += _add_line_numbers(source_code)
+	# 现在可以通过工具 search_code_line 来精确获取代码行号了
+	md += source_code
 	md += "\n```\n"
 	return {"success": true, "data": md}
 
 
-static func _add_line_numbers(p_source_code: String) -> String:
-	var lines: PackedStringArray = p_source_code.split("\n")
-	var line_number_width: int = max(3, str(lines.size()).length())
-	var result: String = ""
-	for i in range(lines.size()):
-		result += "%s | %s" % [str(i + 1).pad_zeros(line_number_width), lines[i]]
-		if i < lines.size() - 1:
-			result += "\n"
-	return result
+#static func _add_line_numbers(p_source_code: String) -> String:
+	#var lines: PackedStringArray = p_source_code.split("\n")
+	#var line_number_width: int = max(3, str(lines.size()).length())
+	#var result: String = ""
+	#for i in range(lines.size()):
+		#result += "%s | %s" % [str(i + 1).pad_zeros(line_number_width), lines[i]]
+		#if i < lines.size() - 1:
+			#result += "\n"
+	#return result
 
 
 # ============================
