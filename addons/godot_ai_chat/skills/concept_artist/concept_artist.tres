@@ -8,5 +8,5 @@ script = ExtResource("1_osdab")
 skill_name = "Concept Artist"
 description = "本技能主要用于生成概念图和参考图，也可以用来生成临时测试用的无缝贴图。"
 instruction_file = "res://addons/godot_ai_chat/skills/concept_artist/Skill.md"
-tools = Array[String](["uid://j5410tdoskcr", "uid://cw5xgoi1irsaw", "uid://mbca75kncnxx", "uid://dcvy617k0sxkp", "uid://c0y7yml7ecuvx", "uid://dkor40h5a6eo0"])
+tools = Array[String](["uid://j5410tdoskcr", "uid://dcvy617k0sxkp", "uid://mbca75kncnxx", "uid://c0y7yml7ecuvx", "uid://dkor40h5a6eo0"])
 sub_agent_config = ExtResource("2_viade")

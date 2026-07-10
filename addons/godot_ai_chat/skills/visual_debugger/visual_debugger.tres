@@ -9,5 +9,5 @@ skill_name = "Visual Debugger"
 description = "本技能利用多模态模型能力对 2D/3D 场景进行多角度视觉检查。
 使用本技能前，请向用户确认当前配置的 Sub-Agent 模型是否具备多模态能力。"
 instruction_file = "res://addons/godot_ai_chat/skills/visual_debugger/Skill.md"
-tools = Array[String](["uid://ho4l00iitlui", "uid://cgmng0ah88fe4", "uid://oih54idxsj1r", "uid://dqxvmm3op2kf1", "uid://c35mseu23cb84", "uid://dmag53k50t7xo", "uid://dkqn5wywfwo2q"])
+tools = Array[String](["uid://ho4l00iitlui", "uid://cgmng0ah88fe4", "uid://oih54idxsj1r", "uid://dqxvmm3op2kf1", "uid://c35mseu23cb84", "uid://dkqn5wywfwo2q"])
 sub_agent_config = ExtResource("2_vgtxn")

@@ -15,5 +15,5 @@ description = "本技能通过将代码库分析的脏活交给本地的 Sub-Age
 
 适用场景：代码库调研、功能定位、架构分析。如需修改代码请使用 Script Editor 技能。"
 instruction_file = "res://addons/godot_ai_chat/skills/code_librarian/Skill.md"
-tools = Array[String](["uid://j5410tdoskcr", "uid://cw5xgoi1irsaw", "uid://dkqn5wywfwo2q"])
+tools = Array[String](["uid://j5410tdoskcr", "uid://cw5xgoi1irsaw", "uid://qpajvkxkg2r0", "uid://dkqn5wywfwo2q"])
 sub_agent_config = ExtResource("2_oh7sv")
