@@ -269,7 +269,7 @@ display_mode = 1
 [node name="WorkspaceFileDialog" type="FileDialog" parent="." unique_id=1662165699]
 title = "Open a Directory"
 size = Vector2i(1600, 1400)
-min_size = Vector2i(1600, 1400)
+min_size = Vector2i(1200, 800)
 file_mode = 2
 display_mode = 1
 

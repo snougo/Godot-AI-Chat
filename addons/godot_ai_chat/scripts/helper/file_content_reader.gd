@@ -94,7 +94,7 @@ static func read_script_content(p_path: String) -> Dictionary:
 	var md: String = "Content for Script: `%s`\n" % file_name
 	md += "```%s\n" % lang_tag
 	#md += _add_line_numbers(source_code)
-	# 现在可以通过工具 search_code_line 来精确获取代码行号了
+	# 现在可以通过工具 ge_code_line_number 来精确获取代码行号了
 	md += source_code
 	md += "\n```\n"
 	return {"success": true, "data": md}
