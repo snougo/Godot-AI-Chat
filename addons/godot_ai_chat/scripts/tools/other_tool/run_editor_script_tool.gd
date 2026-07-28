@@ -25,6 +25,8 @@ const DANGEROUS_METHODS_BLOCK: Array[Dictionary] = [
 	{"method": "rename_absolute", "message": "rename_absolute() is forbidden — cannot rename/move files (may overwrite targets)."},
 	{"method": "copy_absolute", "message": "copy_absolute() is forbidden — cannot copy files (may overwrite targets)."},
 	{"method": "restart_editor", "message": "restart_editor() is forbidden."},
+	{"method": "make_dir_recursive", "message": "make_dir_recursive() is forbidden — cannot create directories in restricted zones."},
+	{"method": "make_dir_recursive_absolute", "message": "make_dir_recursive_absolute() is forbidden — cannot create directories in restricted zones."},
 ]
 
 ## Typed block — requires alias tracking to resolve object type before matching method.
@@ -55,7 +57,7 @@ const FILEACCESS_PATH_METHODS: Array[String] = [
 
 ## Whitelist of file extensions that the EditorScript is allowed to create/modify.
 const ALLOWED_EXTENSIONS: Array[String] = [
-	"md", "json", "txt", "csv", 
+	"md", "json", "txt", "csv", "cfg",
 	"gdshader", "glsl",
 	"tres",
 	"tscn", "gd",
@@ -164,7 +166,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	# --- Post-execution audit: path blacklist (all changes: create/modify/delete) ---
 	for path in audit.created + audit.modified + audit.deleted:
 		for prefix in RESTRICTED_PATH_PATTERNS:
-			if path.begins_with(prefix):
+			if path.to_lower().begins_with(prefix):
 				post_violations.append("- `%s` — 位于受限区域 `%s`" % [path, prefix])
 				break
 	
@@ -418,14 +420,10 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 
 # --- Private Functions: FileAccess Path Whitelist (Layer 1) ---
 
-# Checks that all FileAccess path-taking methods use res:// paths only.
-# Runs on original code (not stripped) to inspect string literal arguments.
-# Also checks aliases resolved to FileAccess via the symbol table.
 func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> ToolResult:
 	var blocks: Array[String] = []
 	var warns: Array[String] = []
 	
-	# Identifiers that resolve to FileAccess (always includes the class name itself)
 	var fa_names: Array[String] = ["FileAccess"]
 	for key in p_symbol_table:
 		if p_symbol_table[key] == "FileAccess":
@@ -439,8 +437,17 @@ func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> Tool
 			if method not in FILEACCESS_PATH_METHODS:
 				continue
 			var path: String = match.get_string(2)
+			
+			# 检查是否在 res:// 内
 			if not path.begins_with("res://"):
 				blocks.append('FileAccess.%s() — path "%s" is outside res:// — only project files are allowed.' % [method, path])
+				continue
+			
+			# 新增：检查路径黑名单
+			for prefix in RESTRICTED_PATH_PATTERNS:
+				if path.to_lower().begins_with(prefix):
+					blocks.append('FileAccess.%s() — path "%s" is inside restricted zone `%s`.' % [method, path, prefix])
+					break
 		
 		# 2. Single-quoted string argument
 		var sq_pat: RegEx = RegEx.create_from_string(alias + "\\.(\\w+)\\s*\\(\\s*'([^']*)'")
@@ -449,8 +456,16 @@ func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> Tool
 			if method not in FILEACCESS_PATH_METHODS:
 				continue
 			var path: String = match.get_string(2)
+			
 			if not path.begins_with("res://"):
 				blocks.append("FileAccess.%s() — path '%s' is outside res:// — only project files are allowed." % [method, path])
+				continue
+			
+			# 新增：检查路径黑名单
+			for prefix in RESTRICTED_PATH_PATTERNS:
+				if path.to_lower().begins_with(prefix):
+					blocks.append("FileAccess.%s() — path '%s' is inside restricted zone `%s`." % [method, path, prefix])
+					break
 		
 		# 3. Non-string-literal argument (dynamic path, cannot verify)
 		var dyn_pat: RegEx = RegEx.create_from_string(alias + '\\.(\\w+)\\s*\\(\\s*[^"\'\\s)]')
@@ -461,13 +476,13 @@ func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> Tool
 				continue
 			if not dyn_seen.has(method):
 				dyn_seen[method] = true
-				warns.append("FileAccess.%s() uses a non-literal path — cannot verify it's within res://." % method)
+				blocks.append("FileAccess.%s() uses a non-literal path — dynamic paths are not allowed." % method)
 	
 	if not blocks.is_empty():
 		var msg: String = "**Static analysis blocked execution.**\n\nThe following forbidden file access was detected:\n"
 		for b in blocks:
 			msg += "- %s\n" % b
-		msg += "\nFileAccess is restricted to res:// paths only."
+		msg += "\nFileAccess is restricted to res:// paths only, and restricted zones are off-limits."
 		return ToolResult.fail(msg)
 	
 	if not warns.is_empty():
@@ -478,10 +493,6 @@ func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> Tool
 # --- Private Functions: Format Whitelist (Layer 1.5) ---
 
 func _check_format_whitelist(p_code: String) -> ToolResult:
-	# Scans code for all string literals containing file-like paths (both
-	# full res:// paths and relative filenames) and validates extensions
-	# against the whitelist. Also detects format-string bypass attempts
-	# (e.g. "res://file.%s" % "gd").
 	var pattern: RegEx = RegEx.create_from_string('"([^"]*)\\.([a-zA-Z0-9_]+)"')
 	var sq_pattern: RegEx = RegEx.create_from_string("'([^']*)\\.([a-zA-Z0-9_]+)'")
 	var fmt_pattern: RegEx = RegEx.create_from_string('"(res://[^"]*%[a-zA-Z][^"]*)"')
@@ -490,15 +501,33 @@ func _check_format_whitelist(p_code: String) -> ToolResult:
 	var violations: Array[String] = []
 	var seen: Array[String] = []
 	
+	# 辅助：检查路径是否在黑名单中
+	# 返回违规描述，若未命中则返回空字符串
+	var _check_restricted_path := func(p_full_match: String, p_path: String) -> String:
+		var lower_path := p_path.to_lower()
+		for prefix in RESTRICTED_PATH_PATTERNS:
+			if lower_path.begins_with(prefix):
+				return "- `%s` — 位于受限区域 `%s`" % [p_full_match, prefix]
+		return ""
+	
 	# Check double-quoted strings (standard file.ext pattern)
 	for match in pattern.search_all(p_code):
 		var full: String = match.get_string(0)
 		if full in seen:
 			continue
 		seen.append(full)
+		
+		var file_path: String = match.get_string(1) + "." + match.get_string(2)
 		var ext: String = match.get_string(2).to_lower()
+		
+		# 检查扩展名白名单
 		if not ext in ALLOWED_EXTENSIONS:
 			violations.append("- `%s` (格式: `.%s`)" % [full, ext])
+		
+		# 检查路径黑名单
+		var rp: String = _check_restricted_path.call(full, file_path)
+		if not rp.is_empty():
+			violations.append(rp)
 	
 	# Check single-quoted strings (standard file.ext pattern)
 	for match in sq_pattern.search_all(p_code):
@@ -506,11 +535,20 @@ func _check_format_whitelist(p_code: String) -> ToolResult:
 		if full in seen:
 			continue
 		seen.append(full)
+		
+		var file_path: String = match.get_string(1) + "." + match.get_string(2)
 		var ext: String = match.get_string(2).to_lower()
+		
+		# 检查扩展名白名单
 		if not ext in ALLOWED_EXTENSIONS:
 			violations.append("- `%s` (格式: `.%s`)" % [full, ext])
+		
+		# 检查路径黑名单
+		var rp: String = _check_restricted_path.call(full, file_path)
+		if not rp.is_empty():
+			violations.append(rp)
 	
-	# Check format-string bypass (double-quoted, e.g. "file.%s" or "file_%s.gd")
+	# Check format-string bypass (double-quoted)
 	for match in fmt_pattern.search_all(p_code):
 		var path: String = match.get_string(1)
 		if path in seen:
@@ -522,6 +560,11 @@ func _check_format_whitelist(p_code: String) -> ToolResult:
 		var after_dot: String = path.substr(last_dot + 1)
 		if "%" in after_dot:
 			violations.append("- `%s` (扩展名含动态格式符，无法确定最终格式)" % ['"' + path + '"'])
+		
+		# 格式符路径也检查黑名单（比如 "res://addons/%s"）
+		var rp: String = _check_restricted_path.call('"' + path + '"', path)
+		if not rp.is_empty():
+			violations.append(rp)
 	
 	# Check format-string bypass (single-quoted)
 	for match in sq_fmt_pattern.search_all(p_code):
@@ -535,6 +578,10 @@ func _check_format_whitelist(p_code: String) -> ToolResult:
 		var after_dot: String = path.substr(last_dot + 1)
 		if "%" in after_dot:
 			violations.append("- `%s` (扩展名含动态格式符，无法确定最终格式)" % ["'" + path + "'"])
+		
+		var rp: String = _check_restricted_path.call("'" + path + "'", path)
+		if not rp.is_empty():
+			violations.append(rp)
 	
 	if violations.is_empty():
 		return ToolResult.ok("")
@@ -543,14 +590,19 @@ func _check_format_whitelist(p_code: String) -> ToolResult:
 	for e in ALLOWED_EXTENSIONS:
 		ext_list += "- `.%s`\n" % e
 	
+	var restricted_list: String = ""
+	for r in RESTRICTED_PATH_PATTERNS:
+		restricted_list += "- `%s`\n" % r
+	
 	return ToolResult.fail(
-		"**Permission Denied: Unsupported file format.**\n\n"
-		+ "The generated code references file formats not in the allowed whitelist.\n"
+		"**Permission Denied: Unsupported file format or restricted path.**\n\n"
 		+ "**Violations:**\n"
 		+ "\n".join(violations) + "\n\n"
 		+ "**Allowed file formats:**\n"
 		+ ext_list
-		+ "\nPlease rewrite the code to only work with allowed file formats."
+		+ "\n**Restricted zones:**\n"
+		+ restricted_list
+		+ "\nPlease rewrite the code to only work with allowed formats outside restricted zones."
 	)
 
 
