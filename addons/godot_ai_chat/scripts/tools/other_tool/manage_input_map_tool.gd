@@ -10,7 +10,7 @@ const USER_HINT: String = "\n[Notice] Changes saved. If not visible in 'Project 
 
 func _init() -> void:
 	tool_name = "manage_input_map"
-	tool_description = "Manages InputMap actions. Supports: add (create new), remove (delete), list (show all)."
+	tool_description = "Manages InputMap actions."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -24,12 +24,12 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"action_name": {
 				"type": "string",
-				"description": "Action name (e.g. 'move_forward'). Required for remove. Optional for add (auto-generated if empty). Ignored for list."
+				"description": "Action name. Required for remove. Optional for add (auto-generated if empty). Ignored for list."
 			},
 			"events": {
 				"type": "array",
 				"items": { "type": "string" },
-				"description": "Event bindings. Use Godot API constants: 'KEY_W', 'KEY_CTRL+KEY_S', etc."
+				"description": "Event bindings."
 			},
 			"deadzone": {
 				"type": "number",

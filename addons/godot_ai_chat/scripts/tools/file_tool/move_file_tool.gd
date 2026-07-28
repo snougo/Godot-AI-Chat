@@ -21,7 +21,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"source_path": {
 				"type": "string",
-				"description": "The full source file path starting with 'res://'."
+				"description": "The full source file path."
 			},
 			"target_path": {
 				"type": "string",

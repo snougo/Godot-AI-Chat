@@ -19,7 +19,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"query": {
 				"type": "string",
-				"description": "Keyword to fuzzy-match against shader titles. Required. Example: 'glitch', 'neon', 'water'."
+				"description": "Keyword to fuzzy-match against shader titles."
 			},
 			"category": {
 				"type": "string",
@@ -45,7 +45,7 @@ func get_parameters_schema() -> Dictionary:
 				"maximum": 30
 			}
 		},
-		"required": ["query", "limit"]
+		"required": ["query", "category", "sort_by", "limit"]
 	}
 
 

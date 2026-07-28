@@ -10,7 +10,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "set_2d_viewport_transform"
-	tool_description = "Controls the 2D editor viewport transform. Supports zoom (scale factor) and pan offset."
+	tool_description = "Controls the 2D editor viewport transform."
 
 
 # --- Public Functions ---
@@ -21,11 +21,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"zoom": {
 				"type": "number",
-				"description": "Zoom level. Values > 1 zoom in, < 1 zoom out. For example: 2.0 = 2x zoom, 0.5 = half zoom. Optional."
+				"description": "Zoom level. Values > 1 zoom in, < 1 zoom out."
 			},
 			"pan_offset": {
 				"type": "array",
-				"description": "Pan offset as [x, y] in pixels. Positive x pans right, positive y pans down. Optional.",
+				"description": "Pan offset as [x, y] in pixels. Positive x pans right, positive y pans down.",
 				"items": {"type": "number"}
 			}
 		},

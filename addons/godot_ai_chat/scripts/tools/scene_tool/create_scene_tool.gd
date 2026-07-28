@@ -10,7 +10,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "create_scene"
-	tool_description = "Creates a new Godot scene (.tscn) file."
+	tool_description = "Creates a new Godot scene file."
 
 
 # --- Public Functions ---
@@ -21,19 +21,19 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Target folder path (e.g., 'res://xxx/'). The folder must already exist."
+				"description": "Target folder path. The folder must already exist."
 			},
 			"file_name": {
 				"type": "string",
-				"description": "File name with .tscn extension (e.g., 'my_scene.tscn')."
+				"description": "File name with `.tscn` extension."
 			},
 			"root_node_type": {
 				"type": "string",
-				"description": "Root node class name (e.g., 'Node2D', 'Control', 'CharacterBody2D'). Default: 'Node'."
+				"description": "Root Node Class Type. Default: 'Node'."
 			},
 			"root_node_name": {
 				"type": "string",
-				"description": "Root node name. Defaults to file basename."
+				"description": "Root Node Name. Defaults to file basename."
 			}
 		},
 		"required": ["path", "file_name"]
@@ -64,7 +64,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	# 检查目标文件夹是否存在（禁止越权创建文件夹）
 	if not DirAccess.dir_exists_absolute(folder_path):
-		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path)
+		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `create_folder` to create it first." % folder_path)
 	
 	# 强制校验扩展名
 	var ext: String = full_path.get_extension().to_lower()

@@ -43,7 +43,7 @@ const POLL_DELAY: float = 0.05
 
 func _init() -> void:
 	tool_name = "draw_things_generate_image"
-	tool_description = "Generates an image using the local `Draw Things` app via its HTTP API. "
+	tool_description = "Generates an image using the local App via its HTTP API. "
 
 
 # --- Public Functions ---
@@ -58,11 +58,11 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"negative_prompt": {
 				"type": "string",
-				"description": "Elements or qualities to exclude from the generated image (e.g., 'blurry, low quality, deformed hands')."
+				"description": "Elements or qualities to exclude from the generated image."
 			},
 			"output_path": {
 				"type": "string",
-				"description": "Required. Full path to save the generated PNG image, e.g. 'res://artworks/my_image.png'. The parent directory must exist."
+				"description": "Required. Full path to save, The directory must exist."
 			},
 			"width": {
 				"type": "integer",

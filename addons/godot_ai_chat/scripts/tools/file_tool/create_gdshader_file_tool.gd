@@ -26,11 +26,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Target folder path (e.g., 'res://xxx/'). The folder must already exist."
+				"description": "Target folder path. The folder must already exist."
 			},
 			"file_name": {
 				"type": "string",
-				"description": "File name with .gdshader extension (e.g., 'xxx.gdshader')."
+				"description": "File name with `.gdshader` extension."
 			},
 			"content": {
 				"type": "string",
@@ -61,7 +61,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		return ToolResult.fail("Error: File already exists at %s. Overwriting is not allowed." % full_path)
 	
 	if not DirAccess.dir_exists_absolute(folder_path):
-		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path)
+		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `create_folder` to create it first." % folder_path)
 	
 	var ext: String = full_path.get_extension().to_lower()
 	if ext not in VALID_EXTENSIONS:

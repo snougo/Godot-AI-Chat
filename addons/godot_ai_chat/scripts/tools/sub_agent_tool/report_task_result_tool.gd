@@ -6,7 +6,8 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "report_task_result"
-	tool_description = "MUST be called when you have fully completed the task, or if you failed. This returns control to the Main Agent."
+	tool_description = "Called when you have completed the task (whether it's success or failure)."
+
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -15,7 +16,7 @@ func get_parameters_schema() -> Dictionary:
 			"status": {
 				"type": "string",
 				"enum": ["success", "failure"],
-				"description": "Whether the task was completed successfully."
+				"description": "task status."
 			},
 			"summary": {
 				"type": "string",
@@ -24,6 +25,7 @@ func get_parameters_schema() -> Dictionary:
 		},
 		"required": ["status", "summary"]
 	}
+
 
 func execute(_args: Dictionary) -> ToolResult:
 	# 这个工具的执行逻辑实际上会被 SubAgentOrchestrator 拦截，这里只是占位

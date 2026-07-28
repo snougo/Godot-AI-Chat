@@ -17,7 +17,7 @@ const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 
 func _init() -> void:
 	tool_name = "edit_resource"
-	tool_description = "Edits properties of an existing Resource (.tres/.res) file."
+	tool_description = "Edits properties of an existing Resource file."
 
 
 # --- Public Functions ---
@@ -28,11 +28,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Full path to the existing .tres or .res file (e.g., 'res://materials/stone.tres')."
+				"description": "Full path to the existing `.tres` or `.res` file."
 			},
 			"properties": {
 				"type": "object",
-				"description": "Dictionary of property names and their new values. Supports nested properties via ':' separator (e.g., {'albedo_color': 'Color(1,0,0,1)', 'normal_enabled': true, 'albedo_texture': 'res://textures/stone_albedo.png'})."
+				"description": "Dictionary of property names and their new values."
 			}
 		},
 		"required": ["path", "properties"]

@@ -27,11 +27,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Target folder path (e.g., 'res://xxx/'). The folder must already exist."
+				"description": "Target folder path. The folder must already exist."
 			},
 			"file_name": {
 				"type": "string",
-				"description": "File name with .gd extension (e.g., 'my_script.gd')."
+				"description": "File name with `.gd` extension."
 			},
 			"content": {
 				"type": "string",
@@ -67,7 +67,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	# 检查目标文件夹是否存在（禁止越权创建文件夹）
 	if not DirAccess.dir_exists_absolute(folder_path):
-		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `manage_folder` to create it first." % folder_path)
+		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `create_folder` to create it first." % folder_path)
 	
 	# 强制校验扩展名
 	var ext: String = full_path.get_extension().to_lower()

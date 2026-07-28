@@ -21,7 +21,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "The full path to the .md file."
+				"description": "The full path to the `.md` file."
 			}
 		},
 		"required": ["path"]

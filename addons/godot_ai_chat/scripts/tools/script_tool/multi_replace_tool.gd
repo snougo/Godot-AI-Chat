@@ -4,7 +4,7 @@ extends BaseScriptTool
 
 func _init() -> void:
 	tool_name = "multi_replace"
-	tool_description = "Multi-replace in the current script. Each operation searches for exact text matches and replaces all occurrences with new content. All searches are based on the original file content. Unmatched searches are skipped with a warning."
+	tool_description = "Multi-replace in the current script."
 
 
 func get_parameters_schema() -> Dictionary:

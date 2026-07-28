@@ -18,7 +18,7 @@ func get_parameters_schema() -> Dictionary:
 			"scope": {
 				"type": "string",
 				"enum": MemoryEntry.get_valid_scopes(),
-				"description": "Memory scope: 'workspace' (only relevant to this module) or 'global' (relevant to the entire project)"
+				"description": "Memory scope: 'workspace' or 'global'"
 			},
 			"title": {
 				"type": "string",
@@ -35,7 +35,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"topic": {
 				"type": "string",
-				"description": "Topic group for this memory (required). Use `get_memory_topics` to get existing topics."
+				"description": "Topic group for this memory (required)."
 			}
 		},
 		"required": ["workspace_path", "scope", "title", "content", "memory_type", "topic"]

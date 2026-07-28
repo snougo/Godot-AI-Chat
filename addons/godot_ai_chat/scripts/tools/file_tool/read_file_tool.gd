@@ -22,7 +22,7 @@ const EXTENSION_MAP: Dictionary = {
 
 func _init() -> void:
 	tool_name = "read_file"
-	tool_description = "Reads a file."
+	tool_description = "Reads a file. support: scene、script、text、resource、image_meta"
 
 
 # --- Public Functions ---

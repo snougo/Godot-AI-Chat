@@ -21,7 +21,7 @@ const SUPPORTED_EXTENSIONS: Dictionary = {
 
 func _init() -> void:
 	tool_name = "open_file"
-	tool_description = "Opens a file in the Godot editor. Supports: .tscn/.scn (Scene Editor), .gd/.gdshader (Script Editor)."
+	tool_description = "Opens a file in the Godot editor. Support: `.tscn/.scn` (Scene), `.gd/.gdshader` (Script)."
 
 
 # --- Public Functions ---
@@ -32,7 +32,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"file_path": {
 				"type": "string",
-				"description": "Full path to the file (e.g., 'res://xxx/xxx.tscn')."
+				"description": "Full path to the file."
 			}
 		},
 		"required": ["file_path"]

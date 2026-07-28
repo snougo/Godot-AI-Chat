@@ -10,7 +10,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "set_3d_viewport_camera"
-	tool_description = "Controls the 3D editor viewport camera. Supports setting position + look-at target, FOV, and projection mode."
+	tool_description = "Controls the 3D editor viewport camera."
 
 
 # --- Public Functions ---

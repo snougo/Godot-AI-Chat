@@ -24,7 +24,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"keyword": {
 				"type": "string",
-				"description": "Search keyword. Only support `ClassName` (Node2D, Control and CustomClass, etc). \n > **Warning: ** Do not search for multiple keywords at the same time."
+				"description": "Search keyword. Only support `ClassName`. \n > **Warning: ** Searching multiple keywords are not support."
 			}
 		},
 		"required": ["keyword"]

@@ -23,7 +23,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"scene_path": {
 				"type": "string",
-				"description": "The scene file path, e.g., 'res://xxx.tscn'"
+				"description": "The scene file path."
 			},
 			"node_path": {
 				"type": "string",

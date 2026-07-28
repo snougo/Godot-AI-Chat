@@ -15,7 +15,7 @@ const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 
 func _init() -> void:
 	tool_name = "get_resource_properties"
-	tool_description = "Lists all editable properties of a Resource (.tres/.res) file with their current values and types."
+	tool_description = "Lists all editable properties of a Resource file with their current values and types."
 
 
 # --- Public Functions ---
@@ -26,7 +26,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Full path to the .tres or .res file (e.g., 'res://materials/stone.tres')."
+				"description": "Full path to the `.tres` or `.res` file."
 			}
 		},
 		"required": ["path"]

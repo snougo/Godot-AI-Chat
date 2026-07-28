@@ -4,7 +4,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "delete_memory"
-	tool_description = "Delete a memory entry by its ID. Use `search_memories` to get memory ID"
+	tool_description = "Delete a memory entry by its ID. Use `search_memories` to get memory ID first"
 
 
 func get_parameters_schema() -> Dictionary:
