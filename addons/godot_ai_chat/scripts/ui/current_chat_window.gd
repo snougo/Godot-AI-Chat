@@ -41,12 +41,15 @@ var _is_loading: bool = false
 var _auto_scroll_enabled: bool = true
 # [自动滚动] 防递归标志，区分程序滚动和用户操作
 var _is_auto_scrolling: bool = false
+# [自动滚动] 用于检测是否信号已经连接
+var _scroll_signals_connected: bool = false
 
 
 # --- Built-in Functions ---
 
 func _process(delta: float) -> void:
-	_ensure_scroll_signal_connected()
+	if not _scroll_signals_connected:
+		_ensure_scroll_signal_connected()
 	
 	_culling_timer += delta
 	if _culling_timer >= CULLING_INTERVAL:
@@ -338,6 +341,7 @@ func _create_block() -> ChatMessageBlock:
 func _get_last_block() -> ChatMessageBlock:
 	if chat_list_container.get_child_count() == 0:
 		return null
+	
 	return chat_list_container.get_child(chat_list_container.get_child_count() - 1) as ChatMessageBlock
 
 
@@ -354,6 +358,7 @@ func _scroll_to_bottom() -> void:
 func _apply_auto_scroll() -> void:
 	if not is_instance_valid(chat_scroll_container):
 		return
+	
 	var sb: ScrollBar = chat_scroll_container.get_v_scroll_bar()
 	if sb:
 		chat_scroll_container.scroll_vertical = sb.max_value
@@ -363,19 +368,24 @@ func _apply_auto_scroll() -> void:
 func _ensure_scroll_signal_connected() -> void:
 	if not is_instance_valid(chat_scroll_container):
 		return
+	
 	var sb := chat_scroll_container.get_v_scroll_bar()
 	if not sb:
 		return
+	
 	if not sb.changed.is_connected(_on_scroll_bar_changed):
 		sb.changed.connect(_on_scroll_bar_changed)
 	if not sb.value_changed.is_connected(_on_scroll_value_changed):
 		sb.value_changed.connect(_on_scroll_value_changed)
+	
+	_scroll_signals_connected = true
 
 
 # ScrollBar 属性变化时触发（max_value 增加等），自动跟随到底部
 func _on_scroll_bar_changed() -> void:
 	if _is_auto_scrolling or not _auto_scroll_enabled:
 		return
+	
 	_is_auto_scrolling = true
 	_apply_auto_scroll()
 	_is_auto_scrolling = false

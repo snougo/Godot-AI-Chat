@@ -26,7 +26,7 @@ const MAX_FILES: int = 200
 
 func _init() -> void:
 	tool_name = "grep_code"
-	tool_description = "Searches all script files in a folder for specific code text and reports matches with line numbers."
+	tool_description = "Searches all script files in target folder for specific code content matches."
 
 
 func get_parameters_schema() -> Dictionary:

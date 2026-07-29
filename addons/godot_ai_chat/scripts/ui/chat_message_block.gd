@@ -77,6 +77,12 @@ var _tool_code_edit: CodeEdit = null
 
 # --- Built-in Functions ---
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		if _is_suspended and is_instance_valid(_main_margin_container):
+			_main_margin_container.queue_free()
+
+
 func _ready() -> void:
 	_parser.segment_parsed.connect(_on_parser_segment_parsed)
 	if not _content_container:
@@ -285,7 +291,7 @@ func suspend_content() -> void:
 	if _is_suspended or _typing_active:
 		return
 	
-	# [优化P2] 无论折叠与否，统一移除内容以彻底释放布局压力
+	# 无论折叠与否，统一移除内容以彻底释放布局压力
 	custom_minimum_size.y = size.y
 	remove_child(_main_margin_container)
 	_is_suspended = true

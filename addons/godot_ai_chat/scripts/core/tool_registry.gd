@@ -11,16 +11,15 @@ extends RefCounted
 ## 核心工具路径 (始终加载给 Main-Agent)
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/file_tool/read_file_tool.gd",
+	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_folder_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_folder_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/grep_code_tool.gd",
-	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_node_properties_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/check_todo_list_tool.gd",
 	
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/grep_code_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_godot_api_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/web_fetch_content_tool.gd",
