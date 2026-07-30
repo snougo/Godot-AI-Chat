@@ -2,60 +2,54 @@
 extends AiTool
 
 ## Generates and executes a custom EditorScript for complex editor operations.
-## All safety checks are centralized here: master switch → static analysis → format whitelist → snapshot diff audit.
-## LLMs write standard `extends EditorScript` code — no special base class required.
+## Safety model: AI declares intended file paths → tool validates paths →
+## verifies code-only-uses-declared-paths → executes → audits.
 
-# --- Constants ---
+# ============================================================================
+# Constants — Danger Rules
+# ============================================================================
 
-## Network APIs — block on sight (data exfiltration risk).
-const DANGEROUS_TYPES: Array[String] = [
-	"HTTPRequest", "HTTPClient", "WebSocketPeer", "StreamPeerTCP",
-	"StreamPeerTLS", "TCPServer", "PacketPeerUDP",
+## Network-related classes — block all usage (data exfiltration risk).
+const DANGEROUS_NETWORK_CLASSES: Array[String] = [
+	"HTTPRequest", 
+	"HTTPClient", 
+	"WebSocketPeer", 
+	"StreamPeerTCP",
+	"StreamPeerTLS", 
+	"TCPServer", 
+	"PacketPeerUDP",
 ]
 
-## Wildcard block — method name alone is dangerous, regardless of calling object.
-const DANGEROUS_METHODS_BLOCK: Array[Dictionary] = [
-	{"method": "execute", "message": "execute() is forbidden — cannot spawn external processes."},
-	{"method": "create_process", "message": "create_process() is forbidden."},
-	{"method": "shell_open", "message": "shell_open() is forbidden — cannot open external applications."},
-	{"method": "kill", "message": "kill() is forbidden."},
-	{"method": "set_environment", "message": "set_environment() is forbidden."},
-	{"method": "get_environment", "message": "get_environment() is forbidden — cannot read environment variables (may contain secrets)."},
-	{"method": "remove_absolute", "message": "remove_absolute() is forbidden — cannot delete files."},
-	{"method": "rename_absolute", "message": "rename_absolute() is forbidden — cannot rename/move files (may overwrite targets)."},
-	{"method": "copy_absolute", "message": "copy_absolute() is forbidden — cannot copy files (may overwrite targets)."},
-	{"method": "restart_editor", "message": "restart_editor() is forbidden."},
-	{"method": "make_dir_recursive", "message": "make_dir_recursive() is forbidden — cannot create directories in restricted zones."},
-	{"method": "make_dir_recursive_absolute", "message": "make_dir_recursive_absolute() is forbidden — cannot create directories in restricted zones."},
+## High-risk classes — ALL method calls on these classes are blocked.
+## API surface is too broad or invasive for selective blocking.
+const BLOCKED_CLASSES: Array[String] = [
+	"OS",
+	"EditorInterface",
+	"ProjectSettings",
+	"Engine",
+	"EditorFileSystem",
+	"ScriptEditor",
 ]
 
-## Typed block — requires alias tracking to resolve object type before matching method.
+## Partially blocked classes — only specific methods are forbidden.
+## Requires alias tracking to resolve object type before matching method.
 const DANGEROUS_TYPED_CALLS: Array[Dictionary] = [
+	# DirAccess — file system manipulation
 	{"object": "DirAccess", "method": "remove", "message": "DirAccess.remove() is forbidden — cannot delete files."},
 	{"object": "DirAccess", "method": "rename", "message": "DirAccess.rename() is forbidden — cannot rename/move files."},
 	{"object": "DirAccess", "method": "copy", "message": "DirAccess.copy() is forbidden — cannot copy files (may overwrite targets)."},
+	{"object": "DirAccess", "method": "remove_absolute", "message": "DirAccess.remove_absolute() is forbidden — cannot delete files."},
+	{"object": "DirAccess", "method": "rename_absolute", "message": "DirAccess.rename_absolute() is forbidden — cannot rename/move files."},
+	{"object": "DirAccess", "method": "copy_absolute", "message": "DirAccess.copy_absolute() is forbidden — cannot copy files (may overwrite targets)."},
+	{"object": "DirAccess", "method": "make_dir_recursive", "message": "DirAccess.make_dir_recursive() is forbidden — cannot create directories."},
+	{"object": "DirAccess", "method": "make_dir_recursive_absolute", "message": "DirAccess.make_dir_recursive_absolute() is forbidden — cannot create directories."},
 	{"object": "ClassDB", "method": "instantiate", "message": "ClassDB.instantiate() is forbidden — dynamic class instantiation bypasses static analysis."},
 	{"object": "ClassDB", "method": "instance", "message": "ClassDB.instance() is forbidden — dynamic class instantiation bypasses static analysis."},
 ]
 
-## Wildcard warn — method name triggers warning regardless of calling object.
-const WARN_METHODS: Array[Dictionary] = [
-	{"method": "set_setting", "message": "set_setting() detected — changes to editor/project settings are not auditable by file snapshot."},
-]
-
-## ResourceSaver.save — warn (not block) since resource files can carry executable scripts
-const RESOURCE_SAVER_WARNING: String = "ResourceSaver.save() detected — created resource files may contain executable script code. Review output files for safety."
-
-## Objects whose .call()/.callv() must be blocked (dynamic method invocation bypass).
-const DANGEROUS_DYNAMIC_CALL_OBJECTS: Array[String] = [
-	"OS", "DirAccess", "EditorInterface", "ProjectSettings", "Engine",
-]
-
-## FileAccess methods that take a file path as first argument — restricted to res:// only.
-const FILEACCESS_PATH_METHODS: Array[String] = [
-	"open", "open_compressed", "open_encrypted", "open_encrypted_with_pass",
-	"get_file_as_string", "file_exists", "get_modified_time", "get_md5",
-]
+# ============================================================================
+# Constants — Path & File Validation
+# ============================================================================
 
 ## Whitelist of file extensions that the EditorScript is allowed to create/modify.
 const ALLOWED_EXTENSIONS: Array[String] = [
@@ -73,7 +67,12 @@ const RESTRICTED_PATH_PATTERNS: Array[String] = [
 	"res://.git/",
 	"res://.import/",
 	"res://android/",
+	"res://rollback_files/",
 ]
+
+## Max file size (bytes) for content backup — skip files larger than this.
+const MAX_BACKUP_SIZE: int = 5 * 1024 * 1024  # 5MB
+
 
 # --- Private Vars ---
 
@@ -81,27 +80,36 @@ const RESTRICTED_PATH_PATTERNS: Array[String] = [
 var _last_compile_error: String = ""
 
 
-# --- Built-in Functions ---
+# ============================================================================
+# Built-in Functions
+# ============================================================================
 
 func _init() -> void:
 	tool_name = "run_editor_script"
 	tool_description = "Executes a custom Editor script. This tool is disabled by default."
 
 
-# --- Public Functions ---
-
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
+			"file_paths": {
+				"type": "array",
+				"items": {"type": "string"},
+				"description": "List of file paths this script will operate on. All \"res://\" paths in the code must appear in this list."
+			},
 			"code": {
 				"type": "string",
-				"description": "The GDScript code to execute. Must extend EditorScript and override _run(). DO NOT include class_name."
+				"description": "The GDScript code to execute. Must extend `EditorScript` and override `_run()`. Do NOT include class_name."
 			}
 		},
-		"required": ["code"]
+		"required": ["file_paths", "code"]
 	}
 
+
+# ============================================================================
+# Main Execution
+# ============================================================================
 
 func execute(p_args: Dictionary) -> ToolResult:
 	# === Layer 0: Master switch ===
@@ -109,26 +117,46 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if not _cfg.allow_editor_script_execution:
 		return ToolResult.fail(
 			"**Editor Script execution is disabled.**\n\n"
-			+ "Please describe to the user what you intend to do, and ask them to enable the **PandoraBox** CheckButton in the Chat UI."
+			+ "Please describe to the user what you intend to do, and ask user to enable the **PandoraBox** CheckButton in the Chat UI."
 		)
 	
-	# === Layer 1: Static code analysis (L2 — call extraction + alias tracking) ===
 	var code: String = p_args.get("code", "")
-	if code.is_empty():
-		return ToolResult.fail("Error: 'code' parameter is required.")
+	var file_paths: Array = p_args.get("file_paths", [])
 	
+	if code.is_empty():
+		return ToolResult.fail("'code' parameter is required.")
+	if file_paths.is_empty():
+		return ToolResult.fail("'file_paths' parameter is required — declare at least one file path.")
+	
+	# === Layer 1A: Validate declared paths (pure parameter check) ===
+	var path_validation: ToolResult = _validate_declared_paths(file_paths)
+	if path_validation.is_fail():
+		return path_validation
+	
+	# === Layer 1B: Static analysis (danger APIs) ===
 	var static_result: ToolResult = _static_analysis_l2(code)
 	if static_result.is_fail():
 		return static_result
 	
-	# === Layer 1.5: Pre-execution format whitelist (static scan) ===
-	var whitelist_result: ToolResult = _check_format_whitelist(code)
-	if whitelist_result.is_fail():
-		return whitelist_result
+	# === Layer 1C: Verify code paths match declared set ===
+	var verify_result: ToolResult = _verify_code_paths(code, file_paths)
+	if verify_result.is_fail():
+		return verify_result
+	
+	# === Layer 1D: Check for non-literal API calls (dynamic paths) ===
+	var dynamic_result: ToolResult = _check_dynamic_api_calls(code)
+	if dynamic_result.is_fail():
+		return dynamic_result
+	
+	# === Layer 1.75: Backup declared paths ===
+	var backup_targets: Dictionary = {"write": file_paths, "delete": file_paths}
+	var target_backup: Dictionary = _backup_target_files(backup_targets)
+	var backup_id: String = _generate_backup_id()
+	_save_backup_to_disk(backup_id, code, file_paths, target_backup)
 	
 	# === Layer 2: Pre-execution file system snapshot ===
 	if not Engine.is_editor_hint():
-		return ToolResult.fail("Error: run_editor_script can only be used in the Godot editor.")
+		return ToolResult.fail("`run_editor_script` can only be used in the Godot editor.")
 	
 	var snapshot_before: Dictionary = _collect_file_snapshot()
 	
@@ -144,53 +172,32 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	instance._run()
 	
-	# === Layer 4: Post-execution snapshot + dual audit ===
+	# === Layer 4: Post-execution snapshot + audit ===
 	var snapshot_after: Dictionary = _collect_file_snapshot()
 	var audit: Dictionary = _diff_snapshots(snapshot_before, snapshot_after)
+	_update_backup_audit(backup_id, audit)
 	
-	# --- Post-execution audit: format whitelist — created/modified (catch B1 bypass) ---
-	var post_violations: Array[String] = []
-	for path in audit.created + audit.modified:
-		var ext: String = path.get_extension().to_lower()
-		if ext.is_empty():
-			continue
-		if not ext in ALLOWED_EXTENSIONS:
-			post_violations.append("- `%s` (格式: `.%s`, 操作: 创建/修改) — 不在白名单内" % [path, ext])
-	
-	# --- Post-execution audit: format whitelist — deleted (prevent source file destruction) ---
-	for path in audit.deleted:
-		var ext: String = path.get_extension().to_lower()
-		if ext.is_empty():
-			continue
-		if not ext in ALLOWED_EXTENSIONS:
-			post_violations.append("- `%s` (格式: `.%s`, 操作: 删除) — 不允许删除非白名单格式文件" % [path, ext])
-	
-	# --- Post-execution audit: path blacklist (all changes: create/modify/delete) ---
+	# Post-execution audit: verify all changes are within declared paths
+	var violations: Array[String] = []
 	for path in audit.created + audit.modified + audit.deleted:
-		for prefix in RESTRICTED_PATH_PATTERNS:
-			if path.to_lower().begins_with(prefix):
-				post_violations.append("- `%s` — 位于受限区域 `%s`" % [path, prefix])
-				break
+		if path not in file_paths:
+			violations.append("- `%s` — not in declared file_paths" % path)
 	
-	if not post_violations.is_empty():
-		var ext_list: String = ""
-		for e in ALLOWED_EXTENSIONS:
-			ext_list += "- `.%s`\n" % e
-		return ToolResult.fail(
-			"**Security violations detected after execution.**\n\n"
-			+ "The following unauthorized file operations were detected:\n"
-			+ "\n".join(post_violations) + "\n\n"
-			+ "**Allowed file formats:**\n"
-			+ ext_list
-			+ "\n**Restricted zones:**\n"
-			+ "- `res://addons/`\n"
-			+ "- `res://.godot/`\n"
-			+ "- `res://.git/`\n"
-			+ "- `res://.import/`\n"
-			+ "- `res://android/`\n"
-		)
+	if not violations.is_empty():
+		var fail_msg: String = "**Security violations detected after execution.**\n\n"
+		fail_msg += "The following file operations affect paths that were not declared:\n"
+		fail_msg += "\n".join(violations) + "\n\n"
+		fail_msg += "**Declared paths:**\n"
+		
+		for p in file_paths:
+			fail_msg += "- `%s`\n" % p
+		
+		fail_msg += "\n---\n"
+		fail_msg += "**Backup saved for manual rollback.**\n"
+		fail_msg += "Backup ID: **`%s`**\n" % backup_id
+		return ToolResult.fail(fail_msg)
 	
-	# --- Report normal changes ---
+	# Build normal result
 	var result_text: String = "**Editor Script executed successfully.**\n\n"
 	
 	if not audit.created.is_empty():
@@ -198,61 +205,187 @@ func execute(p_args: Dictionary) -> ToolResult:
 		for f in audit.created:
 			result_text += "- `%s`\n" % f
 		result_text += "\n"
+	
 	if not audit.modified.is_empty():
 		result_text += "**Files Modified:**\n"
 		for f in audit.modified:
 			result_text += "- `%s`\n" % f
 		result_text += "\n"
+	
 	if not audit.deleted.is_empty():
 		result_text += "**Files Deleted:**\n"
 		for f in audit.deleted:
 			result_text += "- `%s`\n" % f
 		result_text += "\n"
 	
-	if _is_empty(audit):
+	if audit.created.is_empty() and audit.modified.is_empty() and audit.deleted.is_empty():
 		result_text += "*(No file system changes detected.)*\n"
+	
+	result_text += "---\n"
+	result_text += "**Backup saved for manual rollback.**\n"
+	result_text += "Backup ID: **`%s`**\n" % backup_id
 	
 	ToolBox.refresh_editor_filesystem()
 	
 	var warnings: Array = static_result.get_extra("warnings", [])
 	if not warnings.is_empty():
-		result_text += "**Static Analysis Warnings:**\n"
+		result_text += "\n**Static Analysis Warnings:**\n"
 		for w in warnings:
 			result_text += "- %s\n" % w
 	
 	return ToolResult.ok(result_text)
 
 
-# --- Private Functions: L2 Static Analysis ---
+# ============================================================================
+# Layer 1A — Validate Declared Paths
+# ============================================================================
 
-# Strips string literals and comments from code for structural analysis.
-# String contents are replaced with empty placeholders; comments are removed entirely.
+func _validate_declared_paths(p_paths: Array) -> ToolResult:
+	var blocks: Array[String] = []
+	
+	for path in p_paths:
+		if typeof(path) != TYPE_STRING:
+			return ToolResult.fail("'file_paths' must contain only strings.")
+		
+		if not path.begins_with("res://"):
+			blocks.append('Path "%s" must start with "res://".' % path)
+			continue
+		
+		var ext: String = path.get_extension().to_lower()
+		if ext not in ALLOWED_EXTENSIONS and not ext.is_empty():
+			blocks.append('Path "%s" has unsupported extension ".%s".' % [path, ext])
+			continue
+		
+		for prefix in RESTRICTED_PATH_PATTERNS:
+			if path.to_lower().begins_with(prefix):
+				blocks.append('Path "%s" is inside restricted zone `%s`.' % [path, prefix])
+				break
+	
+	if not blocks.is_empty():
+		var ext_list: String = ""
+		for e in ALLOWED_EXTENSIONS:
+			ext_list += "- `.%s`\n" % e
+		
+		var msg: String = "**Invalid file paths declared.**\n\n"
+		msg += "\n".join(blocks) + "\n\n"
+		msg += "**Allowed file formats:**\n" + ext_list
+		msg += "\n**Restricted zones:**\n"
+		for r in RESTRICTED_PATH_PATTERNS:
+			msg += "- `%s`\n" % r
+		
+		return ToolResult.fail(msg)
+	
+	return ToolResult.ok("")
+
+
+# ============================================================================
+# Layer 1C — Verify Code Paths vs Declared Set
+# ============================================================================
+
+func _verify_code_paths(p_code: String, p_declared: Array) -> ToolResult:
+	var used: Array[String] = []
+	
+	# Extract all "res://..." string literals from code (double-quoted)
+	var dq_pat: RegEx = RegEx.create_from_string('"(res://[^"]*)"')
+	for match in dq_pat.search_all(p_code):
+		var path: String = match.get_string(1)
+		if path not in used:
+			used.append(path)
+	
+	# Single-quoted
+	var sq_pat: RegEx = RegEx.create_from_string("'(res://[^']*)'")
+	for match in sq_pat.search_all(p_code):
+		var path: String = match.get_string(1)
+		if path not in used:
+			used.append(path)
+	
+	# Each code path must be in declared set
+	var undeclared: Array[String] = []
+	for path in used:
+		if path not in p_declared:
+			undeclared.append(path)
+	
+	if not undeclared.is_empty():
+		var msg: String = "**Code contains undeclared file paths.**\n\n"
+		msg += "The following paths appear in code but were not declared in `file_paths`:\n"
+		for u in undeclared:
+			msg += "- `%s`\n" % u
+		msg += "\n**Declared paths:**\n"
+		for d in p_declared:
+			msg += "- `%s`\n" % d
+		msg += "\nDeclare all file paths in the `file_paths` parameter before using them in code."
+		return ToolResult.fail(msg)
+	
+	return ToolResult.ok("")
+
+
+# ============================================================================
+# Layer 1D — Check for Non-Literal API Calls (Dynamic Paths)
+# ============================================================================
+
+func _check_dynamic_api_calls(p_code: String) -> ToolResult:
+	# If there are "res://" literals in the code, they've already been validated
+	# by _verify_code_paths. Variable references to declared paths are allowed.
+	var dq_pat: RegEx = RegEx.create_from_string('"(res://[^"]*)"')
+	var sq_pat: RegEx = RegEx.create_from_string("'(res://[^']*)'")
+	var literal_count: int = 0
+	for _m in dq_pat.search_all(p_code):
+		literal_count += 1
+	for _m in sq_pat.search_all(p_code):
+		literal_count += 1
+	if literal_count > 0:
+		return ToolResult.ok("")
+	
+	# No "res://" literals at all — check if API calls use non-literal paths
+	var blocks: Array[String] = []
+	var fa_pat: RegEx = RegEx.create_from_string('FileAccess\\.(\\w+)\\s*\\(\\s*[^"\'\\s)]')
+	var fa_seen: Dictionary = {}
+	for match in fa_pat.search_all(p_code):
+		var method: String = match.get_string(1)
+		if not fa_seen.has(method):
+			fa_seen[method] = true
+			blocks.append("FileAccess.%s() uses a non-literal path argument — dynamic paths are not allowed." % method)
+	
+	var rs_pat: RegEx = RegEx.create_from_string("ResourceSaver\\.save\\s*\\(\\s*[^,]+\\s*,\\s*[^\"'\\s)]")
+	for match in rs_pat.search_all(p_code):
+		if not blocks.has("ResourceSaver.save()"):
+			blocks.append("ResourceSaver.save() uses a non-literal path argument — dynamic paths are not allowed.")
+	
+	if not blocks.is_empty():
+		var msg: String = "**Dynamic file path detected in API call.**\n\n"
+		msg += "All file path arguments to FileAccess and ResourceSaver must be direct string literals:\n"
+		for b in blocks:
+			msg += "- %s\n" % b
+		msg += '\nUse a literal path like "res://folder/file.ext" instead of a variable or expression.'
+		return ToolResult.fail(msg)
+	
+	return ToolResult.ok("")
+
+
+# ============================================================================
+# L2 Static Analysis — Danger API Checks
+# ============================================================================
+
 func _strip_strings_and_comments(p_code: String) -> String:
 	var code := p_code
-	
-	# Strip string literals (double-quoted and single-quoted)
 	var dq_pattern: RegEx = RegEx.create_from_string('"[^"]*"')
 	var sq_pattern: RegEx = RegEx.create_from_string("'[^']*'")
 	code = dq_pattern.sub(code, '""', true)
 	code = sq_pattern.sub(code, "''", true)
-	
-	# Strip comments (remove everything after # on each line)
 	var lines := code.split("\n")
+	
 	for i in lines.size():
 		var hash_pos: int = lines[i].find("#")
 		if hash_pos != -1:
 			lines[i] = lines[i].substr(0, hash_pos)
+	
 	return "\n".join(lines)
 
 
-# Builds a symbol table mapping variable names to their resolved type/source.
-# Only extracts the leading identifier from assignment right-hand sides.
 func _build_symbol_table(p_code: String) -> Dictionary:
 	var table: Dictionary = {}
-	# Match: [var] X [: Type] = RHS  (but NOT ==, <=, >=, !=)
 	var assign_pattern: RegEx = RegEx.create_from_string(
-		"(?:var\\s+)?(\\w+)\\s*(?::\\s*[\\w\\.]+\\s*)?(?::=|=(?!=))\\s*(.+)"
-	)
+		"(?:var\\s+)?(\\w+)\\s*(?::\\s*[\\w\\.]+\\s*)?(?::=|=(?!=))\\s*(.+)")
 	
 	for match in assign_pattern.search_all(p_code):
 		var var_name: String = match.get_string(1)
@@ -264,32 +397,22 @@ func _build_symbol_table(p_code: String) -> Dictionary:
 	return table
 
 
-# Extracts the leading type/source identifier from an assignment right-hand side.
-# - `HTTPRequest.new()` → "HTTPRequest"
-# - `DirAccess.open(...)` → "DirAccess"
-# - `some_var` → "some_var" (caller resolves via symbol table)
-# - `5`, `"text"`, `func():...` → "" (ignored)
 func _resolve_rhs(p_rhs: String) -> String:
 	p_rhs = p_rhs.strip_edges()
 	
-	# Case 1: ClassName.xxx( → extract ClassName
 	var call_match: RegEx = RegEx.create_from_string("^(\\w+)\\.")
 	var cm: RegExMatch = call_match.search(p_rhs)
 	if cm:
 		return cm.get_string(1)
 	
-	# Case 2: Pure identifier → return as-is (may be a variable alias or type name)
 	var id_match: RegEx = RegEx.create_from_string("^(\\w+)$")
 	var im: RegExMatch = id_match.search(p_rhs)
 	if im:
 		return im.get_string(1)
 	
-	# Case 3: Other (literal, expression, etc.) → ignore
 	return ""
 
 
-# Resolves chained variable aliases in the symbol table until convergence.
-# Example: {d2 → d, d → DirAccess} → {d2 → DirAccess, d → DirAccess}
 func _resolve_symbol_table(p_table: Dictionary) -> Dictionary:
 	var resolved: Dictionary = p_table.duplicate()
 	var changed: bool = true
@@ -307,18 +430,16 @@ func _resolve_symbol_table(p_table: Dictionary) -> Dictionary:
 	return resolved
 
 
-# Extracts all method-call expressions of the form `identifier.method(` from code.
-# Returns a deduplicated list of {object, method} pairs.
 func _extract_calls(p_code: String) -> Array[Dictionary]:
 	var calls: Array[Dictionary] = []
 	var seen: Dictionary = {}
-	#var call_pattern: RegEx = RegEx.create_from_string("(\\w+)\\.(\\w+)\\s*\\(")
 	var call_pattern: RegEx = RegEx.create_from_string("(\\w+|\\))\\.(\\w+)\\s*\\(")
 	
 	for match in call_pattern.search_all(p_code):
 		var obj: String = match.get_string(1)
 		var method: String = match.get_string(2)
 		var key: String = obj + "." + method
+		
 		if not seen.has(key):
 			seen[key] = true
 			calls.append({"object": obj, "method": method})
@@ -326,34 +447,31 @@ func _extract_calls(p_code: String) -> Array[Dictionary]:
 	return calls
 
 
-# L2 static analysis: preprocess → symbol table → call extraction → danger check.
 func _static_analysis_l2(p_code: String) -> ToolResult:
 	var blocks: Array[String] = []
 	var warns: Array[String] = []
 	
-	# 1. Preprocess: strip strings and comments
 	var clean_code: String = _strip_strings_and_comments(p_code)
-	
-	# 2. Build and resolve symbol table
 	var raw_table: Dictionary = _build_symbol_table(clean_code)
 	var symbol_table: Dictionary = _resolve_symbol_table(raw_table)
-	
-	# 3. Extract all method calls
 	var calls: Array[Dictionary] = _extract_calls(clean_code)
 	
-	# 4. Check each call against danger rules
 	for call in calls:
 		var obj: String = call["object"]
 		var method: String = call["method"]
-		# Resolve object through symbol table (fall back to raw name if not a tracked variable)
 		var resolved_obj: String = symbol_table.get(obj, obj)
 		
-		# 4a. Check DANGEROUS_TYPES
-		if resolved_obj in DANGEROUS_TYPES:
+		# === Step A: Check DANGEROUS_NETWORK_CLASSES ===
+		if resolved_obj in DANGEROUS_NETWORK_CLASSES:
 			blocks.append("%s is forbidden — network APIs are not allowed." % resolved_obj)
 			continue
 		
-		# 4b. Check DANGEROUS_TYPED_CALLS (object + method)
+		# === Step B: Check BLOCKED_CLASSES (any method on high-risk classes) ===
+		if resolved_obj in BLOCKED_CLASSES:
+			blocks.append("%s is a high-risk class — all method calls are blocked." % resolved_obj)
+			continue
+		
+		# === Step C: Check DANGEROUS_TYPED_CALLS (class + method) ===
 		var typed_hit: bool = false
 		for rule in DANGEROUS_TYPED_CALLS:
 			if resolved_obj == rule["object"] and method == rule["method"]:
@@ -363,7 +481,8 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 		if typed_hit:
 			continue
 		
-		# 4b.5 Chain call detection — object type unresolvable via static analysis
+		# === Step D: Chain call detection ===
+		# Object type unresolvable via static analysis — conservative block
 		if resolved_obj == ")":
 			var chain_hit: bool = false
 			for rule in DANGEROUS_TYPED_CALLS:
@@ -373,41 +492,7 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 					break
 			if chain_hit:
 				continue
-		
-		# 4c. Check DANGEROUS_METHODS_BLOCK (wildcard method)
-		var method_hit: bool = false
-		for rule in DANGEROUS_METHODS_BLOCK:
-			if method == rule["method"]:
-				blocks.append(rule["message"])
-				method_hit = true
-				break
-		if method_hit:
-			continue
-		
-		# 4d. Check dangerous dynamic calls (.call()/.callv() on known dangerous objects)
-		if (method == "call" or method == "callv") and resolved_obj in DANGEROUS_DYNAMIC_CALL_OBJECTS:
-			blocks.append("%s.%s() is forbidden — cannot dynamically invoke methods on %s." % [resolved_obj, method, resolved_obj])
-			continue
-		
-		# 4e. Check WARN_METHODS
-		for rule in WARN_METHODS:
-			if method == rule["method"]:
-				warns.append(rule["message"])
-				break
-		
-		# 4f. Check ResourceSaver.save — warn for code-bearing resource file creation
-		if resolved_obj == "ResourceSaver" and method == "save":
-			warns.append(RESOURCE_SAVER_WARNING)
 	
-	# 5. Check FileAccess path whitelist — restrict to res:// only
-	var fa_result: ToolResult = _check_fileaccess_paths(p_code, symbol_table)
-	if fa_result.is_fail():
-		return fa_result
-	var fa_warnings: Array = fa_result.get_extra("warnings", [])
-	for w in fa_warnings:
-		warns.append(w)
-	
-	# 6. Build result
 	if not blocks.is_empty():
 		var msg: String = "**Static analysis blocked execution.**\n\nThe following forbidden patterns were detected:\n"
 		for b in blocks:
@@ -417,211 +502,21 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 	
 	if not warns.is_empty():
 		return ToolResult.ok("", {"warnings": warns})
+	
 	return ToolResult.ok("")
 
 
-# --- Private Functions: FileAccess Path Whitelist (Layer 1) ---
-
-func _check_fileaccess_paths(p_code: String, p_symbol_table: Dictionary) -> ToolResult:
-	var blocks: Array[String] = []
-	var warns: Array[String] = []
-	
-	var fa_names: Array[String] = ["FileAccess"]
-	for key in p_symbol_table:
-		if p_symbol_table[key] == "FileAccess":
-			fa_names.append(key)
-	
-	for alias in fa_names:
-		# 1. Double-quoted string argument
-		var dq_pat: RegEx = RegEx.create_from_string(alias + '\\.(\\w+)\\s*\\(\\s*"([^"]*)"')
-		for match in dq_pat.search_all(p_code):
-			var method: String = match.get_string(1)
-			if method not in FILEACCESS_PATH_METHODS:
-				continue
-			var path: String = match.get_string(2)
-			
-			# 检查是否在 res:// 内
-			if not path.begins_with("res://"):
-				blocks.append('FileAccess.%s() — path "%s" is outside res:// — only project files are allowed.' % [method, path])
-				continue
-			
-			# 新增：检查路径黑名单
-			for prefix in RESTRICTED_PATH_PATTERNS:
-				if path.to_lower().begins_with(prefix):
-					blocks.append('FileAccess.%s() — path "%s" is inside restricted zone `%s`.' % [method, path, prefix])
-					break
-		
-		# 2. Single-quoted string argument
-		var sq_pat: RegEx = RegEx.create_from_string(alias + "\\.(\\w+)\\s*\\(\\s*'([^']*)'")
-		for match in sq_pat.search_all(p_code):
-			var method: String = match.get_string(1)
-			if method not in FILEACCESS_PATH_METHODS:
-				continue
-			var path: String = match.get_string(2)
-			
-			if not path.begins_with("res://"):
-				blocks.append("FileAccess.%s() — path '%s' is outside res:// — only project files are allowed." % [method, path])
-				continue
-			
-			# 新增：检查路径黑名单
-			for prefix in RESTRICTED_PATH_PATTERNS:
-				if path.to_lower().begins_with(prefix):
-					blocks.append("FileAccess.%s() — path '%s' is inside restricted zone `%s`." % [method, path, prefix])
-					break
-		
-		# 3. Non-string-literal argument (dynamic path, cannot verify)
-		var dyn_pat: RegEx = RegEx.create_from_string(alias + '\\.(\\w+)\\s*\\(\\s*[^"\'\\s)]')
-		var dyn_seen: Dictionary = {}
-		for match in dyn_pat.search_all(p_code):
-			var method: String = match.get_string(1)
-			if method not in FILEACCESS_PATH_METHODS:
-				continue
-			if not dyn_seen.has(method):
-				dyn_seen[method] = true
-				blocks.append("FileAccess.%s() uses a non-literal path — dynamic paths are not allowed." % method)
-	
-	if not blocks.is_empty():
-		var msg: String = "**Static analysis blocked execution.**\n\nThe following forbidden file access was detected:\n"
-		for b in blocks:
-			msg += "- %s\n" % b
-		msg += "\nFileAccess is restricted to res:// paths only, and restricted zones are off-limits."
-		return ToolResult.fail(msg)
-	
-	if not warns.is_empty():
-		return ToolResult.ok("", {"warnings": warns})
-	return ToolResult.ok("")
-
-
-# --- Private Functions: Format Whitelist (Layer 1.5) ---
-
-func _check_format_whitelist(p_code: String) -> ToolResult:
-	var pattern: RegEx = RegEx.create_from_string('"([^"]*)\\.([a-zA-Z0-9_]+)"')
-	var sq_pattern: RegEx = RegEx.create_from_string("'([^']*)\\.([a-zA-Z0-9_]+)'")
-	var fmt_pattern: RegEx = RegEx.create_from_string('"(res://[^"]*%[a-zA-Z][^"]*)"')
-	var sq_fmt_pattern: RegEx = RegEx.create_from_string("'(res://[^']*%[a-zA-Z][^']*)'")
-	
-	var violations: Array[String] = []
-	var seen: Array[String] = []
-	
-	# 辅助：检查路径是否在黑名单中
-	# 返回违规描述，若未命中则返回空字符串
-	var _check_restricted_path := func(p_full_match: String, p_path: String) -> String:
-		var lower_path := p_path.to_lower()
-		for prefix in RESTRICTED_PATH_PATTERNS:
-			if lower_path.begins_with(prefix):
-				return "- `%s` — 位于受限区域 `%s`" % [p_full_match, prefix]
-		return ""
-	
-	# Check double-quoted strings (standard file.ext pattern)
-	for match in pattern.search_all(p_code):
-		var full: String = match.get_string(0)
-		if full in seen:
-			continue
-		seen.append(full)
-		
-		var file_path: String = match.get_string(1) + "." + match.get_string(2)
-		var ext: String = match.get_string(2).to_lower()
-		
-		# 检查扩展名白名单
-		if not ext in ALLOWED_EXTENSIONS:
-			violations.append("- `%s` (格式: `.%s`)" % [full, ext])
-		
-		# 检查路径黑名单
-		var rp: String = _check_restricted_path.call(full, file_path)
-		if not rp.is_empty():
-			violations.append(rp)
-	
-	# Check single-quoted strings (standard file.ext pattern)
-	for match in sq_pattern.search_all(p_code):
-		var full: String = match.get_string(0)
-		if full in seen:
-			continue
-		seen.append(full)
-		
-		var file_path: String = match.get_string(1) + "." + match.get_string(2)
-		var ext: String = match.get_string(2).to_lower()
-		
-		# 检查扩展名白名单
-		if not ext in ALLOWED_EXTENSIONS:
-			violations.append("- `%s` (格式: `.%s`)" % [full, ext])
-		
-		# 检查路径黑名单
-		var rp: String = _check_restricted_path.call(full, file_path)
-		if not rp.is_empty():
-			violations.append(rp)
-	
-	# Check format-string bypass (double-quoted)
-	for match in fmt_pattern.search_all(p_code):
-		var path: String = match.get_string(1)
-		if path in seen:
-			continue
-		seen.append(path)
-		var last_dot: int = path.rfind(".")
-		if last_dot == -1:
-			continue
-		var after_dot: String = path.substr(last_dot + 1)
-		if "%" in after_dot:
-			violations.append("- `%s` (扩展名含动态格式符，无法确定最终格式)" % ['"' + path + '"'])
-		
-		# 格式符路径也检查黑名单（比如 "res://addons/%s"）
-		var rp: String = _check_restricted_path.call('"' + path + '"', path)
-		if not rp.is_empty():
-			violations.append(rp)
-	
-	# Check format-string bypass (single-quoted)
-	for match in sq_fmt_pattern.search_all(p_code):
-		var path: String = match.get_string(1)
-		if path in seen:
-			continue
-		seen.append(path)
-		var last_dot: int = path.rfind(".")
-		if last_dot == -1:
-			continue
-		var after_dot: String = path.substr(last_dot + 1)
-		if "%" in after_dot:
-			violations.append("- `%s` (扩展名含动态格式符，无法确定最终格式)" % ["'" + path + "'"])
-		
-		var rp: String = _check_restricted_path.call("'" + path + "'", path)
-		if not rp.is_empty():
-			violations.append(rp)
-	
-	if violations.is_empty():
-		return ToolResult.ok("")
-	
-	var ext_list: String = ""
-	for e in ALLOWED_EXTENSIONS:
-		ext_list += "- `.%s`\n" % e
-	
-	var restricted_list: String = ""
-	for r in RESTRICTED_PATH_PATTERNS:
-		restricted_list += "- `%s`\n" % r
-	
-	return ToolResult.fail(
-		"**Permission Denied: Unsupported file format or restricted path.**\n\n"
-		+ "**Violations:**\n"
-		+ "\n".join(violations) + "\n\n"
-		+ "**Allowed file formats:**\n"
-		+ ext_list
-		+ "\n**Restricted zones:**\n"
-		+ restricted_list
-		+ "\nPlease rewrite the code to only work with allowed formats outside restricted zones."
-	)
-
-
-# --- Private Functions: Code Wrapping & Compilation ---
+# ============================================================================
+# Code Wrapping & Compilation
+# ============================================================================
 
 func _wrap_code(p_code: String) -> String:
 	var clean_code: String = p_code.strip_edges()
-	
-	# Ensure extends EditorScript
 	if "extends EditorScript" not in clean_code:
 		clean_code = "extends EditorScript\n\n" + clean_code
 	
-	# Remove class_name (not allowed for ephemeral scripts)
 	var class_name_regex: RegEx = RegEx.create_from_string("(?m)^class_name\\s+\\w+\\s*$")
 	clean_code = class_name_regex.sub(clean_code, "", true)
-	
-	# Ensure @tool
 	if not clean_code.begins_with("@tool"):
 		clean_code = "@tool\n" + clean_code
 	
@@ -630,28 +525,27 @@ func _wrap_code(p_code: String) -> String:
 
 func _compile_script(p_code: String) -> GDScript:
 	_last_compile_error = ""
-	
 	var editor_log: RichTextLabel = _get_editor_log()
 	var before_text: String = editor_log.get_parsed_text() if editor_log else ""
-	
 	var script: GDScript = GDScript.new()
 	script.source_code = p_code
-	var err: Error = script.reload()
 	
+	var err: Error = script.reload()
 	if err != OK:
 		if editor_log:
 			var after_text: String = editor_log.get_parsed_text()
 			var captured: String = _capture_editor_log_error(before_text, after_text)
 			if not captured.is_empty():
 				_last_compile_error = captured
-		
 		printerr("[run_editor_script] Compilation error: ", err)
 		return null
 	
 	return script
 
 
-# --- Private Functions: File System Snapshot & Audit (Layer 4) ---
+# ============================================================================
+# File System Snapshot & Audit (Layer 4)
+# ============================================================================
 
 func _collect_file_snapshot() -> Dictionary:
 	var snapshot: Dictionary = {}
@@ -666,6 +560,7 @@ func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary) -> void:
 	
 	dir.list_dir_begin()
 	var item: String = dir.get_next()
+	
 	while item != "":
 		if item.begins_with("."):
 			item = dir.get_next()
@@ -677,6 +572,7 @@ func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary) -> void:
 		else:
 			p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
 		item = dir.get_next()
+	
 	dir.list_dir_end()
 
 
@@ -685,55 +581,43 @@ func _diff_snapshots(p_before: Dictionary, p_after: Dictionary) -> Dictionary:
 	var modified: Array[String] = []
 	var deleted: Array[String] = []
 	
-	# Created / Modified
 	for path in p_after:
 		if not p_before.has(path):
 			created.append(path)
 		elif p_after[path] != p_before[path]:
 			modified.append(path)
 	
-	# Deleted
 	for path in p_before:
 		if not p_after.has(path):
 			deleted.append(path)
 	
-	return {
-		"created": created,
-		"modified": modified,
-		"deleted": deleted,
-	}
+	return {"created": created, "modified": modified, "deleted": deleted}
 
 
-func _is_empty(p_dict: Dictionary) -> bool:
-	return p_dict.created.is_empty() and p_dict.modified.is_empty() and p_dict.deleted.is_empty()
+# ============================================================================
+# EditorLog Error Capture
+# ============================================================================
 
-
-# --- Private Functions: EditorLog Error Capture ---
-
-# Retrieves the EditorLog RichTextLabel node from the editor UI tree.
-# Returns null if not in editor mode or if the node cannot be found.
 func _get_editor_log() -> RichTextLabel:
 	if not Engine.is_editor_hint():
 		return null
+	
 	var base_control: Control = EditorInterface.get_base_control()
 	if not base_control:
 		return null
 	
-	# Strategy 1: Find EditorLog by class name (works in 4.7+)
 	var logs: Array[Node] = base_control.find_children("*", "EditorLog", true, false)
 	for log_node in logs:
 		var rtls: Array[Node] = log_node.find_children("*", "RichTextLabel", true, false)
 		if rtls.size() > 0:
 			return rtls[0] as RichTextLabel
 	
-	# Strategy 2: Find by node name "Output" (fallback)
 	var output_node: Node = base_control.find_child("Output", true, false)
 	if output_node:
 		var rtls: Array[Node] = output_node.find_children("*", "RichTextLabel", true, false)
 		if rtls.size() > 0:
 			return rtls[0] as RichTextLabel
 	
-	# Strategy 3: Old name fallback
 	var log: RichTextLabel = base_control.find_child("EditorLog", true, false) as RichTextLabel
 	if log:
 		return log
@@ -741,9 +625,6 @@ func _get_editor_log() -> RichTextLabel:
 	return null
 
 
-# Extracts newly appended text from EditorLog by comparing before/after snapshots.
-# The new text typically contains Godot's exact compiler error message,
-# e.g. "res://.gd:5: Parse Error: Expected ')'"
 func _capture_editor_log_error(p_before: String, p_after: String) -> String:
 	var new_text: String = ""
 	if p_after.length() > p_before.length():
@@ -755,7 +636,6 @@ func _capture_editor_log_error(p_before: String, p_after: String) -> String:
 	if new_text.is_empty():
 		return ""
 	
-	# Filter out noise: only keep lines that look like compile errors
 	var lines: PackedStringArray = new_text.split("\n")
 	var filtered: PackedStringArray = []
 	for line in lines:
@@ -774,3 +654,74 @@ func _capture_editor_log_error(p_before: String, p_after: String) -> String:
 		return new_text
 	
 	return "\n".join(filtered)
+
+
+# ============================================================================
+# Backup & Disk Persistence
+# ============================================================================
+
+func _generate_backup_id() -> String:
+	var dt: Dictionary = Time.get_datetime_dict_from_system()
+	return "rollback_%04d%02d%02d_%02d%02d%02d" % [dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second]
+
+
+func _save_backup_to_disk(p_backup_id: String, p_code: String, p_file_paths: Array, p_files: Dictionary) -> void:
+	var backup := EditorScriptAutoBackup.new()
+	backup.backup_id = p_backup_id
+	backup.timestamp = Time.get_unix_time_from_system()
+	backup.script_code = p_code
+	
+	# Store declared paths in the backup (for audit/reference)
+	for path in p_file_paths:
+		if not backup.file_paths.has(path):
+			backup.file_paths.append(path)
+			backup.file_contents.append(PackedByteArray())
+	
+	# Store actual file contents (pre-execution snapshot)
+	for path in p_files:
+		var idx: int = backup.file_paths.find(path)
+		if idx != -1:
+			backup.file_contents[idx] = p_files[path]
+		else:
+			backup.add_file(path, p_files[path])
+	
+	EditorScriptAutoBackup.ensure_backup_dir_exists()
+	var save_path: String = PluginPaths.BACKUP_DIR + p_backup_id + ".tres"
+	var err: Error = ResourceSaver.save(backup, save_path)
+	if err != OK:
+		AIChatLogger.error("[run_editor_script] Failed to save backup: " + str(err))
+
+
+func _update_backup_audit(p_backup_id: String, p_audit: Dictionary) -> void:
+	var backup_path: String = PluginPaths.BACKUP_DIR + p_backup_id + ".tres"
+	if not ResourceLoader.exists(backup_path):
+		return
+	
+	var backup: EditorScriptAutoBackup = ResourceLoader.load(backup_path, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
+	if not backup:
+		return
+	
+	backup.audit_created = p_audit.get("created", [])
+	backup.audit_modified = p_audit.get("modified", [])
+	backup.audit_deleted = p_audit.get("deleted", [])
+	ResourceSaver.save(backup, backup_path)
+
+
+func _backup_target_files(p_targets: Dictionary) -> Dictionary:
+	var backup: Dictionary = {}
+	for category in ["write", "delete"]:
+		for path in p_targets.get(category, []):
+			if backup.has(path):
+				continue
+			if not FileAccess.file_exists(path):
+				continue
+			var file: FileAccess = FileAccess.open(path, FileAccess.READ)
+			if not file:
+				continue
+			var size: int = file.get_length()
+			if size > MAX_BACKUP_SIZE:
+				file.close()
+				continue
+			backup[path] = file.get_buffer(size)
+			file.close()
+	return backup

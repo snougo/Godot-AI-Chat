@@ -14,6 +14,8 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_folder_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_folder_tool.gd",
+	
+	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_new_skill_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_node_properties_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/manage_todo_list_tool.gd",
@@ -28,7 +30,7 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/delete_memory_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_memories_tool.gd",
 	
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_new_skill_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/other_tool/rollback_files_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/other_tool/run_editor_script_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/list_available_skills_tool.gd",

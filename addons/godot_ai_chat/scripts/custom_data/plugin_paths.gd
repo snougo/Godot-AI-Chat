@@ -26,6 +26,9 @@ const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 ## 聊天会话存档目录
 const SESSION_DIR: String = PLUGIN_DIR + "chat_sessions/"
 
+## 编辑器脚本回滚备份目录（位于项目根目录，持久保存）
+const BACKUP_DIR: String = "res://rollback_files/"
+
 # --- Skills ---
 
 ## 技能目录
