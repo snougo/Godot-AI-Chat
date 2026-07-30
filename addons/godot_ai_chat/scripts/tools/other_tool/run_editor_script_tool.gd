@@ -34,6 +34,8 @@ const DANGEROUS_TYPED_CALLS: Array[Dictionary] = [
 	{"object": "DirAccess", "method": "remove", "message": "DirAccess.remove() is forbidden — cannot delete files."},
 	{"object": "DirAccess", "method": "rename", "message": "DirAccess.rename() is forbidden — cannot rename/move files."},
 	{"object": "DirAccess", "method": "copy", "message": "DirAccess.copy() is forbidden — cannot copy files (may overwrite targets)."},
+	{"object": "ClassDB", "method": "instantiate", "message": "ClassDB.instantiate() is forbidden — dynamic class instantiation bypasses static analysis."},
+	{"object": "ClassDB", "method": "instance", "message": "ClassDB.instance() is forbidden — dynamic class instantiation bypasses static analysis."},
 ]
 
 ## Wildcard warn — method name triggers warning regardless of calling object.
