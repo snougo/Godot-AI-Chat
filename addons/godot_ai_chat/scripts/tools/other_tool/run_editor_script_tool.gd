@@ -144,7 +144,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		return verify_result
 	
 	# === Layer 1D: Check for non-literal API calls (dynamic paths) ===
-	var dynamic_result: ToolResult = _check_dynamic_api_calls(code)
+	var dynamic_result: ToolResult = _check_dynamic_api_calls(code, file_paths)
 	if dynamic_result.is_fail():
 		return dynamic_result
 	
@@ -320,43 +320,119 @@ func _verify_code_paths(p_code: String, p_declared: Array) -> ToolResult:
 
 
 # ============================================================================
-# Layer 1D — Check for Non-Literal API Calls (Dynamic Paths)
+# Layer 1D — Dynamic Path Detection (with symbol tracking)
 # ============================================================================
 
-func _check_dynamic_api_calls(p_code: String) -> ToolResult:
-	# If there are "res://" literals in the code, they've already been validated
-	# by _verify_code_paths. Variable references to declared paths are allowed.
-	var dq_pat: RegEx = RegEx.create_from_string('"(res://[^"]*)"')
-	var sq_pat: RegEx = RegEx.create_from_string("'(res://[^']*)'")
-	var literal_count: int = 0
-	for _m in dq_pat.search_all(p_code):
-		literal_count += 1
-	for _m in sq_pat.search_all(p_code):
-		literal_count += 1
-	if literal_count > 0:
-		return ToolResult.ok("")
+# 在原始代码上构建 {变量名: 字符串值} 映射表。
+# 只记录能追溯到字符串字面量赋值的变量（支持变量引用链解析）。
+func _build_path_var_table(p_code: String) -> Dictionary:
+	var literals: Dictionary = {}
+	var refs: Dictionary = {}
 	
-	# No "res://" literals at all — check if API calls use non-literal paths
+	var assign_pat := RegEx.create_from_string(
+		"(?:var\\s+)?(\\w+)\\s*(?::\\s*[\\w\\.]+\\s*)?(?::=|=(?!=))\\s*(.+)")
+	
+	for m in assign_pat.search_all(p_code):
+		var name: String = m.get_string(1)
+		var rhs: String = m.get_string(2).strip_edges()
+		
+		# 去除行尾注释（简单处理：" #" 模式）
+		var hash_pos: int = rhs.find(" #")
+		if hash_pos != -1:
+			rhs = rhs.substr(0, hash_pos).strip_edges()
+		if rhs.is_empty():
+			continue
+		
+		# 字符串字面量 → 直接记录值
+		if (rhs.begins_with('"') and rhs.ends_with('"') and rhs.length() >= 2) or \
+		   (rhs.begins_with("'") and rhs.ends_with("'") and rhs.length() >= 2):
+			literals[name] = rhs.substr(1, rhs.length() - 2)
+		# 变量引用（单个标识符）→ 记录引用关系
+		elif rhs.is_valid_identifier():
+			if not literals.has(name):
+				refs[name] = rhs
+	
+	# 解析引用链（最多 10 轮直至收敛）
+	var result: Dictionary = literals.duplicate()
+	var changed := true
+	var iter := 0
+	while changed and iter < 10:
+		changed = false
+		iter += 1
+		for key in refs:
+			if not result.has(key):
+				var target: String = refs[key]
+				if result.has(target):
+					result[key] = result[target]
+					changed = true
+	
+	return result
+
+
+# 检查 API 调用的路径参数是否合法。
+# 返回空字符串表示放行，非空字符串为违规描述。
+func _check_path_argument(p_arg: String, p_path_vars: Dictionary, p_declared: Array, p_call_name: String) -> String:
+	# 1. 字符串字面量 → 已由 L1C 验证，放行
+	if p_arg.begins_with('"') or p_arg.begins_with("'"):
+		return ""
+	
+	# 2. 变量名 → 查路径变量映射表
+	if p_arg.is_valid_identifier():
+		if p_path_vars.has(p_arg):
+			var resolved_path: String = p_path_vars[p_arg]
+			if resolved_path in p_declared:
+				return ""  # 合法：变量引用声明的路径
+			return "%s uses variable `%s` → `%s` which is not in declared file_paths." % [p_call_name, p_arg, resolved_path]
+		return "%s uses variable `%s` with non-literal or unresolvable value — dynamic paths are not allowed." % [p_call_name, p_arg]
+	
+	# 3. 其他表达式（拼接、函数调用等）
+	return "%s uses expression `%s` — only string literals or variables assigned to declared paths are allowed." % [p_call_name, p_arg]
+
+
+# 检测 FileAccess / ResourceSaver 调用中的动态或未声明路径。
+# 与 L1C 互补：L1C 只检查 res:// 字面量，本函数检查变量参数和表达式参数。
+func _check_dynamic_api_calls(p_code: String, p_declared: Array) -> ToolResult:
+	# 构建 变量→字符串值 映射表（用于追踪变量来源）
+	var path_vars: Dictionary = _build_path_var_table(p_code)
+	
 	var blocks: Array[String] = []
-	var fa_pat: RegEx = RegEx.create_from_string('FileAccess\\.(\\w+)\\s*\\(\\s*[^"\'\\s)]')
-	var fa_seen: Dictionary = {}
-	for match in fa_pat.search_all(p_code):
-		var method: String = match.get_string(1)
-		if not fa_seen.has(method):
-			fa_seen[method] = true
-			blocks.append("FileAccess.%s() uses a non-literal path argument — dynamic paths are not allowed." % method)
+	var seen: Dictionary = {}
 	
-	var rs_pat: RegEx = RegEx.create_from_string("ResourceSaver\\.save\\s*\\(\\s*[^,]+\\s*,\\s*[^\"'\\s)]")
-	for match in rs_pat.search_all(p_code):
-		if not blocks.has("ResourceSaver.save()"):
-			blocks.append("ResourceSaver.save() uses a non-literal path argument — dynamic paths are not allowed.")
+	# 检测 FileAccess 静态方法的第一个参数
+	var fa_pat := RegEx.create_from_string('FileAccess\\.(\\w+)\\s*\\(\\s*([^,\\)]+)')
+	for m in fa_pat.search_all(p_code):
+		var method: String = m.get_string(1)
+		var arg: String = m.get_string(2).strip_edges()
+		var dedup_key: String = method + "|" + arg
+		if seen.has(dedup_key):
+			continue
+		seen[dedup_key] = true
+		
+		var violation: String = _check_path_argument(arg, path_vars, p_declared, "FileAccess.%s()" % method)
+		if not violation.is_empty():
+			blocks.append(violation)
+	
+	# 检测 ResourceSaver.save 的第二个参数（路径）
+	var rs_pat := RegEx.create_from_string("ResourceSaver\\.save\\s*\\(\\s*[^,]+,\\s*([^,\\)]+)")
+	for m in rs_pat.search_all(p_code):
+		var arg: String = m.get_string(1).strip_edges()
+		var dedup_key: String = "save|" + arg
+		if seen.has(dedup_key):
+			continue
+		seen[dedup_key] = true
+		
+		var violation: String = _check_path_argument(arg, path_vars, p_declared, "ResourceSaver.save()")
+		if not violation.is_empty():
+			blocks.append(violation)
 	
 	if not blocks.is_empty():
-		var msg: String = "**Dynamic file path detected in API call.**\n\n"
-		msg += "All file path arguments to FileAccess and ResourceSaver must be direct string literals:\n"
+		var msg: String = "**Dynamic or undeclared file path detected in API call.**\n\n"
+		msg += "All file path arguments must be:\n"
+		msg += '- Direct string literals in the declared `file_paths` (e.g. `"res://path/file.gd"`)\n'
+		msg += '- Or variables assigned to such literals (e.g. `var p = "res://path/file.gd"`)\n\n'
+		msg += "The following violations were detected:\n"
 		for b in blocks:
 			msg += "- %s\n" % b
-		msg += '\nUse a literal path like "res://folder/file.ext" instead of a variable or expression.'
 		return ToolResult.fail(msg)
 	
 	return ToolResult.ok("")

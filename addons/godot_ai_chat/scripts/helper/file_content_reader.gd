@@ -236,7 +236,11 @@ static func read_image_metadata(p_path: String) -> Dictionary:
 
 
 static func _format_bytes(p_bytes: int) -> String:
-	if p_bytes < 1024:        return "%d B" % p_bytes
-	elif p_bytes < 1024 * 1024:         return "%.2f KB" % (p_bytes / 1024.0)
-	elif p_bytes < 1024 * 1024 * 1024:   return "%.2f MB" % (p_bytes / (1024.0 * 1024.0))
-	else:                      return "%.2f GB" % (p_bytes / (1024.0 * 1024.0 * 1024.0))
+	if p_bytes < 1024:
+		return "%d B" % p_bytes
+	elif p_bytes < 1024 * 1024:
+		return "%.2f KB" % (p_bytes / 1024.0)
+	elif p_bytes < 1024 * 1024 * 1024:
+		return "%.2f MB" % (p_bytes / (1024.0 * 1024.0))
+	else:
+		return "%.2f GB" % (p_bytes / (1024.0 * 1024.0 * 1024.0))
