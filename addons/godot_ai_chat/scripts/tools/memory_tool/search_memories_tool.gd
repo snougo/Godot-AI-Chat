@@ -43,7 +43,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	limit = clampi(limit, 1, 50)
 	
-	var store := _load_or_create_store()
+	var store := MemoryStore.load_or_create()
 	var results := store.search(workspace_path, topic, limit)
 	
 	if results.is_empty():
@@ -67,12 +67,3 @@ func execute(p_args: Dictionary) -> ToolResult:
 	store.save()
 	
 	return ToolResult.ok("\n".join(lines))
-
-
-func _load_or_create_store() -> MemoryStore:
-	if ResourceLoader.exists(MemoryStore.SAVE_PATH):
-		return load(MemoryStore.SAVE_PATH) as MemoryStore
-	
-	var store := MemoryStore.new()
-	store.save()
-	return store

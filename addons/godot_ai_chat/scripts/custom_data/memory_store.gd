@@ -5,7 +5,6 @@ extends Resource
 ## 记忆仓库
 ## 管理所有记忆条目的存储、检索、召回。
 
-const SAVE_PATH: String = PluginPaths.PLUGIN_DIR + "memory_store.tres"
 
 ## 类型排序权重（数值越小越靠前）
 const TYPE_ORDER: Dictionary = {
@@ -178,8 +177,19 @@ func get_topics(p_workspace_path: String = "") -> Dictionary:
 
 # --- 持久化 ---
 
+## 加载记忆仓库；文件不存在时自动创建并保存
+static func load_or_create() -> MemoryStore:
+	if ResourceLoader.exists(PluginPaths.MEMORY_STORE_PATH):
+		return load(PluginPaths.MEMORY_STORE_PATH) as MemoryStore
+	
+	var store := MemoryStore.new()
+	store.save()
+	return store
+
+
+## 保存记忆仓库
 func save() -> Error:
-	return ResourceSaver.save(self, SAVE_PATH)
+	return ResourceSaver.save(self, PluginPaths.MEMORY_STORE_PATH)
 
 
 # --- 内部方法 ---

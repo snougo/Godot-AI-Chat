@@ -3,11 +3,6 @@ extends AiTool
 
 ## 创建新的技能文件夹结构并生成 Skill.md 文件及对应的 AiSkill 资源文件。
 
-# --- Enums / Constants ---
-
-## 技能基础路径
-const SKILLS_BASE_PATH: String = "res://addons/godot_ai_chat/skills/"
-
 
 # --- Built-in Functions ---
 
@@ -50,7 +45,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if validation_result.is_fail():
 		return validation_result
 	
-	var target_folder: String = SKILLS_BASE_PATH.path_join(skill_folder_name)
+	var target_folder: String = PluginPaths.SKILLS_DIR.path_join(skill_folder_name)
 	
 	var base_check_result: ToolResult = _check_base_directory()
 	if base_check_result.is_fail():
@@ -77,8 +72,8 @@ func _validate_folder_name(p_folder_name: String) -> ToolResult:
 # 检查基础目录是否存在
 # [return]: 检查结果字典
 func _check_base_directory() -> ToolResult:
-	if not DirAccess.dir_exists_absolute(SKILLS_BASE_PATH):
-		return ToolResult.fail("Error: Base skills directory does not exist at " + SKILLS_BASE_PATH)
+	if not DirAccess.dir_exists_absolute(PluginPaths.SKILLS_DIR):
+		return ToolResult.fail("Error: Base skills directory does not exist at " + PluginPaths.SKILLS_DIR)
 	return ToolResult.ok("")
 
 
@@ -152,7 +147,7 @@ func _create_sub_agent_config(p_target_folder: String) -> ToolResult:
 	# 设置一些合理默认值
 	config.api_provider = "OpenAI-ChatCompletions"
 	
-	var config_path: String = p_target_folder.path_join("sub_agent_config.tres")
+	var config_path: String = p_target_folder.path_join(PluginPaths.SKILL_CONFIG_FILE_NAME)
 	var err: Error = ResourceSaver.save(config, config_path)
 	if err != OK:
 		return ToolResult.fail("Error: saving sub_agent_config: " + str(err))
@@ -186,7 +181,7 @@ func _create_skill_resource(p_target_folder: String, p_skill_md_content: String)
 	resource.instruction_file = p_target_folder.path_join("Skill.md")
 	resource.tools = []
 	
-	var config_path: String = p_target_folder.path_join("sub_agent_config.tres")
+	var config_path: String = p_target_folder.path_join(PluginPaths.SKILL_CONFIG_FILE_NAME)
 	if FileAccess.file_exists(config_path):
 		resource.sub_agent_config = load(config_path)
 	

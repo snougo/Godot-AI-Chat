@@ -26,7 +26,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if mem_id < 1:
 		return ToolResult.fail("Error: A valid 'id' (positive integer) is required.")
 	
-	var store := _load_or_create_store()
+	var store := MemoryStore.load_or_create()
 	
 	# 先查找记忆条目，用于反馈信息
 	var target_entry: MemoryEntry = null
@@ -59,12 +59,3 @@ func execute(p_args: Dictionary) -> ToolResult:
 	result += "Scope: %s" % deleted_scope
 	
 	return ToolResult.ok(result)
-
-
-func _load_or_create_store() -> MemoryStore:
-	if ResourceLoader.exists(MemoryStore.SAVE_PATH):
-		return load(MemoryStore.SAVE_PATH) as MemoryStore
-	
-	var store := MemoryStore.new()
-	store.save()
-	return store

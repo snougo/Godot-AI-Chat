@@ -69,7 +69,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if topic.is_empty():
 		return ToolResult.fail("Error: topic is required. Use get_memory_topics to see existing topics or create a new one.")
 	
-	var store := _load_or_create_store()
+	var store := MemoryStore.load_or_create()
 	var entry := store.add_entry(title, content, memory_type, scope, workspace_path, "", topic)
 	
 	if not entry:
@@ -88,12 +88,3 @@ func execute(p_args: Dictionary) -> ToolResult:
 	result += "Content: %s" % entry.content
 	
 	return ToolResult.ok(result)
-
-
-func _load_or_create_store() -> MemoryStore:
-	if ResourceLoader.exists(MemoryStore.SAVE_PATH):
-		return load(MemoryStore.SAVE_PATH) as MemoryStore
-	
-	var store := MemoryStore.new()
-	store.save()
-	return store

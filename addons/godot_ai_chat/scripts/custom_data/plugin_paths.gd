@@ -18,6 +18,9 @@ const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings_config.tres"
 ## 上下文压缩配置资源文件路径
 const COMPRESSION_CONFIG_PATH: String = PLUGIN_DIR + "context_compression_config.tres"
 
+## SubAgent 全局配置资源文件路径
+const SUB_AGENT_CONFIG_PATH: String = PLUGIN_DIR + "sub_agent_config.tres"
+
 ## 默认工作区路径
 const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 
@@ -26,6 +29,9 @@ const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 ## 聊天会话存档目录
 const SESSION_DIR: String = PLUGIN_DIR + "chat_sessions/"
 
+## 记忆仓库资源文件路径
+const MEMORY_STORE_PATH: String = PLUGIN_DIR + "memory_store.tres"
+
 ## 编辑器脚本回滚备份目录（位于项目根目录，持久保存）
 const BACKUP_DIR: String = "res://rollback_files/"
 
@@ -33,6 +39,9 @@ const BACKUP_DIR: String = "res://rollback_files/"
 
 ## 技能目录
 const SKILLS_DIR: String = PLUGIN_DIR + "skills/"
+
+## 技能文件夹内的 SubAgent 配置文件固定文件名（每技能一个）
+const SKILL_CONFIG_FILE_NAME: String = "sub_agent_config.tres"
 
 # --- Assets ---
 

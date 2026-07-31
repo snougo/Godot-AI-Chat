@@ -606,7 +606,7 @@ func _wrap_code(p_code: String) -> String:
 
 func _compile_script(p_code: String) -> GDScript:
 	_last_compile_error = ""
-	var editor_log: RichTextLabel = _get_editor_log()
+	var editor_log: RichTextLabel = EditorConsoleReader.output_label()
 	var before_text: String = editor_log.get_parsed_text() if editor_log else ""
 	var script: GDScript = GDScript.new()
 	script.source_code = p_code
@@ -615,7 +615,7 @@ func _compile_script(p_code: String) -> GDScript:
 	if err != OK:
 		if editor_log:
 			var after_text: String = editor_log.get_parsed_text()
-			var captured: String = _capture_editor_log_error(before_text, after_text)
+			var captured: String = EditorConsoleReader.capture_error_delta(before_text, after_text)
 			if not captured.is_empty():
 				_last_compile_error = captured
 		printerr("[run_editor_script] Compilation error: ", err)
@@ -685,68 +685,6 @@ func _diff_snapshots(p_before: Dictionary, p_after: Dictionary) -> Dictionary:
 			deleted.append(path)
 	
 	return {"created": created, "modified": modified, "deleted": deleted}
-
-
-# ============================================================================
-# EditorLog Error Capture
-# ============================================================================
-
-func _get_editor_log() -> RichTextLabel:
-	if not Engine.is_editor_hint():
-		return null
-	
-	var base_control: Control = EditorInterface.get_base_control()
-	if not base_control:
-		return null
-	
-	var logs: Array[Node] = base_control.find_children("*", "EditorLog", true, false)
-	for log_node in logs:
-		var rtls: Array[Node] = log_node.find_children("*", "RichTextLabel", true, false)
-		if rtls.size() > 0:
-			return rtls[0] as RichTextLabel
-	
-	var output_node: Node = base_control.find_child("Output", true, false)
-	if output_node:
-		var rtls: Array[Node] = output_node.find_children("*", "RichTextLabel", true, false)
-		if rtls.size() > 0:
-			return rtls[0] as RichTextLabel
-	
-	var log: RichTextLabel = base_control.find_child("EditorLog", true, false) as RichTextLabel
-	if log:
-		return log
-	
-	return null
-
-
-func _capture_editor_log_error(p_before: String, p_after: String) -> String:
-	var new_text: String = ""
-	if p_after.length() > p_before.length():
-		new_text = p_after.substr(p_before.length())
-	elif p_before.is_empty():
-		new_text = p_after
-	
-	new_text = new_text.strip_edges()
-	if new_text.is_empty():
-		return ""
-	
-	var lines: PackedStringArray = new_text.split("\n")
-	var filtered: PackedStringArray = []
-	for line in lines:
-		var trimmed: String = line.strip_edges()
-		if trimmed.is_empty():
-			continue
-		if "Parse Error" in trimmed \
-		or "Parse error" in trimmed \
-		or "Compile Error" in trimmed \
-		or "SCRIPT ERROR" in trimmed \
-		or trimmed.begins_with("  ") \
-		or trimmed.begins_with("at:"):
-			filtered.append(trimmed)
-	
-	if filtered.is_empty():
-		return new_text
-	
-	return "\n".join(filtered)
 
 
 # ============================================================================

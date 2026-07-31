@@ -32,7 +32,7 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	final_system_prompt += "========================\n\n"
 	
 	# 4. 注入记忆
-	var memory_store_path: String = MemoryStore.SAVE_PATH
+	var memory_store_path: String = PluginPaths.MEMORY_STORE_PATH
 	if ResourceLoader.exists(memory_store_path):
 		var store: MemoryStore = load(memory_store_path) as MemoryStore
 		if store and not store.entries.is_empty():
