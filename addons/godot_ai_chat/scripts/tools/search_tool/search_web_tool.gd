@@ -1,5 +1,4 @@
 @tool
-class_name WebSearchTool
 extends AiTool
 
 ## 执行在线搜索。

@@ -1,5 +1,4 @@
 @tool
-class_name WebFetchContentTool
 extends AiTool
 
 ## 网页内容抓取与提取工具
@@ -31,7 +30,7 @@ const _NOISE_TAGS: Array[String] = [
 
 
 func _init() -> void:
-	tool_name = "web_fetch_content"
+	tool_name = "fetch_web_content"
 	tool_description = "Fetches a web page and extracts its main text content. WARNING: DO NNOT USE THIS TOOL TO GET Online Godot Doc."
 
 
