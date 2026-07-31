@@ -1,7 +1,7 @@
 @tool
 extends AiTool
 
-## 跨文件批量搜索工具（相当于 grep）。
+## 代码引用定位工具：在指定文件夹的 .gd 脚本中查找某段代码符号（函数名/变量名/类名/API）的所有引用位置。
 ## 在指定文件夹内搜索所有脚本，找出包含/不包含指定代码内容的文件。
 ##
 ## 使用场景：
@@ -25,8 +25,8 @@ const MAX_FILES: int = 200
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "grep_code"
-	tool_description = "Searches all script files in target folder for specific code content matches."
+	tool_name = "find_code_references"
+	tool_description = "Searches all script files in target folder for specific code content matches(e.g., function name, variable name, class name, or API call)."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -39,7 +39,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"search": {
 				"type": "string",
-				"description": "The code text to search for. Matching is exact and case-sensitive. Single-line search only."
+				"description": "The code symbol or snippet to find. Exact and case-sensitive, single-line only."
 			}
 		},
 		"required": ["path", "search"]
