@@ -170,7 +170,7 @@ func _perform_rollback(p_backup_id: String) -> ToolResult:
 	if deleted_count > 0:
 		result += "- Deleted %d created file(s)\n" % deleted_count
 	if restored_count > 0:
-		result += "- Restored %d file(s) (modified + deleted)\n" % restored_count
+		result += "- Restored %d file(s)\n" % restored_count
 	if skipped_count > 0:
 		result += "- %d file(s) skipped (no backup content or already missing)\n" % skipped_count
 	if not errors.is_empty():
@@ -181,7 +181,7 @@ func _perform_rollback(p_backup_id: String) -> ToolResult:
 	if errors.is_empty():
 		result += "\nBackup file has been removed."
 	else:
-		result += "\n⚠️ **Backup preserved for manual recovery:** `%s`" % backup_path
+		result += "\n**Backup preserved for manual recovery:** `%s`" % backup_path
 	
 	ToolBox.refresh_editor_filesystem()
 	

@@ -372,8 +372,13 @@ func _build_path_var_table(p_code: String) -> Dictionary:
 # 检查 API 调用的路径参数是否合法。
 # 返回空字符串表示放行，非空字符串为违规描述。
 func _check_path_argument(p_arg: String, p_path_vars: Dictionary, p_declared: Array, p_call_name: String) -> String:
-	# 1. 字符串字面量 → 已由 L1C 验证，放行
+	# 1. 字符串字面量 → 必须 res:// 开头且在声明集
 	if p_arg.begins_with('"') or p_arg.begins_with("'"):
+		var literal: String = p_arg.substr(1, p_arg.length() - 2)
+		if not literal.begins_with("res://"):
+			return "%s uses non-res:// path `%s` — only project paths are allowed." % [p_call_name, literal]
+		if literal not in p_declared:
+			return "%s uses path `%s` not in declared file_paths." % [p_call_name, literal]
 		return ""
 	
 	# 2. 变量名 → 查路径变量映射表
@@ -646,7 +651,19 @@ func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary) -> void:
 		if dir.current_is_dir():
 			_collect_files_recursive(full_path + "/", p_snapshot)
 		else:
-			p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
+			# 大文件用 mtime 兜底（几乎不会被编辑器脚本修改），其余用内容哈希
+			var file: FileAccess = FileAccess.open(full_path, FileAccess.READ)
+			if file:
+				var size: int = file.get_length()
+				file.close()
+				if size > MAX_BACKUP_SIZE:
+					p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
+				else:
+					p_snapshot[full_path] = FileAccess.get_md5(full_path)
+			else:
+				# 打开失败兜底（正常不会发生）
+				p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
+		
 		item = dir.get_next()
 	
 	dir.list_dir_end()
@@ -738,7 +755,14 @@ func _capture_editor_log_error(p_before: String, p_after: String) -> String:
 
 func _generate_backup_id() -> String:
 	var dt: Dictionary = Time.get_datetime_dict_from_system()
-	return "rollback_%04d%02d%02d_%02d%02d%02d" % [dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second]
+	var base: String = "rollback_%04d%02d%02d_%02d%02d%02d" % [dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second]
+	var id: String = base
+	var counter: int = 1
+	# 同秒碰撞防护：目标文件已存在则追加序号，保证目录内唯一
+	while FileAccess.file_exists(PluginPaths.BACKUP_DIR + id + ".tres"):
+		id = "%s_%02d" % [base, counter]
+		counter += 1
+	return id
 
 
 func _save_backup_to_disk(p_backup_id: String, p_code: String, p_file_paths: Array, p_files: Dictionary) -> void:
