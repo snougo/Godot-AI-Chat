@@ -49,6 +49,9 @@ const ROLE_TOOL: String = "tool"
 ## [Gemini 专用] 用于在多轮工具调用中维持 Gemini 的思维链签名
 @export var gemini_thought_signature: String = ""
 
+## [Anthropic 专用] 存储 thinking 块的签名（extended thinking 多轮对话回传必需）
+@export var thinking_signature: String = ""
+
 
 # --- Built-in Functions ---
 

@@ -72,17 +72,27 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 	
 	if json is Dictionary:
 		if json.has("choices") and not json.choices.is_empty():
-			var msg: Dictionary = json.choices[0].get("message", {})
-			var result: Dictionary = {
-				"content": msg.get("content", ""),
-				"tool_calls": msg.get("tool_calls", []),
-				"role": msg.get("role", "assistant")
-			}
-			
-			if msg.has("reasoning_content"):
-				result["reasoning_content"] = msg.reasoning_content
-			
-			return result
+			# [修复 P2] 防御：choices[0] 可能不是 Dictionary
+			var choice: Variant = json.choices[0]
+			if choice is Dictionary:
+				var msg: Dictionary = choice.get("message", {})
+				# [修复 P2] 防御：message.content / tool_calls 可能是 JSON null
+				var content: Variant = msg.get("content", "")
+				var tool_calls: Variant = msg.get("tool_calls", [])
+				var result: Dictionary = {
+					"content": content if content is String else "",
+					"tool_calls": tool_calls if tool_calls is Array else [],
+					"role": msg.get("role", "assistant")
+				}
+				
+				if msg.has("reasoning_content") and msg.reasoning_content is String:
+					result["reasoning_content"] = msg.reasoning_content
+				
+				# [修复 P3] 透传非流式 usage（Chat Completions 本身就是 prompt/completion 格式）
+				if json.has("usage") and json["usage"] is Dictionary:
+					result["usage"] = json["usage"]
+				
+				return result
 		elif json.has("error"):
 			return {"error": str(json.error), "raw": json_str}
 	
@@ -176,10 +186,6 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 		if p_msg.role == "tool" and final_content.is_empty():
 			final_content = "SUCCESS"
 		
-		# [兼容性策略] Assistant 消息如果有 ToolCall，content 必须存在
-		elif p_msg.role == "assistant" and not p_msg.tool_calls.is_empty() and final_content.is_empty():
-			final_content = ""
-		
 		dict["content"] = final_content
 	
 	# 3. Name 字段
@@ -191,8 +197,18 @@ func _convert_message_to_api_format(p_msg: ChatMessage) -> Dictionary:
 		var valid_calls: Array = []
 		for tc in p_msg.tool_calls:
 			if tc.get("id", "") != "":
-				if not tc.has("type"): tc["type"] = "function"
-				valid_calls.append(tc)
+				# [修复 P1] 构造新字典，只保留 Chat Completions 需要的字段，
+				# 避免把 Responses Provider 的内部字段（如 item_id）透传给 API
+				var func_data: Variant = tc.get("function", {})
+				var func_dict: Dictionary = func_data if func_data is Dictionary else {}
+				valid_calls.append({
+					"id": tc.get("id", ""),
+					"type": "function",
+					"function": {
+						"name": func_dict.get("name", ""),
+						"arguments": func_dict.get("arguments", "")
+					}
+				})
 		
 		if not valid_calls.is_empty():
 			dict["tool_calls"] = valid_calls

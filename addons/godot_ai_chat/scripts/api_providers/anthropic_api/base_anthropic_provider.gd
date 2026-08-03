@@ -6,6 +6,15 @@ extends BaseLLMProvider
 ##
 ## 处理 Claude 系列模型的 Message API 格式构建和 SSE 流式响应解析。
 
+# --- Constants ---
+
+## 第三方兼容服务（如 DeepSeek Anthropic 端点）可能不支持 system 数组 + cache_control 格式
+## 若收到 400 报错，改为 false 回退为字符串 system
+const USE_SYSTEM_CACHE_CONTROL := true
+## 同理，部分网关不接受 tools 内的 cache_control
+const USE_TOOLS_CACHE_CONTROL := true
+
+
 # --- Private Vars ---
 
 var _stream_tool_index_map: Dictionary = {}
@@ -46,43 +55,29 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		"model": p_model_name,
 		"messages": api_messages,
 		"temperature": snappedf(p_temperature, 0.1),
-		"max_tokens": 8192, # [优化] 改为 8192，确保官方 API 不会因为上限越界而报错
+		"max_tokens": _resolve_max_tokens(p_model_name),
 		"stream": p_stream
 	}
 	
-	#if not system_prompt.is_empty():
-		#body["system"] = system_prompt
-	
 	if not system_prompt.is_empty():
-		# 使用数组格式并标记 cache_control，启用 Anthropic Prompt Caching
-		body["system"] = [
-			{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
-		]
+		if USE_SYSTEM_CACHE_CONTROL:
+			# 使用数组格式并标记 cache_control，启用 Anthropic Prompt Caching
+			body["system"] = [
+				{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}
+			]
+		else:
+			body["system"] = system_prompt
 	
-	# 工具定义：仅在工具结果回传时跳过，其他情况正常发送
+	# 工具定义：LLM API 无状态，每个请求都必须携带完整 tools 定义
+	# （包括工具结果回传后的后续请求，否则模型会退化为文本格式模拟工具调用）
 	if not p_tool_definitions.is_empty():
-		# 检查最后一条非 system 消息是否为 tool（工具结果待回传）
-		var skip_tools: bool = false
-		for i in range(p_messages.size() - 1, -1, -1):
-			var msg: ChatMessage = p_messages[i]
-			if msg.role == ChatMessage.ROLE_SYSTEM:
-				continue
-			skip_tools = (msg.role == ChatMessage.ROLE_TOOL)
-			break
-		
-		#if not skip_tools:
-			#var anthropic_tools: Array = []
-			#for tool_def in p_tool_definitions:
-				#anthropic_tools.append(_convert_tool_definition(tool_def))
-			#body["tools"] = anthropic_tools
-		
-		if not skip_tools:
-			var anthropic_tools: Array = []
-			for tool_def in p_tool_definitions:
-				var tool: Dictionary = _convert_tool_definition(tool_def)
+		var anthropic_tools: Array = []
+		for tool_def in p_tool_definitions:
+			var tool: Dictionary = _convert_tool_definition(tool_def)
+			if USE_TOOLS_CACHE_CONTROL:
 				tool["cache_control"] = {"type": "ephemeral"}
-				anthropic_tools.append(tool)
-			body["tools"] = anthropic_tools
+			anthropic_tools.append(tool)
+		body["tools"] = anthropic_tools
 	
 	return body
 
@@ -148,15 +143,20 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -
 				ui_update.usage = _current_stream_usage.duplicate()
 		
 		"content_block_start":
-			var block_type: String = p_chunk_data.get("content_block", {}).get("type", "")
+			var block: Dictionary = p_chunk_data.get("content_block", {})
+			var block_type: String = block.get("type", "")
 			if block_type == "tool_use":
-				var block: Dictionary = p_chunk_data.content_block
 				p_target_msg.tool_calls.append({
 					"id": block.get("id", ""),
 					"type": "function",
 					"function": { "name": block.get("name", ""), "arguments": "" }
 				})
 				_stream_tool_index_map[index] = p_target_msg.tool_calls.size() - 1
+			elif block_type == "thinking":
+				# 捕获 thinking 块签名（extended thinking 多轮回传必需，缺失会报 400）
+				var sig: String = block.get("signature", "")
+				if not sig.is_empty():
+					p_target_msg.thinking_signature = sig
 		
 		"content_block_delta":
 			var delta: Dictionary = p_chunk_data.get("delta", {})
@@ -215,11 +215,23 @@ func _normalize_anthropic_messages(messages: Array[Dictionary]) -> Array[Diction
 			var last_msg: Dictionary = merged.back()
 			if last_msg.role == msg.role:
 				changed = true
-				var c1: Array = last_msg.content if last_msg.content is Array else [{"type": "text", "text": last_msg.content}]
-				var c2: Array = msg.content if msg.content is Array else[{"type": "text", "text": msg.content}]
+				var c1: Array = _to_content_blocks(last_msg.content)
+				var c2: Array = _to_content_blocks(msg.content)
 				last_msg.content = c1 + c2
+				if msg.role == "user":
+					# Anthropic 规则：tool_result 块必须位于 user 消息所有文本块之前
+					# 重排合并结果：tool_result 全部前置（保持相对顺序），其余块保持原顺序
+					var tool_results: Array = []
+					var others: Array = []
+					for b in last_msg.content:
+						if b is Dictionary and b.get("type") == "tool_result":
+							tool_results.append(b)
+						else:
+							others.append(b)
+					last_msg.content = tool_results + others
 			else:
 				merged.append(msg)
+		
 		result = merged
 		
 		# 2. 清理孤立的 tool_use 和 tool_result
@@ -269,6 +281,15 @@ func _normalize_anthropic_messages(messages: Array[Dictionary]) -> Array[Diction
 		var no_empty: Array[Dictionary] =[]
 		for msg in result:
 			if msg.content is Array:
+				# 过滤数组内的空文本块（Anthropic 禁止空 text 块，会报 400）
+				var filtered: Array = []
+				for b in msg.content:
+					if b is Dictionary and b.get("type") == "text" and String(b.get("text", "")).is_empty():
+						changed = true
+						continue
+					filtered.append(b)
+				msg.content = filtered
+				
 				if msg.content.is_empty():
 					changed = true
 					continue
@@ -278,6 +299,7 @@ func _normalize_anthropic_messages(messages: Array[Dictionary]) -> Array[Diction
 				changed = true
 				continue
 			no_empty.append(msg)
+		
 		result = no_empty
 	
 	return result
@@ -301,6 +323,13 @@ func _normalize_usage(p_usage: Dictionary) -> Dictionary:
 	if result.has("prompt_tokens") and result.has("completion_tokens"):
 		result.total_tokens = result.prompt_tokens + result.completion_tokens
 	return result
+
+
+# 将消息 content 统一转为内容块数组（字符串转 text 块，数组原样返回）
+func _to_content_blocks(p_content: Variant) -> Array:
+	if p_content is Array:
+		return p_content
+	return [{"type": "text", "text": p_content}]
 
 
 func _convert_tool_definition(p_openai_tool: Dictionary) -> Dictionary:
@@ -364,7 +393,10 @@ func _build_assistant_content(p_msg: ChatMessage) -> Variant:
 	
 	var content_array: Array = []
 	if not p_msg.reasoning_content.is_empty():
-		content_array.append({ "type": "thinking", "thinking": p_msg.reasoning_content })
+		var thinking_block: Dictionary = { "type": "thinking", "thinking": p_msg.reasoning_content }
+		if not p_msg.thinking_signature.is_empty():
+			thinking_block.signature = p_msg.thinking_signature
+		content_array.append(thinking_block)
 	
 	if not p_msg.content.is_empty():
 		content_array.append({ "type": "text", "text": p_msg.content })
@@ -388,3 +420,11 @@ func _build_assistant_content(p_msg: ChatMessage) -> Variant:
 		})
 	
 	return content_array
+
+
+# 按模型解析 max_tokens（官方 API 中该字段必填，且不能超过模型上限）
+func _resolve_max_tokens(p_model_name: String) -> int:
+	# 旧版 haiku 上限较低，其余现代模型均支持 8192+
+	if p_model_name.begins_with("claude-3-haiku"):
+		return 4096
+	return 8192

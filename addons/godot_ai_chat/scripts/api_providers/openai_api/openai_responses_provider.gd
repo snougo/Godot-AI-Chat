@@ -24,10 +24,22 @@ func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: Strin
 	if base.ends_with("/"):
 		base = base.substr(0, base.length() - 1)
 	
+	# 模型列表请求
 	if p_model_name.is_empty():
-		return base + "/v1/models"
+		if base.ends_with("/responses"):
+			return base.replace("/responses", "/models")
+		elif base.ends_with("/v1"):
+			return base + "/models"
+		else:
+			return base + "/v1/models"
 	
-	return base + "/v1/responses"
+	# 正常聊天请求
+	if base.ends_with("/responses"):
+		return base
+	elif base.ends_with("/v1"):
+		return base + "/responses"
+	else:
+		return base + "/v1/responses"
 
 
 ## 构建请求体 (Body) — Responses API 格式
@@ -37,7 +49,7 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 		"stream": p_stream,
 		"temperature": snappedf(p_temperature, 0.1)
 	}
-
+	
 	# 工具定义（Chat Completions 嵌套格式 → Responses API 扁平格式）
 	if not p_tool_definitions.is_empty():
 		var responses_tools: Array = []
@@ -52,21 +64,21 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 				})
 			else:
 				responses_tools.append(tool)
-
+		
 		if not responses_tools.is_empty():
 			body["tools"] = responses_tools
-
+	
 	# 提取 instructions + 构建 input 数组
 	var instructions: String = ""
 	var input_items: Array = []
-
+	
 	for msg in p_messages:
 		match msg.role:
 			ChatMessage.ROLE_SYSTEM:
 				if not instructions.is_empty():
 					instructions += "\n\n"
 				instructions += msg.content
-
+			
 			ChatMessage.ROLE_USER:
 				var user_item: Dictionary = {
 					"type": "message",
@@ -87,28 +99,40 @@ func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_
 						})
 					user_item["content"] = content_array
 				input_items.append(user_item)
-
+			
 			ChatMessage.ROLE_ASSISTANT:
-				# 只添加纯文本助手消息（工具调用结果由 function_call_output 表示）
-				if msg.tool_calls.is_empty() and not msg.content.is_empty():
+				# [修复 Bug 3] 文本部分与工具调用部分分别回传
+				# 1) 文本部分：模型调用工具前的说明文字不能丢弃
+				if not msg.content.is_empty():
 					input_items.append({
 						"type": "message",
 						"role": "assistant",
 						"content": msg.content
 					})
-
+				
+				# 2) 工具调用部分：每个 tool_call 回传为 function_call item
+				#    （与后续 function_call_output 通过 call_id 配对，符合官方规范）
+				for tc in msg.tool_calls:
+					var call_id: String = tc.get("id", tc.get("call_id", ""))
+					var func_data: Dictionary = tc.get("function", {})
+					input_items.append({
+						"type": "function_call",
+						"call_id": call_id,
+						"name": func_data.get("name", ""),
+						"arguments": func_data.get("arguments", "{}")
+					})
+			
 			ChatMessage.ROLE_TOOL:
 				input_items.append({
 					"type": "function_call_output",
 					"call_id": msg.tool_call_id,
 					"output": msg.content
 				})
-
+	
 	if not instructions.is_empty():
 		body["instructions"] = instructions
-
+	
 	body["input"] = input_items if not input_items.is_empty() else ""
-
 	return body
 
 
@@ -139,6 +163,34 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 			ui_update["content_delta"] = delta
 		return ui_update
 	
+	# 1.5 推理摘要增量 (response.reasoning_summary_text.delta)
+	# [修复 Bug 6] 补上缺失的 reasoning 流式事件，让思考内容实时显示
+	if event_type == "response.reasoning_summary_text.delta":
+		var reasoning_delta: String = p_raw_chunk.get("delta", "")
+		if not reasoning_delta.is_empty():
+			p_target_msg.reasoning_content += reasoning_delta
+			ui_update["reasoning_delta"] = reasoning_delta
+		return ui_update
+	
+	# 1.6 推理完整文本增量 (response.reasoning_text.delta)
+	# [修复] gpt-oss 等模型使用此事件而非 reasoning_summary_text.delta
+	if event_type == "response.reasoning_text.delta":
+		var reasoning_delta: String = p_raw_chunk.get("delta", "")
+		if not reasoning_delta.is_empty():
+			p_target_msg.reasoning_content += reasoning_delta
+			ui_update["reasoning_delta"] = reasoning_delta
+		return ui_update
+	
+	# 1.7 推理摘要完成 (response.reasoning_summary_text.done) — 部分端点只发此事件
+	if event_type == "response.reasoning_summary_text.done":
+		var full_text: String = p_raw_chunk.get("text", "")
+		var already: int = p_target_msg.reasoning_content.length()
+		if full_text.length() > already:
+			var new_part: String = full_text.substr(already)
+			p_target_msg.reasoning_content += new_part
+			ui_update["reasoning_delta"] = new_part
+		return ui_update
+	
 	# 2. 新 Item 添加 (response.output_item.added)
 	if event_type == "response.output_item.added":
 		var item: Dictionary = p_raw_chunk.get("item", {})
@@ -147,6 +199,8 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 			var call_id: String = item.get("call_id", item.get("id", ""))
 			var tool_call: Dictionary = {
 				"id": call_id,
+				# [修复 Bug 1] 额外保存 item.id（fc_xxx），供后续 delta/done 事件匹配
+				"item_id": item.get("id", ""),
 				"type": "function",
 				"function": {
 					"name": item.get("name", ""),
@@ -169,11 +223,13 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 		if not delta.is_empty():
 			var found: bool = false
 			for tc in p_target_msg.tool_calls:
-				if tc.get("id") == item_id:
+				# [修复 Bug 1] item_id 对应 item.id（fc_xxx），同时兼容 id（call_xxx）
+				if tc.get("item_id", "") == item_id or tc.get("id", "") == item_id:
 					tc.function.arguments += delta
 					found = true
 					break
 			
+			# 兜底：服务端可能省略 item_id，仍回退到最后一个（单工具调用场景）
 			if not found and not p_target_msg.tool_calls.is_empty():
 				p_target_msg.tool_calls[-1].function.arguments += delta
 		
@@ -185,10 +241,17 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 		var arguments: String = p_raw_chunk.get("arguments", "")
 		
 		if not arguments.is_empty():
+			var found: bool = false
 			for tc in p_target_msg.tool_calls:
-				if tc.get("id") == item_id:
+				# [修复 Bug 1] 同上：匹配 item_id 或 id
+				if tc.get("item_id", "") == item_id or tc.get("id", "") == item_id:
 					tc.function.arguments = arguments
+					found = true
 					break
+			
+			# [修复 Bug 7] 补上与 delta 分支一致的兜底逻辑
+			if not found and not p_target_msg.tool_calls.is_empty():
+				p_target_msg.tool_calls[-1].function.arguments = arguments
 		
 		ui_update["tool_call_completed"] = true
 		return ui_update
@@ -199,6 +262,7 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 		
 		if item.get("type") == "function_call":
 			if item.has("arguments"):
+				# 此分支原本就用 call_id 匹配，是正确的，保持不变
 				var call_id: String = item.get("call_id", item.get("id", ""))
 				for tc in p_target_msg.tool_calls:
 					if tc.get("id") == call_id:
@@ -208,9 +272,16 @@ func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) ->
 		
 		elif item.get("type") == "reasoning":
 			if item.has("summary") and item.summary is Array:
+				var summary_text: String = ""
 				for s in item.summary:
-					if s.get("type") == "summary_text":
-						p_target_msg.reasoning_content += s.get("text", "")
+					if s is Dictionary and s.get("type") == "summary_text":
+						summary_text += s.get("text", "")
+				# 已通过流式 delta 累积的部分不重复追加
+				var already: int = p_target_msg.reasoning_content.length()
+				if summary_text.length() > already:
+					var new_part: String = summary_text.substr(already)
+					p_target_msg.reasoning_content += new_part
+					ui_update["reasoning_delta"] = new_part
 			ui_update["reasoning_completed"] = true
 		
 		return ui_update
@@ -252,11 +323,15 @@ func _parse_output_items(p_json: Dictionary) -> Dictionary:
 				for block in content_arr:
 					if block.get("type") == "output_text":
 						content += block.get("text", "")
+			
 			"reasoning":
-				var summary_arr: Array = item.get("summary", [])
-				for s in summary_arr:
-					if s.get("type") == "summary_text":
-						reasoning += s.get("text", "")
+				# [修复 Bug 5] 增加类型检查，避免 summary 非数组时强转报错
+				var summary: Variant = item.get("summary", [])
+				if summary is Array:
+					for s in summary:
+						if s is Dictionary and s.get("type") == "summary_text":
+							reasoning += s.get("text", "")
+			
 			"function_call":
 				tool_calls.append({
 					"id": item.get("call_id", ""),
@@ -279,7 +354,13 @@ func _parse_output_items(p_json: Dictionary) -> Dictionary:
 	if p_json.has("id"):
 		result["response_id"] = p_json["id"]
 	
-	if p_json.has("usage"):
-		result["usage"] = p_json["usage"]
+	if p_json.has("usage") and p_json["usage"] is Dictionary:
+		# [修复 Bug 4] 统一映射为与流式一致的内部格式
+		var usage_obj: Dictionary = p_json["usage"]
+		result["usage"] = {
+			"prompt_tokens": usage_obj.get("input_tokens", 0),
+			"completion_tokens": usage_obj.get("output_tokens", 0),
+			"total_tokens": usage_obj.get("total_tokens", 0)
+		}
 	
 	return result

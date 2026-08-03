@@ -596,7 +596,7 @@ func _wrap_code(p_code: String) -> String:
 	if "extends EditorScript" not in clean_code:
 		clean_code = "extends EditorScript\n\n" + clean_code
 	
-	var class_name_regex: RegEx = RegEx.create_from_string("(?m)^class_name\\s+\\w+\\s*$")
+	var class_name_regex: RegEx = RegEx.create_from_string("(?m)^class_name\\s+\\w+(?:\\s*#.*)?$")
 	clean_code = class_name_regex.sub(clean_code, "", true)
 	if not clean_code.begins_with("@tool"):
 		clean_code = "@tool\n" + clean_code

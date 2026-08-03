@@ -58,8 +58,20 @@ static func normalize_zhipu_url(p_input_url: String) -> String:
 ## [return]: {protocol: String, host: String, port: int, path: String}
 static func parse_url(p_url: String) -> Dictionary:
 	var protocol_pos: int = p_url.find("://")
-	var protocol: String = p_url.substr(0, protocol_pos)
-	var rest: String = p_url.substr(protocol_pos + 3)
+	# [修复] 无协议头时显式指定协议，避免 protocol 为垃圾值导致 TLS 判定异常
+	var protocol: String = p_url.substr(0, protocol_pos) if protocol_pos != -1 else "http"
+	var rest: String = p_url.substr(protocol_pos + 3) if protocol_pos != -1 else p_url
+	
+	# [修复] 先剥离 fragment/query，避免 query 并入 host 导致 DNS 解析失败
+	var frag_pos: int = rest.find("#")
+	if frag_pos != -1:
+		rest = rest.substr(0, frag_pos)
+	var query: String = ""
+	var query_pos: int = rest.find("?")
+	if query_pos != -1:
+		query = rest.substr(query_pos + 1)
+		rest = rest.substr(0, query_pos)
+	
 	var host_end: int = rest.find("/")
 	var host: String = rest.substr(0, host_end) if host_end != -1 else rest
 	var path: String = rest.substr(host_end) if host_end != -1 else "/"
@@ -69,6 +81,10 @@ static func parse_url(p_url: String) -> Dictionary:
 		var parts: PackedStringArray = host.split(":")
 		host = parts[0]
 		port = parts[1].to_int()
+	
+	# [修复] query 需拼回 path（HTTPClient 请求行应包含 query string）
+	if not query.is_empty():
+		path += "?" + query
 	
 	return {
 		"protocol": protocol,

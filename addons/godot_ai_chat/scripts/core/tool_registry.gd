@@ -24,10 +24,13 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/check_todo_list_tool.gd",
 	
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_pr_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_repo_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_web_content_tool.gd",
+	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_godot_api_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_web_content_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_godot_source_tool.gd",
+	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/find_code_references_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",

@@ -13,7 +13,12 @@ extends BaseAnthropicProvider
 
 # --- Constants ---
 
-#const ANTHROPIC_API_VERSION := "2023-06-01"
+const ANTHROPIC_API_VERSION := "2023-06-01"
+
+# --- Private Vars ---
+
+# 记录最近一次请求的 Base URL（NetworkManager 总是先调 get_request_url 再调 get_request_headers）
+var _last_base_url: String = ""
 
 
 # --- Public Functions ---
@@ -22,16 +27,24 @@ extends BaseAnthropicProvider
 ## 警告：p_api_key 包含敏感信息，切勿记录到日志
 func get_request_headers(p_api_key: String, _p_stream: bool) -> PackedStringArray:
 	var headers: PackedStringArray = []
-	# 大多数兼容 API (如 OpenRouter, OneAPI) 使用标准 Bearer Token
-	headers.append("Authorization: Bearer " + p_api_key)
-	# 部分网关可能还需要 anthropic-version，加上比较保险
-	#headers.append("anthropic-version: " + ANTHROPIC_API_VERSION)
+	
+	if _is_official_anthropic(_last_base_url):
+		# 官方 Anthropic API：必须使用 x-api-key + anthropic-version，不认 Bearer
+		headers.append("x-api-key: " + p_api_key)
+		headers.append("anthropic-version: " + ANTHROPIC_API_VERSION)
+	else:
+		# 兼容网关 (如 OpenRouter, OneAPI) 使用标准 Bearer Token
+		headers.append("Authorization: Bearer " + p_api_key)
+		# 部分网关可能还需要 anthropic-version，加上比较保险
+		#headers.append("anthropic-version: " + ANTHROPIC_API_VERSION)
+	
 	headers.append("Content-Type: application/json")
 	return headers
 
 
 ## 获取请求的 URL
 func get_request_url(p_base_url: String, p_model: String, _p_key: String, _p_stream: bool) -> String:
+	_last_base_url = p_base_url
 	# 如果 model 为空，通常意味着这是在请求模型列表 (NetworkManager.get_model_list)
 	# 或者是某些特殊的检查。
 	# 大多数兼容网关使用 /v1/models 来获取列表
@@ -99,3 +112,9 @@ func _build_url(p_base: String, p_endpoint: String) -> String:
 	
 	# 标准拼接：添加 /v1/endpoint
 	return url + "/v1/" + p_endpoint
+
+
+# 判断是否为官方 Anthropic API（认证方式不同）
+# 注意：企业代理/自定义域名若使用官方协议，需在此追加判断或改用手动配置
+func _is_official_anthropic(p_base_url: String) -> bool:
+	return p_base_url.contains("api.anthropic.com")

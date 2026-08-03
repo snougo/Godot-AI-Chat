@@ -56,7 +56,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		return ToolResult.fail("Error: script source is empty: %s" % path)
 	
 	# 同步编译并捕获错误
-	var error_text: String = _compile_and_capture(source, path)
+	var error_text: String = _compile_and_capture(source)
 	if error_text.is_empty():
 		return ToolResult.ok("Script compiles cleanly: %s" % path)
 	
@@ -71,15 +71,14 @@ func execute(p_args: Dictionary) -> ToolResult:
 # --- Private Functions ---
 
 # 同步编译脚本并捕获错误文本。返回空字符串表示编译成功。
-# [param p_path]: 真实文件路径，用于让错误消息显示 res:// 路径而非临时对象 ID。
-func _compile_and_capture(p_source: String, p_path: String = "") -> String:
+# 注意：不能设置 script.resource_path —— 目标脚本若已被编辑器加载（@tool / 场景引用），
+# 会触发 ResourceCache 冲突："Another resource is loaded from path ..."。
+func _compile_and_capture(p_source: String) -> String:
 	_last_compile_error = ""
 	var editor_log: RichTextLabel = EditorConsoleReader.output_label()
 	var before_text: String = editor_log.get_parsed_text() if editor_log else ""
 	var cleaned: String = _strip_class_name(p_source)
 	var script := GDScript.new()
-	if not p_path.is_empty():
-		script.resource_path = p_path
 	script.source_code = cleaned
 	
 	var err: Error = script.reload()
@@ -89,6 +88,9 @@ func _compile_and_capture(p_source: String, p_path: String = "") -> String:
 			var captured: String = EditorConsoleReader.capture_error_delta(before_text, after_text)
 			if not captured.is_empty():
 				_last_compile_error = captured
+		# 兜底：Output 面板不可用或未捕获到增量时，也不能误报"编译干净"
+		if _last_compile_error.is_empty():
+			_last_compile_error = "Compilation failed (error code: %d), but no error text could be captured from the editor Output panel." % err
 		printerr("[check_script_compile] Compilation error: ", err)
 		return _last_compile_error
 	
@@ -96,8 +98,9 @@ func _compile_and_capture(p_source: String, p_path: String = "") -> String:
 
 
 # 移除 class_name 声明（避免 reload 时注册全局类造成冲突）
+# 允许行尾注释：class_name Foo # comment
 func _strip_class_name(p_code: String) -> String:
-	var class_name_regex: RegEx = RegEx.create_from_string("(?m)^class_name\\s+\\w+\\s*$")
+	var class_name_regex: RegEx = RegEx.create_from_string("(?m)^class_name\\s+\\w+(?:\\s*#.*)?$")
 	return class_name_regex.sub(p_code, "", true)
 
 

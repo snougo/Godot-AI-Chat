@@ -196,6 +196,10 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 func cancel_stream() -> void:
 	if current_stream_request:
 		current_stream_request.cancel()
+		# [修复] 取消后立即等待任务结束并清理 WorkerThreadPool 槽位，
+		# 避免旧任务后台滞留。cancel() 已置 stop flag 并关闭连接，
+		# 任务通常在下一个 10ms 轮询周期退出，阻塞时间可忽略。
+		current_stream_request.wait_for_cleanup()
 		_clear_current_stream_request()
 
 
