@@ -583,6 +583,7 @@ func _create_code_block(p_lang: String) -> void:
 	code_edit.editable = false
 	code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
 	code_edit.scroll_fit_content_height = true
+	code_edit.custom_maximum_size.y = 600
 	code_edit.draw_tabs = true
 	code_edit.gutters_draw_line_numbers = true
 	code_edit.minimap_draw = false
