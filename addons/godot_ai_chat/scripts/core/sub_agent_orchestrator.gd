@@ -249,26 +249,31 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 		
 		if chunk.size() > 0:
 			byte_buffer.append_array(chunk)
-			var text = byte_buffer.get_string_from_utf8()
-			if not text.is_empty():
-				byte_buffer.clear()
-				text_buffer += text
-				var new_text = text_buffer.substr(processed_pos)
-				
-				var last_newline: int = new_text.rfind("\n")
-				if last_newline != -1:
-					var complete_text: String = new_text.substr(0, last_newline + 1)
-					_parse_sse_lines(complete_text, result)
-					processed_pos += complete_text.length()
-				# 没有完整行时不处理，processed_pos 保持不变，数据留在缓冲区等待下一块
-				
-				# 首 token 判定：基于实际内容，而非原始 HTTP chunk
-				if not has_received_first_chunk:
-					if not result.content.is_empty() or not result.reasoning_content.is_empty():
-						has_received_first_chunk = true
-						tracker.mark_first_token_received()
-				else:
-					tracker.mark_data_received()
+			# 保留末尾可能不完整的 UTF-8 字符字节，避免跨 chunk 解码报错与数据损坏
+			var keep: int = _incomplete_utf8_tail(byte_buffer)
+			var complete_size: int = byte_buffer.size() - keep
+			if complete_size > 0:
+				var complete: PackedByteArray = byte_buffer.slice(0, complete_size)
+				var text: String = complete.get_string_from_utf8()
+				byte_buffer = byte_buffer.slice(complete_size)  # 残留尾部留到下一 chunk
+				if not text.is_empty():
+					text_buffer += text
+					var new_text: String = text_buffer.substr(processed_pos)
+					
+					var last_newline: int = new_text.rfind("\n")
+					if last_newline != -1:
+						var complete_text: String = new_text.substr(0, last_newline + 1)
+						_parse_sse_lines(complete_text, result)
+						processed_pos += complete_text.length()
+					# 没有完整行时不处理，processed_pos 保持不变，数据留在缓冲区等待下一块
+					
+					# 首 token 判定：基于实际内容，而非原始 HTTP chunk
+					if not has_received_first_chunk:
+						if not result.content.is_empty() or not result.reasoning_content.is_empty():
+							has_received_first_chunk = true
+							tracker.mark_first_token_received()
+					else:
+						tracker.mark_data_received()
 		else:
 			# 流中停顿检测（仅在已收到实质内容后启用）
 			if has_received_first_chunk and tracker.check().timed_out:
@@ -279,6 +284,12 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 	
 	client.close()
 	
+	# 补刷 byte_buffer 中残留的不完整字符（流已结束，无更多 chunk 可拼接）
+	if byte_buffer.size() > 0:
+		var tail_text: String = byte_buffer.get_string_from_utf8()
+		if not tail_text.is_empty():
+			text_buffer += tail_text
+	
 	# 流结束时刷出缓冲区中不完整的末行（防御性处理，保障数据不丢失）
 	if processed_pos < text_buffer.length():
 		var remaining: String = text_buffer.substr(processed_pos).strip_edges()
@@ -286,6 +297,28 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 			_parse_sse_lines(remaining, result)
 	
 	return result
+
+
+# 返回缓冲区末尾不完整 UTF-8 序列的字节数（0 = 完整）
+func _incomplete_utf8_tail(p_buf: PackedByteArray) -> int:
+	var size: int = p_buf.size()
+	if size == 0:
+		return 0
+	var i: int = size - 1
+	while i >= 0 and (p_buf[i] & 0xC0) == 0x80:
+		i -= 1
+	if i < 0:
+		return mini(size, 3)  # 全为 continuation，保守保留最多 3 字节
+	var lead: int = p_buf[i]
+	var expected: int = 1
+	if (lead & 0xE0) == 0xC0:
+		expected = 2
+	elif (lead & 0xF0) == 0xE0:
+		expected = 3
+	elif (lead & 0xF8) == 0xF0:
+		expected = 4
+	var total: int = size - i
+	return total if total < expected else 0
 
 
 # 解析 SSE 数据行

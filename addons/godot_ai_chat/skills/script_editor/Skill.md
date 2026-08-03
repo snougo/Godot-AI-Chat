@@ -16,7 +16,6 @@
 ## 注意事项
 - 所有编辑操作仅对当前脚本编辑器中打开的脚本文件生效，所以确保编辑前先打开目标脚本。
 - `insert_code` 和 `delete_code` 依赖正确的上下文行号工作，因此不适合进行批量调用。
-- 保存脚本文件后，使用 `check_script_compile` 检查是否存在脚本编译问题。
 
 ## 帮助文档
 `multi_replace` 工具的详细使用说明，请查阅文档 `res://addons/godot_ai_chat/skills/script_editor/reference/multi_replace_tool_guide.md`

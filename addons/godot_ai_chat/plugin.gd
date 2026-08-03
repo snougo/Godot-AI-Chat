@@ -6,6 +6,8 @@ const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.t
 # 插件图标
 const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/icons/plugin_icon.svg")
 
+const GameDebugSessionScript := preload("res://addons/godot_ai_chat/scripts/tools/debug_tool/game_debug_session.gd")
+
 # 插件主实例
 var chat_hub_instance: Control = null
 # EditorDock 容器
@@ -15,6 +17,8 @@ func _enter_tree() -> void:
 	# 优先初始化文件系统环境
 	# 这必须在实例化任何 UI 或逻辑脚本之前完成，以确保路径有效
 	self._initialize_plugin_file_environment()
+	
+	GameDebugSessionScript.register(self)
 	
 	# 加载并实例化主界面
 	var scene: Resource = load(CHAT_HUB_SCENE_PATH)
@@ -70,6 +74,8 @@ func _exit_tree() -> void:
 	
 	# 注意：ToolRegistry 是静态的，不需要显式清理，
 	# 重新启用插件时会覆盖注册，这是安全的。
+	
+	GameDebugSessionScript.unregister(self)
 	
 	AIChatLogger.info("[Godot AI Chat] Plugin disabled.")
 
