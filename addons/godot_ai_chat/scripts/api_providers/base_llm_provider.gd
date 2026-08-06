@@ -76,6 +76,12 @@ func supports_model_list_api(p_base_url: String) -> bool:
 	return true
 
 
+## [可覆写] 当前 Provider 是否支持将工具返回的图片直接嵌入 Tool 消息
+## Gemini 原生支持 inline_data；OpenAI / Anthropic 需将图片转为独立 User 消息
+func supports_inline_tool_images() -> bool:
+	return false
+
+
 ## [可覆写] 返回静态内置模型列表（当 supports_model_list_api() 返回 false 时使用）
 func get_static_model_list() -> Array[String]:
 	return []

@@ -158,7 +158,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if not Engine.is_editor_hint():
 		return ToolResult.fail("`run_editor_script` can only be used in the Godot editor.")
 	
-	var snapshot_before: Dictionary = _collect_file_snapshot()
+	var snapshot_before: Dictionary = _collect_file_snapshot(file_paths)
 	
 	# === Layer 3: Compile and execute ===
 	var wrapped_code: String = _wrap_code(code)
@@ -173,7 +173,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	instance._run()
 	
 	# === Layer 4: Post-execution snapshot + audit ===
-	var snapshot_after: Dictionary = _collect_file_snapshot()
+	var snapshot_after: Dictionary = _collect_file_snapshot(file_paths)
 	var audit: Dictionary = _diff_snapshots(snapshot_before, snapshot_after)
 	_update_backup_audit(backup_id, audit)
 	
@@ -285,21 +285,13 @@ func _validate_declared_paths(p_paths: Array) -> ToolResult:
 func _verify_code_paths(p_code: String, p_declared: Array) -> ToolResult:
 	var used: Array[String] = []
 	
-	# Extract all "res://..." string literals from code (double-quoted)
-	var dq_pat: RegEx = RegEx.create_from_string('"(res://[^"]*)"')
-	for match in dq_pat.search_all(p_code):
-		var path: String = match.get_string(1)
+	# 使用分词器提取所有 res:// 字符串字面量
+	# （正确处理转义引号 / 多行字符串 / raw 字符串，避免字符串内误报）
+	for path in GDScriptTokenizer.extract_res_paths(p_code):
 		if path not in used:
 			used.append(path)
 	
-	# Single-quoted
-	var sq_pat: RegEx = RegEx.create_from_string("'(res://[^']*)'")
-	for match in sq_pat.search_all(p_code):
-		var path: String = match.get_string(1)
-		if path not in used:
-			used.append(path)
-	
-	# Each code path must be in declared set
+	# 每个代码路径必须声明
 	var undeclared: Array[String] = []
 	for path in used:
 		if path not in p_declared:
@@ -322,52 +314,6 @@ func _verify_code_paths(p_code: String, p_declared: Array) -> ToolResult:
 # ============================================================================
 # Layer 1D — Dynamic Path Detection (with symbol tracking)
 # ============================================================================
-
-# 在原始代码上构建 {变量名: 字符串值} 映射表。
-# 只记录能追溯到字符串字面量赋值的变量（支持变量引用链解析）。
-func _build_path_var_table(p_code: String) -> Dictionary:
-	var literals: Dictionary = {}
-	var refs: Dictionary = {}
-	
-	var assign_pat := RegEx.create_from_string(
-		"(?:var\\s+)?(\\w+)\\s*(?::\\s*[\\w\\.]+\\s*)?(?::=|=(?!=))\\s*(.+)")
-	
-	for m in assign_pat.search_all(p_code):
-		var name: String = m.get_string(1)
-		var rhs: String = m.get_string(2).strip_edges()
-		
-		# 去除行尾注释（简单处理：" #" 模式）
-		var hash_pos: int = rhs.find(" #")
-		if hash_pos != -1:
-			rhs = rhs.substr(0, hash_pos).strip_edges()
-		if rhs.is_empty():
-			continue
-		
-		# 字符串字面量 → 直接记录值
-		if (rhs.begins_with('"') and rhs.ends_with('"') and rhs.length() >= 2) or \
-		   (rhs.begins_with("'") and rhs.ends_with("'") and rhs.length() >= 2):
-			literals[name] = rhs.substr(1, rhs.length() - 2)
-		# 变量引用（单个标识符）→ 记录引用关系
-		elif rhs.is_valid_identifier():
-			if not literals.has(name):
-				refs[name] = rhs
-	
-	# 解析引用链（最多 10 轮直至收敛）
-	var result: Dictionary = literals.duplicate()
-	var changed := true
-	var iter := 0
-	while changed and iter < 10:
-		changed = false
-		iter += 1
-		for key in refs:
-			if not result.has(key):
-				var target: String = refs[key]
-				if result.has(target):
-					result[key] = result[target]
-					changed = true
-	
-	return result
-
 
 # 检查 API 调用的路径参数是否合法。
 # 返回空字符串表示放行，非空字符串为违规描述。
@@ -397,38 +343,41 @@ func _check_path_argument(p_arg: String, p_path_vars: Dictionary, p_declared: Ar
 # 检测 FileAccess / ResourceSaver 调用中的动态或未声明路径。
 # 与 L1C 互补：L1C 只检查 res:// 字面量，本函数检查变量参数和表达式参数。
 func _check_dynamic_api_calls(p_code: String, p_declared: Array) -> ToolResult:
-	# 构建 变量→字符串值 映射表（用于追踪变量来源）
-	var path_vars: Dictionary = _build_path_var_table(p_code)
+	# 变量 → 字符串字面量值 映射（由分词器构建，支持引用链解析）
+	var path_vars: Dictionary = GDScriptTokenizer.build_path_var_table(p_code)
 	
 	var blocks: Array[String] = []
 	var seen: Dictionary = {}
 	
-	# 检测 FileAccess 静态方法的第一个参数
-	var fa_pat := RegEx.create_from_string('FileAccess\\.(\\w+)\\s*\\(\\s*([^,\\)]+)')
-	for m in fa_pat.search_all(p_code):
-		var method: String = m.get_string(1)
-		var arg: String = m.get_string(2).strip_edges()
-		var dedup_key: String = method + "|" + arg
-		if seen.has(dedup_key):
-			continue
-		seen[dedup_key] = true
+	# 遍历分词器提取的调用列表，检查 FileAccess / ResourceSaver 的路径参数
+	for call in GDScriptTokenizer.extract_calls(p_code):
+		var obj: String = call["object"]
+		var method: String = call["method"]
+		var args: Array = call["args"]
 		
-		var violation: String = _check_path_argument(arg, path_vars, p_declared, "FileAccess.%s()" % method)
-		if not violation.is_empty():
-			blocks.append(violation)
-	
-	# 检测 ResourceSaver.save 的第二个参数（路径）
-	var rs_pat := RegEx.create_from_string("ResourceSaver\\.save\\s*\\(\\s*[^,]+,\\s*([^,\\)]+)")
-	for m in rs_pat.search_all(p_code):
-		var arg: String = m.get_string(1).strip_edges()
-		var dedup_key: String = "save|" + arg
-		if seen.has(dedup_key):
-			continue
-		seen[dedup_key] = true
+		# FileAccess 静态方法的第一个参数是路径
+		if obj == "FileAccess" and not args.is_empty():
+			var arg: String = args[0]
+			var dedup_key: String = method + "|" + arg
+			if seen.has(dedup_key):
+				continue
+			seen[dedup_key] = true
+			
+			var violation: String = _check_path_argument(arg, path_vars, p_declared, "FileAccess.%s()" % method)
+			if not violation.is_empty():
+				blocks.append(violation)
 		
-		var violation: String = _check_path_argument(arg, path_vars, p_declared, "ResourceSaver.save()")
-		if not violation.is_empty():
-			blocks.append(violation)
+		# ResourceSaver.save 的第二个参数是路径
+		elif obj == "ResourceSaver" and method == "save" and args.size() >= 2:
+			var arg: String = args[1]
+			var dedup_key: String = "save|" + arg
+			if seen.has(dedup_key):
+				continue
+			seen[dedup_key] = true
+			
+			var violation: String = _check_path_argument(arg, path_vars, p_declared, "ResourceSaver.save()")
+			if not violation.is_empty():
+				blocks.append(violation)
 	
 	if not blocks.is_empty():
 		var msg: String = "**Dynamic or undeclared file path detected in API call.**\n\n"
@@ -447,112 +396,36 @@ func _check_dynamic_api_calls(p_code: String, p_declared: Array) -> ToolResult:
 # L2 Static Analysis — Danger API Checks
 # ============================================================================
 
-func _strip_strings_and_comments(p_code: String) -> String:
-	var code := p_code
-	var dq_pattern: RegEx = RegEx.create_from_string('"[^"]*"')
-	var sq_pattern: RegEx = RegEx.create_from_string("'[^']*'")
-	code = dq_pattern.sub(code, '""', true)
-	code = sq_pattern.sub(code, "''", true)
-	var lines := code.split("\n")
-	
-	for i in lines.size():
-		var hash_pos: int = lines[i].find("#")
-		if hash_pos != -1:
-			lines[i] = lines[i].substr(0, hash_pos)
-	
-	return "\n".join(lines)
-
-
-func _build_symbol_table(p_code: String) -> Dictionary:
-	var table: Dictionary = {}
-	var assign_pattern: RegEx = RegEx.create_from_string(
-		"(?:var\\s+)?(\\w+)\\s*(?::\\s*[\\w\\.]+\\s*)?(?::=|=(?!=))\\s*(.+)")
-	
-	for match in assign_pattern.search_all(p_code):
-		var var_name: String = match.get_string(1)
-		var rhs: String = match.get_string(2).strip_edges()
-		var resolved: String = _resolve_rhs(rhs)
-		if not resolved.is_empty():
-			table[var_name] = resolved
-	
-	return table
-
-
-func _resolve_rhs(p_rhs: String) -> String:
-	p_rhs = p_rhs.strip_edges()
-	
-	var call_match: RegEx = RegEx.create_from_string("^(\\w+)\\.")
-	var cm: RegExMatch = call_match.search(p_rhs)
-	if cm:
-		return cm.get_string(1)
-	
-	var id_match: RegEx = RegEx.create_from_string("^(\\w+)$")
-	var im: RegExMatch = id_match.search(p_rhs)
-	if im:
-		return im.get_string(1)
-	
-	return ""
-
-
-func _resolve_symbol_table(p_table: Dictionary) -> Dictionary:
-	var resolved: Dictionary = p_table.duplicate()
-	var changed: bool = true
-	var iterations: int = 0
-	
-	while changed and iterations < 10:
-		changed = false
-		iterations += 1
-		for key in resolved:
-			var val: String = resolved[key]
-			if val != key and resolved.has(val):
-				resolved[key] = resolved[val]
-				changed = true
-	
-	return resolved
-
-
-func _extract_calls(p_code: String) -> Array[Dictionary]:
-	var calls: Array[Dictionary] = []
-	var seen: Dictionary = {}
-	var call_pattern: RegEx = RegEx.create_from_string("(\\w+|\\))\\.(\\w+)\\s*\\(")
-	
-	for match in call_pattern.search_all(p_code):
-		var obj: String = match.get_string(1)
-		var method: String = match.get_string(2)
-		var key: String = obj + "." + method
-		
-		if not seen.has(key):
-			seen[key] = true
-			calls.append({"object": obj, "method": method})
-	
-	return calls
-
-
 func _static_analysis_l2(p_code: String) -> ToolResult:
 	var blocks: Array[String] = []
 	var warns: Array[String] = []
 	
-	var clean_code: String = _strip_strings_and_comments(p_code)
-	var raw_table: Dictionary = _build_symbol_table(clean_code)
-	var symbol_table: Dictionary = _resolve_symbol_table(raw_table)
-	var calls: Array[Dictionary] = _extract_calls(clean_code)
+	# 符号表 + 调用列表由分词器提供（token 流级，天然忽略字符串/注释）
+	var symbol_table: Dictionary = GDScriptTokenizer.build_symbol_table(p_code)
+	var calls: Array[Dictionary] = GDScriptTokenizer.extract_calls(p_code)
 	
+	var seen: Dictionary = {}
 	for call in calls:
 		var obj: String = call["object"]
 		var method: String = call["method"]
+		var key: String = obj + "." + method
+		if seen.has(key):
+			continue
+		seen[key] = true
+		
 		var resolved_obj: String = symbol_table.get(obj, obj)
 		
-		# === Step A: Check DANGEROUS_NETWORK_CLASSES ===
+		# === Step A: 危险网络类 ===
 		if resolved_obj in DANGEROUS_NETWORK_CLASSES:
 			blocks.append("%s is forbidden — network APIs are not allowed." % resolved_obj)
 			continue
 		
-		# === Step B: Check BLOCKED_CLASSES (any method on high-risk classes) ===
+		# === Step B: 高危类（任何方法都禁止） ===
 		if resolved_obj in BLOCKED_CLASSES:
 			blocks.append("%s is a high-risk class — all method calls are blocked." % resolved_obj)
 			continue
 		
-		# === Step C: Check DANGEROUS_TYPED_CALLS (class + method) ===
+		# === Step C: 指定类 + 方法 ===
 		var typed_hit: bool = false
 		for rule in DANGEROUS_TYPED_CALLS:
 			if resolved_obj == rule["object"] and method == rule["method"]:
@@ -562,8 +435,7 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 		if typed_hit:
 			continue
 		
-		# === Step D: Chain call detection ===
-		# Object type unresolvable via static analysis — conservative block
+		# === Step D: 链式调用（对象类型无法静态解析，保守拦截） ===
 		if resolved_obj == ")":
 			var chain_hit: bool = false
 			for rule in DANGEROUS_TYPED_CALLS:
@@ -628,13 +500,23 @@ func _compile_script(p_code: String) -> GDScript:
 # File System Snapshot & Audit (Layer 4)
 # ============================================================================
 
-func _collect_file_snapshot() -> Dictionary:
+func _collect_file_snapshot(p_declared: Array = []) -> Dictionary:
 	var snapshot: Dictionary = {}
-	_collect_files_recursive("res://", snapshot)
+	_collect_files_recursive("res://", snapshot, p_declared)
 	return snapshot
 
 
-func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary) -> void:
+# 受限区目录剪枝：这些目录编辑器脚本永远无法声明/写入（Layer 1A 拒绝），
+# 审计快照无需覆盖，避免全项目扫描时计入（addons 等往往很大）。
+func _is_restricted_dir(p_path: String) -> bool:
+	var normalized: String = p_path.to_lower().trim_suffix("/") + "/"
+	for prefix in RESTRICTED_PATH_PATTERNS:
+		if normalized.begins_with(prefix):
+			return true
+	return false
+
+
+func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary, p_declared: Array) -> void:
 	var dir: DirAccess = DirAccess.open(p_dir)
 	if not dir:
 		return
@@ -649,20 +531,40 @@ func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary) -> void:
 		
 		var full_path: String = p_dir.path_join(item)
 		if dir.current_is_dir():
-			_collect_files_recursive(full_path + "/", p_snapshot)
+			# 受限区目录剪枝（addons / rollback_files / android 等）
+			if _is_restricted_dir(full_path):
+				item = dir.get_next()
+				continue
+			_collect_files_recursive(full_path + "/", p_snapshot, p_declared)
 		else:
-			# 大文件用 mtime 兜底（几乎不会被编辑器脚本修改），其余用内容哈希
-			var file: FileAccess = FileAccess.open(full_path, FileAccess.READ)
-			if file:
-				var size: int = file.get_length()
-				file.close()
-				if size > MAX_BACKUP_SIZE:
-					p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
+			# .import 是 Godot 导入缓存元数据，编辑器脚本不可能写入，跳过
+			if full_path.ends_with(".import"):
+				item = dir.get_next()
+				continue
+			
+			if full_path in p_declared:
+				# 声明路径：内容级精确快照（md5，数量少成本低）
+				var file: FileAccess = FileAccess.open(full_path, FileAccess.READ)
+				if file:
+					var size: int = file.get_length()
+					file.close()
+					if size > MAX_BACKUP_SIZE:
+						p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
+					else:
+						p_snapshot[full_path] = FileAccess.get_md5(full_path)
 				else:
-					p_snapshot[full_path] = FileAccess.get_md5(full_path)
+					p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
 			else:
-				# 打开失败兜底（正常不会发生）
-				p_snapshot[full_path] = FileAccess.get_modified_time(full_path)
+				# 非声明路径：mtime + size 粗粒度（越界检测用，不读内容）
+				var file2: FileAccess = FileAccess.open(full_path, FileAccess.READ)
+				var fsize: int = 0
+				if file2:
+					fsize = file2.get_length()
+					file2.close()
+				p_snapshot[full_path] = {
+					"mtime": FileAccess.get_modified_time(full_path),
+					"size": fsize,
+				}
 		
 		item = dir.get_next()
 	

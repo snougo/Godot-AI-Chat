@@ -62,7 +62,7 @@ var settings_resource: PluginSettingsConfig
 func _ready() -> void:
 	_api_provider_label.text = "API Provider:"
 	_base_url_label.text = "Base Url:"
-	_base_url_label.tooltip_text = "When using openRouter as API Service Provider, You should input https://openrouter.ai/api, not https://openrouter.ai"
+	_base_url_label.tooltip_text = "openRouter: https://openrouter.ai/api\nOpenCode Go: https://opencode.ai/zen/go/v1"
 	_base_url_input.placeholder_text = "LM Studio: http://127.0.0.1:1234"
 	_api_key_label.text = "API Key(optional):"
 	_api_key_label.tooltip_text = "When using LM Studio or Ollama, You don't need to provide an API Key."
@@ -80,6 +80,7 @@ func _ready() -> void:
 	_api_provider_options.clear()
 	_api_provider_options.add_item("OpenAI-ChatCompletions")
 	_api_provider_options.add_item("OpenAI-Responses")
+	_api_provider_options.add_item("OpenCode Go")
 	_api_provider_options.add_item("ZhipuAI")
 	_api_provider_options.add_item("Google Gemini")
 	_api_provider_options.add_item("Anthropic-Compatible")
@@ -134,14 +135,10 @@ func _populate_ui_from_resource() -> void:
 	
 	# --- 解析位掩码到 CheckBox ---
 	var flags: int = settings_resource.log_flags
-	# AIChatLogger.FLAG_DEBUG = 1
-	_check_debug.button_pressed = (flags & 1) != 0
-	# AIChatLogger.FLAG_INFO = 2
-	_check_info.button_pressed = (flags & 2) != 0
-	# AIChatLogger.FLAG_WARN = 4
-	_check_warn.button_pressed = (flags & 4) != 0
-	# AIChatLogger.FLAG_ERROR = 8
-	_check_error.button_pressed = (flags & 8) != 0
+	_check_debug.button_pressed = (flags & AIChatLogger.FLAG_DEBUG) != 0
+	_check_info.button_pressed = (flags & AIChatLogger.FLAG_INFO) != 0
+	_check_warn.button_pressed = (flags & AIChatLogger.FLAG_WARN) != 0
+	_check_error.button_pressed = (flags & AIChatLogger.FLAG_ERROR) != 0
 	# 立即应用到 Logger (确保编辑器启动时就生效)
 	AIChatLogger.set_flags(flags)
 
@@ -172,15 +169,16 @@ func _on_save_button_pressed() -> void:
 	# --- 从 CheckBox 构建位掩码 ---
 	var new_flags: int = 0
 	if _check_debug.button_pressed:
-		new_flags |= 1
+		new_flags |= AIChatLogger.FLAG_DEBUG
 	if _check_info.button_pressed:
-		new_flags |= 2
+		new_flags |= AIChatLogger.FLAG_INFO
 	if _check_warn.button_pressed:
-		new_flags |= 4
+		new_flags |= AIChatLogger.FLAG_WARN
 	if _check_error.button_pressed:
-		new_flags |= 8
+		new_flags |= AIChatLogger.FLAG_ERROR
 	
 	settings_resource.log_flags = new_flags
+	
 	# 立即应用更改
 	AIChatLogger.set_flags(new_flags)
 	

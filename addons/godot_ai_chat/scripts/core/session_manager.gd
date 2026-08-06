@@ -19,57 +19,14 @@ var _current_history: ChatMessageHistory = null
 ## 创建新会话
 ## [return]: 新创建的历史记录对象，失败返回 null
 func create_new_session() -> ChatMessageHistory:
-	_ensure_archive_dir()
-	var now: Dictionary = Time.get_datetime_dict_from_system(false)
-	var base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d" %[now.year, now.month, now.day, now.hour, now.minute, now.second]
-	var extension: String = ".tres"
-	var final_path: String = PluginPaths.SESSION_DIR.path_join(base_filename + extension)
-	
-	var counter: int = 1
-	while FileAccess.file_exists(final_path):
-		final_path = PluginPaths.SESSION_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
-		counter += 1
-	
-	var new_history: ChatMessageHistory = ChatMessageHistory.new()
-	if ResourceSaver.save(new_history, final_path) == OK:
-		current_session_path = final_path
-		_current_history = new_history
-		ToolBox.update_editor_filesystem(current_session_path)
-		_bind_auto_save(new_history)
-		return new_history
-	
-	AIChatLogger.error("[SessionManager] Failed to create chat file.")
-	return null
+	return _save_as_new_session(ChatMessageHistory.new(), "")
 
 
 ## 从已有历史创建新会话（用于上下文压缩后的新会话加载）
 ## [param p_history]: 预构建好的历史记录对象
 ## [return]: 保存并绑定后的历史记录对象，失败返回 null
 func create_session_from_history(p_history: ChatMessageHistory) -> ChatMessageHistory:
-	_ensure_archive_dir()
-	var now: Dictionary = Time.get_datetime_dict_from_system(false)
-	var base_filename: String = "chat_%d-%02d-%02d_%02d-%02d-%02d_compressed" % [now.year, now.month, now.day, now.hour, now.minute, now.second]
-	var extension: String = ".tres"
-	var final_path: String = PluginPaths.SESSION_DIR.path_join(base_filename + extension)
-	
-	var counter: int = 1
-	while FileAccess.file_exists(final_path):
-		final_path = PluginPaths.SESSION_DIR.path_join("%s_%d%s" % [base_filename, counter, extension])
-		counter += 1
-	
-	# 断开旧 history 的自动保存信号
-	if _current_history and _current_history.changed.is_connected(_auto_save):
-		_current_history.changed.disconnect(_auto_save)
-	
-	if ResourceSaver.save(p_history, final_path) == OK:
-		current_session_path = final_path
-		_current_history = p_history
-		ToolBox.update_editor_filesystem(current_session_path)
-		_bind_auto_save(p_history)
-		return p_history
-	
-	AIChatLogger.error("[SessionManager] Failed to create compressed session file.")
-	return null
+	return _save_as_new_session(p_history, "_compressed")
 
 
 ## 加载会话
@@ -80,9 +37,7 @@ func load_session(p_session_name: String) -> ChatMessageHistory:
 	if FileAccess.file_exists(path):
 		var resource = ResourceLoader.load(path)
 		if resource is ChatMessageHistory:
-			# 断开旧 history 的信号
-			if _current_history and _current_history.changed.is_connected(_auto_save):
-				_current_history.changed.disconnect(_auto_save)
+			_disconnect_auto_save()
 			current_session_path = path
 			_current_history = resource
 			_bind_auto_save(resource)
@@ -99,11 +54,9 @@ func delete_session(p_session_name: String) -> bool:
 		return false
 	if DirAccess.remove_absolute(archive_path) == OK:
 		if current_session_path == archive_path:
+			_disconnect_auto_save()
 			current_session_path = ""
-			if _current_history:
-				if _current_history.changed.is_connected(_auto_save):
-					_current_history.changed.disconnect(_auto_save)
-				_current_history = null
+			_current_history = null
 		ToolBox.update_editor_filesystem(archive_path)
 		return true
 	return false
@@ -134,17 +87,46 @@ func save_current_session(history: ChatMessageHistory) -> void:
 
 # --- Private Functions ---
 
+# 将给定历史保存为新的会话文件（生成时间戳文件名 + 躲重名）
+# [param p_history]: 要保存的历史对象
+# [param p_name_suffix]: 文件名后缀（如 "_compressed"，新建为空串）
+# [return]: 保存成功的历史对象，失败返回 null
+func _save_as_new_session(p_history: ChatMessageHistory, p_name_suffix: String) -> ChatMessageHistory:
+	_ensure_archive_dir()
+	_disconnect_auto_save()
+	var now: Dictionary = Time.get_datetime_dict_from_system(false)
+	var base := "chat_%d-%02d-%02d_%02d-%02d-%02d%s" % [now.year, now.month, now.day, now.hour, now.minute, now.second, p_name_suffix]
+	var path := PluginPaths.SESSION_DIR.path_join(base + ".tres")
+	var counter := 1
+	while FileAccess.file_exists(path):
+		path = PluginPaths.SESSION_DIR.path_join("%s_%d.tres" % [base, counter])
+		counter += 1
+	if ResourceSaver.save(p_history, path) == OK:
+		current_session_path = path
+		_current_history = p_history
+		ToolBox.update_editor_filesystem(path)
+		_bind_auto_save(p_history)
+		return p_history
+	AIChatLogger.error("[SessionManager] Failed to save session: %s" % path)
+	return null
+
+
 # 确保存档目录存在
 func _ensure_archive_dir() -> void:
 	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
 		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
 
 
-# 绑定自动保存
-func _bind_auto_save(history: ChatMessageHistory) -> void:
-	if history.changed.is_connected(_auto_save):
-		history.changed.disconnect(_auto_save)
-	history.changed.connect(_auto_save)
+# 断开当前历史绑定的自动保存信号（不置空 _current_history）
+func _disconnect_auto_save() -> void:
+	if _current_history and _current_history.changed.is_connected(_auto_save):
+		_current_history.changed.disconnect(_auto_save)
+
+
+# 绑定自动保存（保证幂等：已连接则不重复连）
+func _bind_auto_save(p_history: ChatMessageHistory) -> void:
+	if not p_history.changed.is_connected(_auto_save):
+		p_history.changed.connect(_auto_save)
 
 
 # 自动保存回调

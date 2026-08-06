@@ -16,6 +16,8 @@ static func create_provider(p_provider_type: String) -> BaseLLMProvider:
 			return OpenAIChatCompletionsProvider.new()
 		"OpenAI-Responses":
 			return OpenAIResponsesProvider.new()
+		"OpenCode Go":
+			return OpenCodeGoProvider.new()
 		"ZhipuAI":
 			return ZhipuAIProvider.new()
 		"Google Gemini":

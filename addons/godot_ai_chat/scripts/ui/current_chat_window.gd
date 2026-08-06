@@ -114,15 +114,16 @@ func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call
 ## [param p_raw_chunk]: 原始数据块
 ## [param p_provider]: LLM 提供者实例，用于解析数据块
 func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -> void:
-	# 1. 确保数据层有 Assistant 消息
+	# 1. 确保数据层有 Assistant 消息（复用尾部 assistant，否则新建）
 	var target_msg: ChatMessage = null
+	var is_new_msg: bool = false
 	if not chat_history.messages.is_empty():
 		var last: ChatMessage = chat_history.messages.back()
 		if last.role == ChatMessage.ROLE_ASSISTANT:
 			target_msg = last
-	
 	if target_msg == null:
 		target_msg = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, "")
+		is_new_msg = true
 	
 	# 2. 委托 Provider 处理拼装
 	var ui_update: Dictionary = p_provider.process_stream_chunk(target_msg, p_raw_chunk)
@@ -157,17 +158,11 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 	if usage is Dictionary and not usage.is_empty():
 		update_token_usage(usage)
 	
-	# 移除此处的 _scroll_to_bottom()
-	# 流式追加内容时不再强制滚动，允许用户自由浏览历史消息
+	# 流式追加内容时不再强制滚动，允许用户自由浏览历史消息（滚动由 ScrollBar.changed 信号响应）
 	
-	# [辅助] 如果消息有实际内容，确保它被添加到历史记录
-	if not chat_history.messages.is_empty():
-		var last: ChatMessage = chat_history.messages.back()
-		if last.role != ChatMessage.ROLE_ASSISTANT:
-			if not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty():
-				chat_history.add_message(target_msg)
-	
-	# 自动滚动已改为通过 ScrollBar.changed 信号实时响应，无需此处手动触发
+	# 新建消息有实际内容时才入库，复用消息已在历史中无需重复添加
+	if is_new_msg and (not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty()):
+		chat_history.add_message(target_msg)
 
 
 ## 回滚未完成的消息（用于停止生成时）
@@ -182,34 +177,16 @@ func rollback_incomplete_message() -> void:
 	# 1. 纯数据回滚循环
 	while not chat_history.messages.is_empty() and safety_count < 10:
 		var last_msg: ChatMessage = chat_history.messages.back()
-		var should_continue_rollback: bool = false
-		var should_pop: bool = false
 		
-		# 情况 A: 正在生成的纯文本 Assistant 消息 -> 删除并结束
-		if last_msg.role == ChatMessage.ROLE_ASSISTANT and last_msg.tool_calls.is_empty():
-			AIChatLogger.debug("[CurrentChatWindow] Rolling back text message in history.")
-			should_pop = true
-			should_continue_rollback = false 
-		
-		# 情况 B: 工具输出消息 (Tool) -> 删除，并继续检查上一条
-		elif last_msg.role == ChatMessage.ROLE_TOOL:
-			AIChatLogger.debug("[CurrentChatWindow] Rolling back tool output in history.")
-			should_pop = true
-			should_continue_rollback = true
-		
-		# 情况 C: 包含工具调用的 Assistant 消息 -> 删除并结束 (这是这一轮的源头)
-		elif last_msg.role == ChatMessage.ROLE_ASSISTANT and not last_msg.tool_calls.is_empty():
-			AIChatLogger.debug("[CurrentChatWindow] Rolling back tool call in history.")
-			should_pop = true
-			should_continue_rollback = false
-		
-		else:
-			# 情况 D: User 或 System -> 停止
-			break
-		
-		if should_pop:
+		# Tool 输出：删除并继续向上回滚
+		if last_msg.role == ChatMessage.ROLE_TOOL:
 			chat_history.messages.pop_back()
-		if not should_continue_rollback:
+		# Assistant 消息（无论有无工具调用）：删除并停止
+		elif last_msg.role == ChatMessage.ROLE_ASSISTANT:
+			chat_history.messages.pop_back()
+			break
+		# User / System：停止
+		else:
 			break
 		
 		safety_count += 1

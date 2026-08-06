@@ -57,11 +57,7 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		if last_msg.tool_calls.is_empty():
 			break
 		
-		var is_gemini: bool = (network_manager.current_provider is GeminiProvider)
-		
-		# 过滤 <think> 标签里的幻觉工具调用
-		#if not is_gemini and "<think>" in last_msg.content:
-			#last_msg.tool_calls = ToolBox.filter_hallucinated_tool_calls(last_msg.content, last_msg.tool_calls)
+		var supports_inline: bool = network_manager.current_provider.supports_inline_tool_images()
 		
 		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
 		var old_content_len: int = last_msg.content.length()
@@ -89,8 +85,7 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 			var call_id: String = call.id
 			
 			var clean_args_str: String = JSONRepairHelper.repair_json(raw_args)
-			if call.has("function"):
-				call.function["arguments"] = clean_args_str
+			call.function["arguments"] = clean_args_str
 			
 			var args: Variant = JSON.parse_string(clean_args_str)
 			if args == null: args = {}
@@ -113,14 +108,14 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 					image_data = result.get_image_data()
 					image_mime = result.get_image_mime()
 					
-					if not is_gemini and not image_data.is_empty():
+					if not supports_inline and not image_data.is_empty():
 						if result_str == "Image successfully read and attached to this message.":
 							result_str = "Image content has been uploaded to the context as a new user message."
 			
 			current_chat_window.append_tool_message(tool_name, result_str, call_id,
-				image_data if is_gemini else PackedByteArray(),
-				image_mime if is_gemini else "")
+				image_data if supports_inline else PackedByteArray(),
+				image_mime if supports_inline else "")
 			
 			# 将图片数据作为独立的 User 消息插入
-			if not is_gemini and not image_data.is_empty():
+			if not supports_inline and not image_data.is_empty():
 				current_chat_window.append_user_message("Image content from tool: " + tool_name, [{"data": image_data, "mime": image_mime}])

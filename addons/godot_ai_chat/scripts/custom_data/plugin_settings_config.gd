@@ -9,7 +9,7 @@ extends Resource
 # --- @export Vars ---
 
 ## API 服务提供商类型
-@export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "ZhipuAI", "Google Gemini", "Anthropic-Compatible") var api_provider: String = "OpenAI-ChatCompletions"
+@export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "OpenCode Go", "ZhipuAI", "Google Gemini", "Anthropic-Compatible") var api_provider: String = "OpenAI-ChatCompletions"
 
 ## API 服务的基地址 (例如 "https://api.openai.com" 或本地模型的地址)
 @export var api_base_url: String = ""

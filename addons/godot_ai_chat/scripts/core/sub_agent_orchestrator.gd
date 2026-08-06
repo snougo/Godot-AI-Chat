@@ -11,6 +11,11 @@ var _config: SubAgentConfig
 var _history: ChatMessageHistory
 var _sub_agent_tools: Dictionary = {}
 
+# 主线程 SSE 解析临时状态（仅 _do_stream_request 使用；Sub-Agent 单线程顺序执行，无并发）
+var _sse_text_buffer: String = ""
+var _sse_processed_pos: int = 0
+var _sse_current_event: String = ""
+
 
 func _exit_tree():
 	_clean_reference()
@@ -54,6 +59,8 @@ func run_task() -> String:
 		return "Error: failed to initialize Sub Agent API Provider."
 	
 	var is_gemini: bool = provider is GeminiProvider
+	# 工具定义格式（schema 生成）仍按 Gemini 特判；图片交付独立成能力查询
+	var supports_inline: bool = provider.supports_inline_tool_images()
 	
 	# 4. 主循环（使用 HTTPClient 主线程轮询）
 	var turns_taken = 0
@@ -70,7 +77,9 @@ func run_task() -> String:
 		var headers = provider.get_request_headers(_config.api_key, true)
 		
 		# 使用 HTTPClient 直接轮询（主线程，避免 StreamRequest 线程问题）
-		var response = await _do_stream_request(url, headers, JSON.stringify(body), _config.network_timeout)
+		# 传入 provider 以便 SSE 解析时委托到其自身的 process_stream_chunk，
+		# 让 ChatCompletions / Responses / Anthropic 三种 SSE 协议各自走自己的分派
+		var response = await _do_stream_request(url, headers, JSON.stringify(body), provider, _config.network_timeout)
 		
 		if response.has("error"):
 			AIChatLogger.error("[Sub Agent] " + response.error)
@@ -94,6 +103,8 @@ func run_task() -> String:
 		var assistant_msg = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, content)
 		assistant_msg.reasoning_content = reasoning
 		assistant_msg.tool_calls = raw_tool_calls
+		# 回传 Anthropic extended-thinking 块的签名，多轮 thinking 会话必需
+		assistant_msg.thinking_signature = response.get("thinking_signature", "")
 		
 		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
 		ToolBox.salvage_and_clean_tool_calls(assistant_msg, _sub_agent_tools)
@@ -137,14 +148,14 @@ func run_task() -> String:
 				AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
 				
 				if res.has_image():
-					if is_gemini:
-						# Gemini: 图片直接放入 tool 消息（原生支持）
+					if supports_inline:
+						# 支持 inline 图片的 Provider：图片直接放入 tool 消息
 						var tool_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, t_result, t_name)
 						tool_msg.tool_call_id = call_id
 						tool_msg.add_image(res.attachments.image_data, res.attachments.mime)
 						_history.add_message(tool_msg)
 					else:
-						# 非 Gemini: 收集图片，稍后通过新增 User 消息承载
+						# 不支持 inline 图片的 Provider: 收集图片，稍后通过新增 User 消息承载
 						pending_images.append({
 							"data": res.attachments.image_data,
 							"mime": res.attachments.get("mime", "image/png"),
@@ -157,10 +168,9 @@ func run_task() -> String:
 				t_result = "[ERROR] Tool not found: " + t_name
 				_history.add_tool_message(t_result, call_id, t_name)
 		
-		# 仅当非 Gemini 且模型支持视觉(VLM)时，才将图片以 User 消息注入
-		if not is_gemini and _config.supports_vision and not pending_images.is_empty():
-			var img_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, \
-				"The following images were retrieved from tool execution. Please analyze their content.")
+		# 仅当 Provider 不支持 inline tool 图片 且模型支持视觉(VLM)时，才将图片以 User 消息注入
+		if not supports_inline and _config.supports_vision and not pending_images.is_empty():
+			var img_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_USER, "The following images were retrieved from tool execution. Please analyze their content.")
 			for img in pending_images:
 				img_msg.add_image(img.data, img.mime)
 			_history.add_message(img_msg)
@@ -177,8 +187,8 @@ func run_task() -> String:
 	+ "Please re-invoke the Sub Agent to continue from where it left off."
 
 
-# 使用 HTTPClient 在主线程轮询流式响应
-func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: String, p_timeout_s: int) -> Dictionary:
+# 使用 HTTPClient 在主线程轮询流式响应（解析委托 provider.process_stream_chunk 完成协议分派）
+func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: String, p_provider: BaseLLMProvider, p_timeout_s: int) -> Dictionary:
 	var tracker: TimeoutTracker = TimeoutTracker.from_network_timeout(p_timeout_s)
 	var has_received_first_chunk: bool = false
 	
@@ -237,11 +247,15 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 		client.close()
 		return {"error": "HTTP %d: %s" % [response_code, error_body.get_string_from_utf8()]}
 	
-	# 读取流式响应并解析 SSE
-	var result = {"content": "", "reasoning_content": "", "tool_calls": []}
+	# 读取流式响应：每个 SSE 事件块转发给 provider.process_stream_chunk，
+	# 让 OpenAI ChatCompletions / OpenAI Responses / Anthropic 三种 SSE 协议各自走自己的分派
+	# 而非硬编码 choices[0].delta 结构（保持与主 Agent 路径同源但实例/历史均隔离）
+	var target_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, "")
 	var byte_buffer = PackedByteArray()
-	var text_buffer = ""
-	var processed_pos = 0
+	
+	_sse_text_buffer = ""
+	_sse_processed_pos = 0
+	_sse_current_event = ""
 	
 	while client.get_status() == HTTPClient.STATUS_BODY:
 		client.poll()
@@ -250,26 +264,19 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 		if chunk.size() > 0:
 			byte_buffer.append_array(chunk)
 			# 保留末尾可能不完整的 UTF-8 字符字节，避免跨 chunk 解码报错与数据损坏
-			var keep: int = _incomplete_utf8_tail(byte_buffer)
+			var keep: int = Utf8Helper.incomplete_tail_bytes(byte_buffer)
 			var complete_size: int = byte_buffer.size() - keep
 			if complete_size > 0:
 				var complete: PackedByteArray = byte_buffer.slice(0, complete_size)
 				var text: String = complete.get_string_from_utf8()
 				byte_buffer = byte_buffer.slice(complete_size)  # 残留尾部留到下一 chunk
 				if not text.is_empty():
-					text_buffer += text
-					var new_text: String = text_buffer.substr(processed_pos)
-					
-					var last_newline: int = new_text.rfind("\n")
-					if last_newline != -1:
-						var complete_text: String = new_text.substr(0, last_newline + 1)
-						_parse_sse_lines(complete_text, result)
-						processed_pos += complete_text.length()
-					# 没有完整行时不处理，processed_pos 保持不变，数据留在缓冲区等待下一块
+					_sse_text_buffer += text
+					_process_complete_sse_lines(target_msg, p_provider)
 					
 					# 首 token 判定：基于实际内容，而非原始 HTTP chunk
 					if not has_received_first_chunk:
-						if not result.content.is_empty() or not result.reasoning_content.is_empty():
+						if not target_msg.content.is_empty() or not target_msg.reasoning_content.is_empty():
 							has_received_first_chunk = true
 							tracker.mark_first_token_received()
 					else:
@@ -288,80 +295,67 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 	if byte_buffer.size() > 0:
 		var tail_text: String = byte_buffer.get_string_from_utf8()
 		if not tail_text.is_empty():
-			text_buffer += tail_text
+			_sse_text_buffer += tail_text
 	
 	# 流结束时刷出缓冲区中不完整的末行（防御性处理，保障数据不丢失）
-	if processed_pos < text_buffer.length():
-		var remaining: String = text_buffer.substr(processed_pos).strip_edges()
+	if _sse_processed_pos < _sse_text_buffer.length():
+		var remaining: String = _sse_text_buffer.substr(_sse_processed_pos).strip_edges()
 		if not remaining.is_empty():
-			_parse_sse_lines(remaining, result)
+			_parse_single_sse_line(remaining, target_msg, p_provider)
 	
-	return result
+	return {
+		"content": target_msg.content,
+		"reasoning_content": target_msg.reasoning_content,
+		"tool_calls": target_msg.tool_calls.duplicate(true),
+		"thinking_signature": target_msg.thinking_signature
+	}
 
 
-# 返回缓冲区末尾不完整 UTF-8 序列的字节数（0 = 完整）
-func _incomplete_utf8_tail(p_buf: PackedByteArray) -> int:
-	var size: int = p_buf.size()
-	if size == 0:
-		return 0
-	var i: int = size - 1
-	while i >= 0 and (p_buf[i] & 0xC0) == 0x80:
-		i -= 1
-	if i < 0:
-		return mini(size, 3)  # 全为 continuation，保守保留最多 3 字节
-	var lead: int = p_buf[i]
-	var expected: int = 1
-	if (lead & 0xE0) == 0xC0:
-		expected = 2
-	elif (lead & 0xF0) == 0xE0:
-		expected = 3
-	elif (lead & 0xF8) == 0xF0:
-		expected = 4
-	var total: int = size - i
-	return total if total < expected else 0
+# 处理文本缓冲区中所有以 \n 结尾的完整 SSE 行
+# 按 rfind 找到最后一行换行，把这一批完整行一并分派
+func _process_complete_sse_lines(p_target_msg: ChatMessage, p_provider: BaseLLMProvider) -> void:
+	while true:
+		var new_part: String = _sse_text_buffer.substr(_sse_processed_pos)
+		var last_newline: int = new_part.rfind("\n")
+		if last_newline == -1:
+			break
+		# 取出截至最后换行的整批完整行，推进处理位置
+		var complete_text: String = new_part.substr(0, last_newline + 1)
+		_sse_processed_pos += complete_text.length()
+		for line in complete_text.split("\n"):
+			line = line.strip_edges()
+			if not line.is_empty():
+				_parse_single_sse_line(line, p_target_msg, p_provider)
 
 
-# 解析 SSE 数据行
-func _parse_sse_lines(p_text: String, p_result: Dictionary) -> void:
-	var lines = p_text.split("\n")
-	for line in lines:
-		line = line.strip_edges()
-		if not line.begins_with("data: "):
-			continue
-		
-		var json_str = line.substr(6).strip_edges()
-		if json_str == "[DONE]":
-			continue
-		
-		var json = JSON.parse_string(json_str)
-		if json == null or not json is Dictionary:
-			continue
-		if not json.has("choices") or json.choices.is_empty():
-			continue
-		
-		var delta = json.choices[0].get("delta", {})
-		
-		if delta.has("content") and delta.content is String:
-			p_result.content += delta.content
-		if delta.has("reasoning_content") and delta.reasoning_content is String:
-			p_result.reasoning_content += delta.reasoning_content
-		if delta.has("tool_calls") and delta.tool_calls is Array:
-			for tc in delta.tool_calls:
-				var index = int(tc.get("index", 0))
-				while p_result.tool_calls.size() <= index:
-					p_result.tool_calls.append({
-						"id": "", "type": "function",
-						"function": {"name": "", "arguments": ""}
-					})
-				var target = p_result.tool_calls[index]
-				if tc.has("id") and tc.id != null:
-					target.id = tc.id
-				if tc.has("function"):
-					var f = tc.function
-					if f.has("name") and f.name != null:
-						target.function.name += f.name
-					if f.has("arguments") and f.arguments != null:
-						target.function.arguments += f.arguments
+# 解析单行 SSE 内容：
+# - event 行更新事件状态（Anthropic / OpenAI Responses 使用）
+# - data 行注入 _event_type 后委托 provider.process_stream_chunk 完成协议级分派
+#   OpenAI ChatCompletions 无 event 行，注入被跳过；其 provider 直接读 choices[0].delta
+func _parse_single_sse_line(p_line: String, p_target_msg: ChatMessage, p_provider: BaseLLMProvider) -> void:
+	# 1. 捕获 event 类型
+	if p_line.begins_with("event:"):
+		_sse_current_event = p_line.substr(6).strip_edges()
+		return
+	
+	# 2. 跳过非 data 行（如 heartbeat / 注释 / 控制字段）
+	if not p_line.begins_with("data:"):
+		return
+	
+	var json_str: String = p_line.substr(5).strip_edges()
+	if json_str == "[DONE]" or json_str.is_empty():
+		return
+	
+	var json: Variant = JSON.parse_string(json_str)
+	if json == null or not json is Dictionary:
+		return
+	
+	# 注入 event 类型（OpenAI Responses 依赖此字段分派；Anthropic 仍走 JSON 内的 type 字段，两者并存兼容）
+	if not _sse_current_event.is_empty():
+		json["_event_type"] = _sse_current_event
+	
+	# 委托 provider 自身的流式解析逻辑（与主 Agent 路径同源但 provider 实例隔离）
+	p_provider.process_stream_chunk(p_target_msg, json)
 
 
 # 加载 Sub-Agent 自己的工具集
@@ -383,27 +377,8 @@ func _load_isolated_tools() -> void:
 
 
 # 获取工具定义
-func _get_tool_definitions(p_is_gemini: bool) -> Array:
-	var defs = []
-	for tool_inst in _sub_agent_tools.values():
-		var schema = tool_inst.get_parameters_schema()
-		if p_is_gemini:
-			schema = ToolRegistry.convert_schema_to_gemini(schema)
-			defs.append({
-				"name": tool_inst.tool_name,
-				"description": tool_inst.tool_description,
-				"parameters": schema
-			})
-		else:
-			defs.append({
-				"type": "function",
-				"function": {
-					"name": tool_inst.tool_name,
-					"description": tool_inst.tool_description,
-					"parameters": schema
-				}
-			})
-	return defs
+func _get_tool_definitions(p_is_gemini: bool) -> Array[Dictionary]:
+	return ToolRegistry.build_tool_definitions(_sub_agent_tools, p_is_gemini)
 
 
 # 从编辑器根节点上移除 Sub-Agent 节点

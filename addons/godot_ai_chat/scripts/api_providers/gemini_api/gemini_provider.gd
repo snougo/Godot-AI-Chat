@@ -12,6 +12,11 @@ func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.JSON_LIST
 
 
+## Gemini 原生支持将工具返回的图片直接嵌入 Tool 消息（通过 inline_data）
+func supports_inline_tool_images() -> bool:
+	return true
+
+
 ## 获取 HTTP 请求头
 func get_request_headers(p_api_key: String, _p_stream: bool) -> PackedStringArray:
 	# Gemini 推荐将 key 放在 header 中

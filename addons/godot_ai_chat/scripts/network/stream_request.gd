@@ -208,7 +208,7 @@ func _thread_task() -> void:
 		if chunk.size() > 0:
 			_incoming_byte_buffer.append_array(chunk)
 			
-			if _is_buffer_safe_for_utf8(_incoming_byte_buffer):
+			if Utf8Helper.incomplete_tail_bytes(_incoming_byte_buffer) == 0:
 				var new_text: String = _incoming_byte_buffer.get_string_from_utf8()
 				_incoming_byte_buffer.clear()
 				_incoming_text_buffer += new_text
@@ -255,27 +255,17 @@ func _process_sse_buffer() -> void:
 		elif line.begins_with("data:"):
 			var json_raw: String = line.substr(5).strip_edges()
 			
-			if json_raw == "[DONE]":
+			if json_raw == "[DONE]" or json_raw.is_empty():
 				continue
 			
-			if not json_raw.is_empty():
-				var result: Dictionary = _try_parse_one_json(json_raw)
-				if result.success:
-					if result.data is Dictionary:
-						if not _current_sse_event.is_empty():
-							result.data["_event_type"] = _current_sse_event
-						_emit_chunk_data(result.data)
-				else:
-					var json_obj: JSON = JSON.new()
-					var err: Error = json_obj.parse(json_raw)
-					if err == OK:
-						if json_obj.data is Dictionary:
-							if not _current_sse_event.is_empty():
-								json_obj.data["_event_type"] = _current_sse_event
-							_emit_chunk_data(json_obj.data)
-					else:
-						if json_raw != "[DONE]":
-							AIChatLogger.warn("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
+			var json_val: Variant = JSON.parse_string(json_raw)
+			if json_val is Dictionary:
+				var d: Dictionary = json_val
+				if not _current_sse_event.is_empty():
+					d["_event_type"] = _current_sse_event
+				_emit_chunk_data(d)
+			else:
+				AIChatLogger.warn("StreamRequest: Failed to parse SSE JSON chunk. Raw: " + json_raw)
 
 
 # 处理 JSON List 协议缓冲区 (Gemini)
@@ -344,78 +334,6 @@ func _emit_chunk_data(p_json: Dictionary) -> void:
 # 延迟发射失败信号
 func _emit_failure(p_msg: String) -> void:
 	failed.emit.call_deferred(p_msg)
-
-
-# 尝试从字符串开头解析一个完整的 JSON 对象
-func _try_parse_one_json(p_s: String) -> Dictionary:
-	if p_s.is_empty() or p_s[0] != "{":
-		return { "success": false, "length": 0 }
-	
-	var balance: int = 0
-	var in_string: bool = false
-	var escaped: bool = false
-	var length: int = 0
-	
-	for i in range(p_s.length()):
-		var char: String = p_s[i]
-		length += 1
-		
-		if escaped:
-			escaped = false
-			continue
-		if char == "\\":
-			escaped = true
-			continue
-		if char == '"':
-			in_string = not in_string
-			continue
-		
-		if not in_string:
-			if char == '{':
-				balance += 1
-			elif char == '}':
-				balance -= 1
-				if balance == 0:
-					var candidate: String = p_s.substr(0, length)
-					var json_obj: JSON = JSON.new()
-					if json_obj.parse(candidate) == OK:
-						return { "success": true, "data": json_obj.data, "length": length }
-					return { "success": false, "length": 0 }
-	
-	return { "success": false, "length": 0 }
-
-
-# 检查缓冲区是否可以安全地转换为 UTF-8 字符串
-func _is_buffer_safe_for_utf8(p_buffer: PackedByteArray) -> bool:
-	if p_buffer.is_empty():
-		return true
-	var len_val: int = p_buffer.size()
-	var last_byte: int = p_buffer[len_val - 1]
-	
-	if (last_byte & 0x80) == 0:
-		return true
-	if (last_byte & 0xC0) == 0x80:
-		var i: int = 1
-		while i < 4 and (len_val - 1 - i) >= 0:
-			var b: int = p_buffer[len_val - 1 - i]
-			if (b & 0xC0) == 0xC0:
-				var expected_len: int = 0
-				if (b & 0xE0) == 0xC0:
-					expected_len = 2
-				elif (b & 0xF0) == 0xE0:
-					expected_len = 3
-				elif (b & 0xF8) == 0xF0:
-					expected_len = 4
-				
-				if (i + 1) < expected_len:
-					return false
-				else:
-					return true
-			i += 1
-		return true
-	if (last_byte & 0xC0) == 0xC0:
-		return false
-	return true
 
 
 # 线程安全地检查是否应该停止

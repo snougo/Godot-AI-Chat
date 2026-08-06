@@ -264,8 +264,6 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 	var err: Error = OK
 	
 	match p_mime:
-		"image/png":
-			err = img.load_png_from_buffer(p_data)
 		"image/jpeg", "image/jpg":
 			err = img.load_jpg_from_buffer(p_data)
 		_:
@@ -351,26 +349,25 @@ func _set_title(p_role: String, p_model_name: String) -> void:
 		ChatMessage.ROLE_USER:
 			title = "🧑‍💻 You"
 			title_style = TITLE_STYLE_USER
-			if is_folded():
-				expand()
 		
 		ChatMessage.ROLE_ASSISTANT:
 			title = "🤖 Assistant" + ("/" + p_model_name if not p_model_name.is_empty() else "")
 			title_style = TITLE_STYLE_ASSISTANT
-			if is_folded():
-				expand()
 		
 		ChatMessage.ROLE_TOOL:
 			title = "🔧 Tool Output"
 			title_style = TITLE_STYLE_TOOL
-			if not is_folded():
-				fold()
 		
 		_:
 			title = p_role.capitalize()
 			title_style = TITLE_STYLE_ASSISTANT
-			if is_folded():
-				expand()
+	
+	# 统一折叠/展开控制：工具角色默认折叠，其余默认展开
+	var should_expand := (p_role != ChatMessage.ROLE_TOOL)
+	if should_expand and is_folded():
+		expand()
+	elif not should_expand and not is_folded():
+		fold()
 	
 	# 设置标题区域样式（4个状态统一使用角色样式）
 	add_theme_stylebox_override("title_panel", title_style)
@@ -639,7 +636,6 @@ func _create_code_block(p_lang: String) -> void:
 	)
 	
 	header.add_child(popup_code_window_button)
-	_content_container.move_child(code_edit, _content_container.get_child_count() - 1)
 	_content_container.add_child(header)
 	_content_container.move_child(header, _content_container.get_child_count() - 2)
 

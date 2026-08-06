@@ -211,34 +211,34 @@ func _compare_entries(a: MemoryEntry, b: MemoryEntry) -> bool:
 
 
 # 词级模糊匹配：查询词中的任意一个词出现在文本中即匹配
-func _fuzzy_match(p_query: String, p_text: String) -> bool:
+#func _fuzzy_match(p_query: String, p_text: String) -> bool:
 	# 按空格分词（适用于英文）
-	var words: PackedStringArray = p_query.split(" ", false)
-	for word in words:
-		word = word.strip_edges()
-		if word.length() >= 2 and p_text.contains(word):
-			return true
+	#var words: PackedStringArray = p_query.split(" ", false)
+	#for word in words:
+		#word = word.strip_edges()
+		#if word.length() >= 2 and p_text.contains(word):
+			#return true
 	# 提取中文双字词进行匹配
-	var bigrams: Array[String] = _extract_chinese_bigrams(p_query)
-	for bigram in bigrams:
-		if p_text.contains(bigram):
-			return true
+	#var bigrams: Array[String] = _extract_chinese_bigrams(p_query)
+	#for bigram in bigrams:
+		#if p_text.contains(bigram):
+			#return true
 	
-	return false
+	#return false
 
 
 # 提取中文双字词
-func _extract_chinese_bigrams(p_text: String) -> Array[String]:
-	var result: Array[String] = []
-	var chars: Array[String] = []
-	for c in p_text:
-		var code: int = c.unicode_at(0)
-		if code >= 0x4E00 and code <= 0x9FFF:
-			chars.append(c)
+#func _extract_chinese_bigrams(p_text: String) -> Array[String]:
+	#var result: Array[String] = []
+	#var chars: Array[String] = []
+	#for c in p_text:
+		#var code: int = c.unicode_at(0)
+		#if code >= 0x4E00 and code <= 0x9FFF:
+			#chars.append(c)
 	
-	for i in range(chars.size() - 1):
-		var bigram: String = chars[i] + chars[i + 1]
-		if not bigram in result:
-			result.append(bigram)
+	#for i in range(chars.size() - 1):
+		#var bigram: String = chars[i] + chars[i + 1]
+		#if not bigram in result:
+			#result.append(bigram)
 	
-	return result
+	#return result

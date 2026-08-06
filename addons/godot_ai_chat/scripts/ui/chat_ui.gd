@@ -160,94 +160,40 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 	current_state = p_new_state
 	_status_label.text = p_payload if not p_payload.is_empty() else _get_default_status_text(p_new_state)
 	
+	# --- 公共控件状态（按状态规律统一设置）---
+	var is_idle: bool = (current_state == UIState.IDLE)
+	var archive_enabled: bool = (current_state == UIState.IDLE or current_state == UIState.ERROR)
+	
+	_user_input.editable = is_idle
+	_user_input.caret_blink = is_idle
+	_delete_chat_button.disabled = not archive_enabled
+	_load_chat_button.disabled = not archive_enabled
+	_save_as_markdown_button.disabled = not archive_enabled
+	_new_chat_button.disabled = not archive_enabled
+	_reconnect_button.disabled = not archive_enabled
+	
+	_status_label.modulate = _get_status_color(current_state)
+	
+	# --- Send 按钮（per-state 文案与禁用状态）---
 	match current_state:
 		UIState.IDLE:
-			if "No Chat" in _status_label.text:
-				_status_label.modulate = Color.GOLD
-			else:
-				_status_label.modulate = Color.WHITE
-			_user_input.editable = true
-			_user_input.caret_blink = true
 			_send_button.text = "Send"
 			_send_button.disabled = false
-			_delete_chat_button.disabled = false
-			_load_chat_button.disabled = false
-			_save_as_markdown_button.disabled = false
-			_new_chat_button.disabled = false
-			_reconnect_button.disabled = false
-		
 		UIState.CONNECTING:
-			_status_label.modulate = Color.WHITE
-			_user_input.editable = false
-			_user_input.caret_blink = false
 			_send_button.text = "Send"
 			_send_button.disabled = true
-			_delete_chat_button.disabled = true
-			_load_chat_button.disabled = true
-			_save_as_markdown_button.disabled = true
-			_new_chat_button.disabled = true
-			_reconnect_button.disabled = true
-		
-		UIState.WAITING_RESPONSE:
-			_status_label.modulate = Color.AQUAMARINE
-			_user_input.editable = false
-			_user_input.caret_blink = false
+		UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING:
 			_send_button.text = "Stop"
 			_send_button.disabled = false
-			_delete_chat_button.disabled = true
-			_load_chat_button.disabled = true
-			_save_as_markdown_button.disabled = true
-			_new_chat_button.disabled = true
-			_reconnect_button.disabled = true
-		
-		UIState.RESPONSE_GENERATING:
-			_status_label.modulate = Color.AQUAMARINE
-			_user_input.editable = false
-			_user_input.caret_blink = false
-			_send_button.text = "Stop"
-			_send_button.disabled = false
-			_delete_chat_button.disabled = true
-			_load_chat_button.disabled = true
-			_save_as_markdown_button.disabled = true
-			_new_chat_button.disabled = true
-			_reconnect_button.disabled = true
-		
 		UIState.TOOLCALLING:
-			_status_label.modulate = Color.GOLD
-			_user_input.editable = false
-			_user_input.caret_blink = false
 			_send_button.text = "Stop"
 			_send_button.disabled = true
-			_delete_chat_button.disabled = true
-			_load_chat_button.disabled = true
-			_save_as_markdown_button.disabled = true
-			_new_chat_button.disabled = true
-			_reconnect_button.disabled = true
-		
 		UIState.COMPRESSING:
-			_status_label.modulate = Color.GOLD
-			_user_input.editable = false
-			_user_input.caret_blink = false
 			_send_button.text = "..."
 			_send_button.disabled = true
-			_delete_chat_button.disabled = true
-			_load_chat_button.disabled = true
-			_save_as_markdown_button.disabled = true
-			_new_chat_button.disabled = true
-			_reconnect_button.disabled = true
-		
 		UIState.ERROR:
-			_status_label.modulate = Color.RED
-			_user_input.editable = false
-			_user_input.caret_blink = false
 			_send_button.text = "Send"
 			_send_button.disabled = true
-			_delete_chat_button.disabled = false
-			_load_chat_button.disabled = false
-			_save_as_markdown_button.disabled = false
-			_new_chat_button.disabled = false
-			_reconnect_button.disabled = false
-			
 			if not p_payload.is_empty():
 				_show_error_dialog(p_payload)
 
@@ -397,6 +343,23 @@ func _get_default_status_text(p_state: UIState) -> String:
 	return ""
 
 
+func _get_status_color(p_state: UIState) -> Color:
+	match p_state:
+		UIState.IDLE:
+			if "No Chat" in _status_label.text:
+				return Color.GOLD
+			return Color.WHITE
+		UIState.CONNECTING:
+			return Color.WHITE
+		UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING:
+			return Color.AQUAMARINE
+		UIState.TOOLCALLING, UIState.COMPRESSING:
+			return Color.GOLD
+		UIState.ERROR:
+			return Color.RED
+	return Color.WHITE
+
+
 func _show_error_dialog(p_msg: String) -> void:
 	_error_dialog.title = "Error"
 	_error_dialog.dialog_text = p_msg
@@ -438,7 +401,7 @@ func _apply_model_filter() -> void:
 		if new_selection_index != -1:
 			_model_selector.select(new_selection_index)
 			_on_model_selected(new_selection_index) 
-		elif not filtered_models.is_empty():
+		else:
 			_model_selector.select(0)
 			_on_model_selected(0)
 

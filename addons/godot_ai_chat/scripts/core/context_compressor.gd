@@ -92,23 +92,26 @@ static func _format_turns_for_summary(p_turns: Array) -> String:
 				_:
 					role_label = msg.role
 			
-			if msg.role == ChatMessage.ROLE_ASSISTANT and not msg.tool_calls.is_empty():
-				if not msg.content.is_empty():
+			match msg.role:
+				ChatMessage.ROLE_ASSISTANT:
+					if not msg.tool_calls.is_empty():
+						if not msg.content.is_empty():
+							lines.append("[%s]: %s" % [role_label, msg.content])
+						for tc in msg.tool_calls:
+							var func_name: String = tc.get("function", {}).get("name", "unknown")
+							var args: String = tc.get("function", {}).get("arguments", "{}")
+							if args.length() > 500:
+								args = args.substr(0, 500) + "..."
+							lines.append("  → Called tool: %s(%s)" % [func_name, args])
+					else:
+						lines.append("[%s]: %s" % [role_label, msg.content])
+				ChatMessage.ROLE_TOOL:
+					var tool_content: String = msg.content
+					if tool_content.length() > 2000:
+						tool_content = tool_content.substr(0, 2000) + "\n... (truncated)"
+					lines.append("[%s]: %s" % [role_label, tool_content])
+				_:
 					lines.append("[%s]: %s" % [role_label, msg.content])
-				for tc in msg.tool_calls:
-					var func_name: String = tc.get("function", {}).get("name", "unknown")
-					var args: String = tc.get("function", {}).get("arguments", "{}")
-					if args.length() > 500:
-						args = args.substr(0, 500) + "..."
-					lines.append("  → Called tool: %s(%s)" % [func_name, args])
-			elif msg.role == ChatMessage.ROLE_TOOL:
-				var tool_content: String = msg.content
-				if tool_content.length() > 2000:
-					tool_content = tool_content.substr(0, 2000) + "\n... (truncated)"
-				lines.append("[%s]: %s" % [role_label, tool_content])
-			else:
-				lines.append("[%s]: %s" % [role_label, msg.content])
 		
 		lines.append("")
-	
 	return "\n".join(lines)

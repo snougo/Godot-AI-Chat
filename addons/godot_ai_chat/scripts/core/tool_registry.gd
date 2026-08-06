@@ -12,6 +12,8 @@ extends RefCounted
 const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/file_tool/read_file_tool.gd",
 	
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/find_code_references_tool.gd",
+	
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_folder_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/default_tool/create_folder_tool.gd",
 	
@@ -24,14 +26,12 @@ const CORE_TOOLS_PATHS: Array[String] = [
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/manage_todo_list_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/check_todo_list_tool.gd",
 	
-	#"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_pr_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_repo_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_pr_tool.gd",
+	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_repo_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_godot_api_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_web_content_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/find_code_references_tool.gd",
 	
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",
 	"res://addons/godot_ai_chat/scripts/tools/memory_tool/delete_memory_tool.gd",
@@ -68,15 +68,14 @@ static func get_tool(p_tool_name: String) -> Object:
 	return main_agent_tools.get(p_tool_name)
 
 
-## 获取所有工具的定义（用于 API 调用）
-static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictionary]:
-	if main_agent_tools.is_empty():
-		load_default_tools()
-	
+## 构建 OpenAI / Gemini 两种格式的工具定义数组
+## [param p_tools]: 工具实例字典 { "tool_name": tool_instance }
+## [param p_for_gemini]: 是否生成 Gemini 兼容格式（顶展 schema、大写 type）
+## [return]: 工具定义数组
+static func build_tool_definitions(p_tools: Dictionary, p_for_gemini: bool) -> Array[Dictionary]:
 	var definitions: Array[Dictionary] = []
-	for tool_instance in main_agent_tools.values():
+	for tool_instance in p_tools.values():
 		var schema: Dictionary = tool_instance.get_parameters_schema()
-		
 		if p_for_gemini:
 			schema = convert_schema_to_gemini(schema)
 			definitions.append({
@@ -93,8 +92,14 @@ static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictio
 					"parameters": schema
 				}
 			})
-	
 	return definitions
+
+
+## 获取所有工具的定义（用于 API 调用）
+static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictionary]:
+	if main_agent_tools.is_empty():
+		load_default_tools()
+	return build_tool_definitions(main_agent_tools, p_for_gemini)
 
 
 ## 获取所有可用技能的名称
@@ -171,9 +176,6 @@ static func _load_and_register_tool(p_path: String) -> void:
 	if script is GDScript:
 		var tool_instance: Object = script.new()
 		if tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):
-			var t_name: String = tool_instance.get("tool_name") if "tool_name" in tool_instance else ""
-			if t_name.is_empty() and tool_instance.has_method("get_tool_name"):
-				t_name = tool_instance.call("get_tool_name")
-			
+			var t_name: String = tool_instance.tool_name
 			if not t_name.is_empty():
 				main_agent_tools[t_name] = tool_instance
