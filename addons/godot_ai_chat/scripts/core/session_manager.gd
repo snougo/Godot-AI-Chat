@@ -29,6 +29,13 @@ func create_session_from_history(p_history: ChatMessageHistory) -> ChatMessageHi
 	return _save_as_new_session(p_history, "_compressed")
 
 
+## 分叉会话：将给定历史保存为新的会话文件
+## [param p_history]: 要分叉保存的历史对象
+## [return]: 保存并绑定后的历史记录对象，失败返回 null
+func fork_session(p_history: ChatMessageHistory) -> ChatMessageHistory:
+	return _save_as_new_session(p_history, "")
+
+
 ## 加载会话
 ## [param p_session_name]: 会话文件名
 ## [return]: 加载的历史记录对象，失败返回 null

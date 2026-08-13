@@ -55,6 +55,7 @@ func _bind_ui_signals() -> void:
 	_chat_ui.mouse_entered.connect(_on_chat_ui_mouse_entered)
 	
 	_chat_ui.new_chat_button_pressed.connect(_on_new_chat_requested)
+	_chat_ui.fork_button_pressed.connect(_on_fork_requested)
 	_chat_ui.load_chat_button_pressed.connect(_on_load_chat_requested)
 	_chat_ui.delete_chat_button_pressed.connect(_on_delete_chat_requested)
 	_chat_ui.save_as_markdown_button_pressed.connect(_on_export_markdown_requested)
@@ -192,6 +193,11 @@ func _on_stop_requested() -> void:
 func _on_new_chat_requested() -> void:
 	_on_stop_requested()
 	_chat_controller.create_new_chat()
+
+
+func _on_fork_requested() -> void:
+	_on_stop_requested()
+	_chat_controller.fork_current_chat()
 
 
 func _on_load_chat_requested(session_name: String) -> void:

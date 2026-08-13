@@ -15,6 +15,8 @@ signal send_button_pressed(user_prompt: String)
 signal stop_button_pressed
 ## 当用户点击新聊天按钮时发出
 signal new_chat_button_pressed
+## 当用户点击 Fork 按钮时发出
+signal fork_button_pressed
 ## 当用户在设置页面点击保存按钮时发出
 signal settings_save_button_pressed
 ## 当用户点击重新连接按钮时发出
@@ -57,6 +59,7 @@ enum UIState {
 @onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/DeleteButton
 @onready var _load_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/LoadChatButton
 @onready var _new_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/NewChatButton
+@onready var _fork_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/ForkButton
 
 @onready var _send_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/SendButton
 @onready var _save_as_markdown_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/SaveAsMarkdownButton
@@ -107,6 +110,7 @@ func _ready() -> void:
 	_delete_chat_button.pressed.connect(_on_delete_chat_button_pressed)
 	_load_chat_button.pressed.connect(_on_load_chat_button_pressed)
 	_new_chat_button.pressed.connect(_on_new_chat_button_pressed)
+	_fork_button.pressed.connect(_on_fork_button_pressed)
 	
 	_model_selector.item_selected.connect(_on_model_selected)
 	_model_name_filter_input.text_changed.connect(_on_model_name_filter_text_changed)
@@ -170,6 +174,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 	_load_chat_button.disabled = not archive_enabled
 	_save_as_markdown_button.disabled = not archive_enabled
 	_new_chat_button.disabled = not archive_enabled
+	_fork_button.disabled = not archive_enabled
 	_reconnect_button.disabled = not archive_enabled
 	
 	_status_label.modulate = _get_status_color(current_state)
@@ -452,6 +457,10 @@ func _on_load_chat_button_pressed() -> void:
 
 func _on_new_chat_button_pressed() -> void:
 	new_chat_button_pressed.emit()
+
+
+func _on_fork_button_pressed() -> void:
+	fork_button_pressed.emit()
 
 
 func _on_reconnect_button_pressed() -> void:

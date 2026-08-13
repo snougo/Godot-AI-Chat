@@ -43,6 +43,26 @@ func create_new_chat() -> void:
 		_chat_ui.show_confirmation("Error: Failed to create chat session.")
 
 
+## 分叉当前会话：深拷贝当前会话内容并保存为新会话后加载
+func fork_current_chat() -> void:
+	var source_history: ChatMessageHistory = _current_chat_window.chat_history
+	if source_history == null or source_history.messages.is_empty():
+		_chat_ui.show_confirmation("No chat to fork. Please start or load a chat first.")
+		return
+
+	var forked_history: ChatMessageHistory = source_history.duplicate_deep(Resource.DEEP_DUPLICATE_ALL) as ChatMessageHistory
+	if forked_history == null:
+		_chat_ui.show_confirmation("Error: Failed to fork chat session.")
+		return
+
+	var saved_history := _session_manager.fork_session(forked_history)
+	if saved_history:
+		_load_history_to_ui(saved_history, _session_manager.current_session_path.get_file())
+		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Forked: " + _session_manager.current_session_path.get_file())
+	else:
+		_chat_ui.show_confirmation("Error: Failed to fork chat session.")
+
+
 ## 加载会话
 ## [param p_session_name]: 会话文件名
 func load_chat(p_session_name: String) -> void:

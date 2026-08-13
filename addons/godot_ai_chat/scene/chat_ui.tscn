@@ -117,6 +117,14 @@ disabled = true
 text_overrun_behavior = 1
 fit_to_longest_item = false
 
+[node name="ForkButton" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=536218530]
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Fork Current Session"
+theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
+text = "Fork"
+text_overrun_behavior = 2
+
 [node name="DeleteButton" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=887043830]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -139,14 +147,6 @@ size_flags_horizontal = 3
 tooltip_text = "New Chat"
 theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
 text = "New"
-text_overrun_behavior = 2
-
-[node name="Button" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=536218530]
-layout_mode = 2
-size_flags_horizontal = 3
-tooltip_text = "Fork Current Session"
-theme_override_colors/font_hover_color = Color(0.34901962, 0.9490196, 0.4117647, 1)
-text = "Fork"
 text_overrun_behavior = 2
 
 [node name="NetworkContainer" type="HBoxContainer" parent="TabContainer/Chat/VBoxContainer" unique_id=2081664670]
