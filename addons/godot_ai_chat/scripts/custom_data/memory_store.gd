@@ -5,14 +5,11 @@ extends Resource
 ## 记忆仓库
 ## 管理所有记忆条目的存储、检索、召回。
 
-
 ## 类型排序权重（数值越小越靠前）
 const TYPE_ORDER: Dictionary = {
-	"session_summary": 0,
-	"lesson_learned": 1,
-	"user_preference": 2,
-	"project_decision": 3,
-	"bug_fix": 4
+	"lesson_learned": 0,
+	"design_rationale": 1,
+	"user_preference": 2
 }
 
 @export var entries: Array[MemoryEntry] = []

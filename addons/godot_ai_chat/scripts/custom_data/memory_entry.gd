@@ -14,11 +14,9 @@ const VALID_SCOPES: Array[String] = [
 
 ## 记忆类型常量
 const VALID_MEMORY_TYPES: Array[String] = [
-	"session_summary",    # 会话摘要（仅限 workspace）
 	"user_preference",    # 用户偏好
-	"project_decision",   # 项目决策
 	"lesson_learned",     # 经验教训
-	"bug_fix"             # Bug 修复记录（仅限 workspace）
+	"design_rationale",   # 设计依据（为什么/架构取舍）
 ]
 
 ## 记忆ID
@@ -26,7 +24,7 @@ const VALID_MEMORY_TYPES: Array[String] = [
 ## 作用域 workspace | global
 @export var scope: String = "workspace"
 ## 记忆类型
-@export var memory_type: String = "session_summary"
+@export var memory_type: String = ""
 ## 记忆话题组
 @export var topic: String = ""
 ## 记忆标题

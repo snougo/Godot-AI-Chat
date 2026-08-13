@@ -4,7 +4,9 @@ extends Control
 
 ## 聊天中心控制器
 ##
-## 插件的主入口，协调 UI、网络、会话和 Agent 各模块的交互。
+## 插件的主入口，作为组合根负责依赖注入，并协调聊天循环。
+## 会话管理逻辑已抽取至 ChatController。
+
 
 # --- @onready Vars ---
 
@@ -15,7 +17,7 @@ extends Control
 
 # --- Private Vars ---
 
-var _session_manager: SessionManager
+var _chat_controller: ChatController
 var _is_performing_cleanup: bool = false
 var _is_plugin_init: bool = false
 var _compression_config: ContextCompressionConfig = null
@@ -25,7 +27,10 @@ var _compression_config: ContextCompressionConfig = null
 
 func _ready() -> void:
 	ToolRegistry.load_default_tools()
-	_session_manager = SessionManager.new()
+	
+	var session_manager := SessionManager.new()
+	_chat_controller = ChatController.new()
+	_chat_controller.setup(session_manager, _chat_ui, _current_chat_window)
 	
 	_agent_orchestrator.network_manager = _network_manager
 	_agent_orchestrator.current_chat_window = _current_chat_window
@@ -63,10 +68,10 @@ func _bind_ui_signals() -> void:
 	
 	_chat_ui.settings_save_button_pressed.connect(func():
 		_network_manager.get_model_list()
-		_update_turn_info()
+		_chat_controller.update_turn_info()
 	)
 	
-	_chat_ui.model_selection_changed.connect(func(model_name: String): _network_manager.current_model_name = model_name)
+	_chat_ui.model_selection_changed.connect(_network_manager.set_model_name)
 	
 	_network_manager.get_model_list_request_started.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.CONNECTING))
 	_network_manager.get_model_list_request_succeeded.connect(_chat_ui.update_model_list)
@@ -100,28 +105,6 @@ func _run_chat_loop() -> void:
 		_current_chat_window.chat_history.emit_changed()
 
 
-func _load_history_to_ui(history: ChatMessageHistory, filename: String) -> void:
-	_chat_ui.select_session_by_name(filename)
-	_chat_ui.reset_token_usage_display()
-	_current_chat_window.load_session_history_resource(history)
-	
-	if history.changed.is_connected(_update_turn_info):
-		history.changed.disconnect(_update_turn_info)
-	history.changed.connect(_update_turn_info)
-	
-	_update_turn_info()
-
-
-func _update_turn_info() -> void:
-	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
-	var history: ChatMessageHistory = _current_chat_window.chat_history
-	
-	if history and settings:
-		_chat_ui.update_turn_display(history.get_turn_count(), settings.max_chat_turns)
-	elif settings:
-		_chat_ui.update_turn_display(0, settings.max_chat_turns)
-
-
 func _get_compression_config() -> ContextCompressionConfig:
 	if _compression_config:
 		return _compression_config
@@ -148,12 +131,10 @@ func _try_compress_context() -> Dictionary:
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
 		return {"success": false, "error": result.error}
 	
-	# 保存为新会话并加载
-	var saved_history := _session_manager.create_session_from_history(result.new_history)
+	var ok: bool = _chat_controller.create_session_from_history(result.new_history)
 	
-	if saved_history:
-		_load_history_to_ui(saved_history, _session_manager.current_session_path.get_file())
-		AIChatLogger.info("[ChatHub] Context compressed. New session: " + _session_manager.current_session_path.get_file())
+	if ok:
+		AIChatLogger.info("[ChatHub] Context compressed. New session loaded.")
 		return {"success": true}
 	else:
 		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
@@ -163,14 +144,13 @@ func _try_compress_context() -> Dictionary:
 # --- Signal Callbacks ---
 
 func _on_user_send_message(text: String) -> void:
-	if not _session_manager.has_active_session() or not _current_chat_window.chat_history:
+	if not _chat_controller.has_active_session() or not _current_chat_window.chat_history:
 		_chat_ui.show_confirmation("No chat active. Please click 'New Chat' or 'Load Chat' to start.")
 		return
 	
 	_chat_ui.clear_user_input()
 	var processed: Dictionary = AttachmentProcessor.process_input(text)
 	
-	# 检查是否需要上下文压缩
 	var settings := ToolBox.get_plugin_settings()
 	var compression_config := _get_compression_config()
 	
@@ -211,55 +191,20 @@ func _on_stop_requested() -> void:
 
 func _on_new_chat_requested() -> void:
 	_on_stop_requested()
-	var history := _session_manager.create_new_session()
-	
-	if history:
-		_load_history_to_ui(history, _session_manager.current_session_path.get_file())
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created: " + _session_manager.current_session_path.get_file())
-	else:
-		_chat_ui.show_confirmation("Error: Failed to create chat session.")
+	_chat_controller.create_new_chat()
 
 
 func _on_load_chat_requested(session_name: String) -> void:
 	_on_stop_requested()
-	var history := _session_manager.load_session(session_name)
-	
-	if history:
-		_load_history_to_ui(history, session_name)
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: " + session_name)
-	else:
-		_chat_ui.show_confirmation("Error: Failed to load session: " + session_name)
+	_chat_controller.load_chat(session_name)
 
 
 func _on_delete_chat_requested(session_name: String) -> void:
-	var is_current := (_session_manager.current_session_path.get_file() == session_name)
-	
-	if not _session_manager.delete_session(session_name):
-		_chat_ui.show_confirmation("Error: Failed to delete session: " + session_name)
-		return
-	
-	if is_current:
-		var loaded_history := _session_manager.load_latest_session()
-		if loaded_history:
-			var loaded_name = _session_manager.current_session_path.get_file()
-			_load_history_to_ui(loaded_history, loaded_name)
-			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted %s, loaded: %s" % [session_name, loaded_name])
-		else:
-			_current_chat_window.chat_history = null
-			for child in _current_chat_window.chat_list_container.get_children():
-				child.queue_free()
-			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted %s. No chats remaining." % session_name)
-			_update_turn_info()
-	else:
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted archive: " + session_name)
-	
-	_chat_ui.update_session_selector()
+	_chat_controller.delete_chat(session_name)
 
 
 func _on_export_markdown_requested(path: String) -> void:
-	if _current_chat_window.chat_history:
-		if SessionStorage.save_to_markdown(_current_chat_window.chat_history.messages, path):
-			_chat_ui.show_confirmation("Exported to " + path)
+	_chat_controller.export_markdown(path)
 
 
 func _on_chat_ui_mouse_entered() -> void:
@@ -268,30 +213,11 @@ func _on_chat_ui_mouse_entered() -> void:
 		
 		if not _is_plugin_init:
 			_is_plugin_init = true
-			if not _session_manager.has_active_session():
-				var history := _session_manager.load_latest_session()
-				if history:
-					_load_history_to_ui(history, _session_manager.current_session_path.get_file())
-					_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: " + _session_manager.current_session_path.get_file())
-				else:
-					_on_new_chat_requested()
+			_chat_controller.load_latest_on_init()
 		
 		await get_tree().create_timer(0.5).timeout
 		_network_manager.get_model_list()
 
 
 func _on_workspace_changed(p_new_path: String) -> void:
-	# 验证路径有效性
-	if not DirAccess.dir_exists_absolute(p_new_path):
-		AIChatLogger.error("Invalid workspace path: " + p_new_path)
-		return
-	else:
-		AIChatLogger.info("Workspace change to: " + p_new_path)
-	
-	var plugin_settings_res := ToolBox.get_plugin_settings()
-	plugin_settings_res.workspace_path = p_new_path
-	
-	if ResourceSaver.save(plugin_settings_res, PluginPaths.SETTINGS_PATH) == OK:
-		AIChatLogger.info("Plugin Settings Saved.")
-	
-	ToolBox.update_editor_filesystem(PluginPaths.SETTINGS_PATH)
+	_chat_controller.handle_workspace_change(p_new_path)

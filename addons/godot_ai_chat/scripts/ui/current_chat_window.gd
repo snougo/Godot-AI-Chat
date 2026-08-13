@@ -4,8 +4,8 @@ extends Node
 
 ## 当前聊天窗口逻辑控制器
 ##
-## 负责管理当前聊天窗口的消息显示、流式处理以及 UI 滚动。
-## 作为 UI 组件与数据层之间的中介，处理消息的追加、更新和回滚。
+## 作为纯视图层，订阅 ChatMessageHistory 的数据变更信号进行渲染，
+## 并负责流式渲染、可视性剔除与自动滚动。
 
 # --- Signals ---
 
@@ -13,6 +13,7 @@ extends Node
 signal token_usage_updated(usage: Dictionary)
 
 # --- Constants ---
+
 const CULLING_INTERVAL: float = 0.2 # 每秒检测5次，足够平滑且低耗
 ## 消息块场景
 const CHAT_MESSAGE_BLOCK_SCENE: PackedScene = preload(PluginPaths.CHAT_MESSAGE_BLOCK_SCENE)
@@ -26,7 +27,7 @@ const BOTTOM_THRESHOLD: float = 50.0
 var chat_list_container: VBoxContainer
 ## 滚动容器引用
 var chat_scroll_container: ScrollContainer
-## 当前加载的聊天历史资源
+## 当前加载的聊天历史资源（唯一数据源）
 var chat_history: ChatMessageHistory
 ## 当前使用的模型名称
 var current_model_name: String = ""
@@ -44,6 +45,12 @@ var _is_auto_scrolling: bool = false
 # [自动滚动] 用于检测是否信号已经连接
 var _scroll_signals_connected: bool = false
 
+# 流式渲染临时状态：正在构建的 assistant 消息与对应 block
+var _streaming_msg: ChatMessage = null
+var _streaming_block: ChatMessageBlock = null
+# 流式已渲染、待正式绑定的消息 instance_id 集合（用于跳过 message_added 的重复渲染）
+var _stream_rendered_ids: Dictionary = {}
+
 
 # --- Built-in Functions ---
 
@@ -60,121 +67,134 @@ func _process(delta: float) -> void:
 # --- Public Functions ---
 
 ## 加载聊天历史资源并刷新显示
-## [param p_session_history]: 聊天历史资源对象
 func load_session_history_resource(p_session_history: ChatMessageHistory) -> void:
+	if chat_history != null and chat_history.message_added.is_connected(_on_history_message_added):
+		chat_history.message_added.disconnect(_on_history_message_added)
+	
 	chat_history = p_session_history
+	
+	if chat_history != null:
+		chat_history.message_added.connect(_on_history_message_added)
+	
+	# 清理流式临时状态
+	_streaming_msg = null
+	_streaming_block = null
+	_stream_rendered_ids.clear()
+	
 	_refresh_display()
 
 
-## 追加用户消息到历史和 UI
-## [param p_text]: 文本内容
-## [param p_images]: 图片数组 [{"data":..., "mime":...}]
+## 清空当前会话视图（仅断开数据绑定并清空 UI，不删除数据）
+func clear_session() -> void:
+	if chat_history != null and chat_history.message_added.is_connected(_on_history_message_added):
+		chat_history.message_added.disconnect(_on_history_message_added)
+	
+	chat_history = null
+	_streaming_msg = null
+	_streaming_block = null
+	_stream_rendered_ids.clear()
+	
+	for child in chat_list_container.get_children():
+		child.queue_free()
+
+
+## 追加用户消息到历史（渲染由数据信号驱动）
 func append_user_message(p_text: String, p_images: Array = []) -> void:
 	chat_history.add_user_message(p_text, p_images)
-	_add_block(ChatMessage.ROLE_USER, p_text, true, [], p_images)
-	_scroll_to_bottom()
 
 
-## 追加错误消息到 UI
-## [param p_text]: 错误信息
+## 追加错误消息到 UI（不入库）
 func append_error_message(p_text: String) -> void:
 	var block: ChatMessageBlock = _create_block()
 	block.set_error(p_text)
 	_scroll_to_bottom()
 
 
-## 追加工具消息到历史和 UI
-## [param p_tool_name]: 工具名称
-## [param p_result_text]: 工具执行结果
-## [param p_tool_call_id]: 工具调用 ID
-## [param p_image_data]: 结果中的图片数据 (可选)
-## [param p_image_mime]: 图片 MIME 类型 (可选)
+## 追加工具消息到历史（渲染由数据信号驱动）
 func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call_id: String, p_image_data: PackedByteArray = PackedByteArray(), p_image_mime: String = "") -> void:
 	var msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, p_result_text, p_tool_name)
 	msg.tool_call_id = p_tool_call_id
 	
-	# 使用 add_image 方法
 	if not p_image_data.is_empty():
 		msg.add_image(p_image_data, p_image_mime)
-		
+	
 	chat_history.add_message(msg)
-	
-	# 构造 UI 显示用的图片数组
-	var display_images: Array = []
-	if not p_image_data.is_empty():
-		display_images.append({"data": p_image_data, "mime": p_image_mime})
-	
-	# [修复] 修正参数传递顺序：
-	# _add_block(role, content, instant, tool_calls, images, reasoning)
-	_add_block(ChatMessage.ROLE_TOOL, p_result_text, true, [], display_images, "")
-	_scroll_to_bottom()
 
 
 ## 处理流式数据块
 ## [param p_raw_chunk]: 原始数据块
 ## [param p_provider]: LLM 提供者实例，用于解析数据块
 func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -> void:
-	# 1. 确保数据层有 Assistant 消息（复用尾部 assistant，否则新建）
-	var target_msg: ChatMessage = null
-	var is_new_msg: bool = false
-	if not chat_history.messages.is_empty():
-		var last: ChatMessage = chat_history.messages.back()
-		if last.role == ChatMessage.ROLE_ASSISTANT:
-			target_msg = last
-	if target_msg == null:
-		target_msg = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, "")
-		is_new_msg = true
+	# 1. 确保存在流式消息与对应 block
+	if _streaming_msg == null:
+		_streaming_msg = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, "")
 	
-	# 2. 委托 Provider 处理拼装
-	var ui_update: Dictionary = p_provider.process_stream_chunk(target_msg, p_raw_chunk)
+	if _streaming_block == null:
+		_streaming_block = _create_block()
+		_streaming_block.start_stream(ChatMessage.ROLE_ASSISTANT, current_model_name)
+		_scroll_to_bottom()
 	
-	# 3. 处理 UI 动画
+	# 2. 委托 Provider 解析并修改 _streaming_msg
+	var ui_update: Dictionary = p_provider.process_stream_chunk(_streaming_msg, p_raw_chunk)
+	
+	# 3. UI 动画
 	var content_delta: String = ui_update.get("content_delta", "")
 	var reasoning_delta: String = ui_update.get("reasoning_delta", "")
 	
-	var last_block: ChatMessageBlock = _get_last_block()
-	var is_assistant_block: bool = (last_block != null and last_block.get_role() == ChatMessage.ROLE_ASSISTANT)
-	
-	if not (is_assistant_block and last_block.visible):
-		var block: ChatMessageBlock = _create_block()
-		block.start_stream(ChatMessage.ROLE_ASSISTANT, current_model_name)
-		last_block = block
-		# 新消息块被添加时，滚动到底部
-		_scroll_to_bottom()
-	
 	if not content_delta.is_empty():
-		last_block.append_chunk(content_delta)
+		_streaming_block.append_chunk(content_delta)
 	
 	if not reasoning_delta.is_empty():
-		last_block.append_reasoning(reasoning_delta)
+		_streaming_block.append_reasoning(reasoning_delta)
 	
 	# 4. 工具调用视觉反馈
-	if not target_msg.tool_calls.is_empty():
-		for tc in target_msg.tool_calls:
-			last_block.show_tool_call(tc)
+	if not _streaming_msg.tool_calls.is_empty():
+		for tc in _streaming_msg.tool_calls:
+			_streaming_block.show_tool_call(tc)
 	
 	# 5. Token 统计
 	var usage: Variant = ui_update.get("usage", null)
 	if usage is Dictionary and not usage.is_empty():
 		update_token_usage(usage)
+
+
+## 结束流式接收：刷出缓冲并将流式消息入库
+func flush_stream_buffer() -> void:
+	if _streaming_block != null and _streaming_block.has_method("finish_stream"):
+		_streaming_block.finish_stream()
 	
-	# 流式追加内容时不再强制滚动，允许用户自由浏览历史消息（滚动由 ScrollBar.changed 信号响应）
-	
-	# 新建消息有实际内容时才入库，复用消息已在历史中无需重复添加
-	if is_new_msg and (not target_msg.content.is_empty() or not target_msg.tool_calls.is_empty() or not target_msg.reasoning_content.is_empty()):
-		chat_history.add_message(target_msg)
+	if _streaming_msg != null:
+		var has_content: bool = (
+			not _streaming_msg.content.is_empty()
+			or not _streaming_msg.tool_calls.is_empty()
+			or not _streaming_msg.reasoning_content.is_empty()
+		)
+		
+		if has_content and chat_history != null:
+			_stream_rendered_ids[_streaming_msg.get_instance_id()] = true
+			chat_history.add_message(_streaming_msg)
+		elif _streaming_block != null:
+			# 空响应：移除空 block
+			_streaming_block.queue_free()
+		
+		_streaming_msg = null
+		_streaming_block = null
 
 
 ## 回滚未完成的消息（用于停止生成时）
 func rollback_incomplete_message() -> void:
-	# 即使历史为空，也可能存在游离的 UI 块（例如第一条消息生成时停止），所以仍需刷新
-	if chat_history.messages.is_empty():
+	# 清理流式临时状态
+	_streaming_msg = null
+	_streaming_block = null
+	_stream_rendered_ids.clear()
+	
+	if chat_history == null or chat_history.messages.is_empty():
 		_refresh_display()
 		return
 	
 	var safety_count: int = 0
 	
-	# 1. 纯数据回滚循环
+	# 纯数据回滚循环
 	while not chat_history.messages.is_empty() and safety_count < 10:
 		var last_msg: ChatMessage = chat_history.messages.back()
 		
@@ -191,8 +211,6 @@ func rollback_incomplete_message() -> void:
 		
 		safety_count += 1
 	
-	# 2. 强制重绘 UI
-	# 这会消除所有"游离"的、未入库的 UI Block，保证视图与数据绝对一致
 	_refresh_display()
 
 
@@ -207,15 +225,23 @@ func update_token_usage(p_usage: Dictionary) -> void:
 		token_usage_updated.emit(p_usage)
 
 
-## 强制刷新并结束当前正在生成的 UI 消息块
-func flush_stream_buffer() -> void:
-	var last_block: ChatMessageBlock = _get_last_block()
-	if last_block and last_block.has_method("finish_stream"):
-		# 这将把 _pending_buffer 里残留的字符（如未闭合的反引号）刷出来，并立即停止打字机效果
-		last_block.finish_stream()
-
-
 # --- Private Functions ---
+
+# 数据信号回调：渲染新追加的消息
+func _on_history_message_added(p_msg: ChatMessage) -> void:
+	var msg_id: int = p_msg.get_instance_id()
+	if _stream_rendered_ids.has(msg_id):
+		_stream_rendered_ids.erase(msg_id)
+		return
+	
+	_render_message(p_msg)
+	_scroll_to_bottom()
+
+
+# 渲染单条消息为 UI block
+func _render_message(p_msg: ChatMessage) -> void:
+	_add_block(p_msg.role, p_msg.content, true, p_msg.tool_calls, p_msg.images, p_msg.reasoning_content)
+
 
 # 执行可视性剔除逻辑
 func _update_visibility_culling() -> void:
@@ -282,13 +308,12 @@ func _refresh_display() -> void:
 		c.queue_free()
 	await get_tree().process_frame
 	
-	for msg in chat_history.messages:
-		if msg.role == ChatMessage.ROLE_SYSTEM: 
-			continue
-		
-		var display_images: Array = msg.images
-		_add_block(msg.role, msg.content, true, msg.tool_calls, display_images, msg.reasoning_content)
-		await get_tree().process_frame
+	if chat_history != null:
+		for msg in chat_history.messages:
+			if msg.role == ChatMessage.ROLE_SYSTEM:
+				continue
+			_render_message(msg)
+			await get_tree().process_frame
 	
 	_is_loading = false
 	await get_tree().process_frame

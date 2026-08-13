@@ -31,7 +31,7 @@ func get_parameters_schema() -> Dictionary:
 			"memory_type": {
 				"type": "string",
 				"enum": MemoryEntry.get_valid_types(),
-				"description": "Type of memory: session_summary(workspace only), user_preference, project_decision, lesson_learned, bug_fix(workspace only)"
+				"description": "Type of memory: lesson_learned (principles + bug symptom/root-cause clues), design_rationale (why/architecture tradeoffs), user_preference (user preferences)"
 			},
 			"topic": {
 				"type": "string",

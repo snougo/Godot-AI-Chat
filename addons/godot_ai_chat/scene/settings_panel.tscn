@@ -56,17 +56,19 @@ layout_mode = 2
 size_flags_horizontal = 3
 text_overrun_behavior = 1
 selected = 0
-item_count = 5
+item_count = 6
 popup/item_0/text = "OpenAI-ChatCompletions"
 popup/item_0/id = 0
 popup/item_1/text = "OpenAI-Responses"
 popup/item_1/id = 1
-popup/item_2/text = "ZhipuAI"
+popup/item_2/text = "OpenCode Go"
 popup/item_2/id = 2
-popup/item_3/text = "Google Gemini"
+popup/item_3/text = "ZhipuAI"
 popup/item_3/id = 3
-popup/item_4/text = "Anthropic-Compatible"
+popup/item_4/text = "Google Gemini"
 popup/item_4/id = 4
+popup/item_5/text = "Anthropic-Compatible"
+popup/item_5/id = 5
 
 [node name="BaseUrl" type="HBoxContainer" parent="Panel/MarginContainer/VBoxContainer" unique_id=242663543]
 layout_mode = 2
@@ -75,7 +77,8 @@ theme_override_constants/separation = 10
 [node name="BaseUrlLabel" type="Label" parent="Panel/MarginContainer/VBoxContainer/BaseUrl" unique_id=827480794]
 layout_mode = 2
 size_flags_horizontal = 3
-tooltip_text = "When using openRouter as API Service Provider, You should input https://openrouter.ai/api, not https://openrouter.ai"
+tooltip_text = "openRouter: https://openrouter.ai/api
+OpenCode Go: https://opencode.ai/zen/go/v1"
 mouse_filter = 1
 text = "Base Url:"
 vertical_alignment = 1

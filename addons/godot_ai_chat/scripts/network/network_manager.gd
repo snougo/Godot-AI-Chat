@@ -26,6 +26,11 @@ func _ready() -> void:
 	_http_request_node.timeout = 10.0
 
 
+## 设置当前模型名称
+func set_model_name(p_model_name: String) -> void:
+	current_model_name = p_model_name
+
+
 ## 从API端点获取模型列表
 func get_model_list() -> void:
 	if not _update_provider_config():

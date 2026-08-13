@@ -6,6 +6,11 @@ extends Resource
 ##
 ## 负责管理对话历史记录，提供增删改查及上下文截断功能。
 
+# --- Signals ---
+
+## 当一条新消息被追加到历史时发出（用于驱动视图增量渲染）
+signal message_added(p_msg: ChatMessage)
+
 # --- @export Vars ---
 
 ## 核心数据存储：强类型的消息列表
@@ -18,6 +23,7 @@ extends Resource
 func add_message(p_msg: ChatMessage) -> void:
 	messages.append(p_msg)
 	emit_changed()
+	message_added.emit(p_msg)
 
 
 ## 添加一条用户消息

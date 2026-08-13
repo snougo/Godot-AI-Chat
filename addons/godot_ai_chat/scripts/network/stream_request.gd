@@ -41,9 +41,6 @@ var _incoming_text_buffer: String = ""
 # SSE 状态跟踪：当前正在处理的事件类型
 var _current_sse_event: String = ""
 
-# 保存 HTTPClient 引用以便强制关闭
-var _http_client: HTTPClient = null
-
 
 # --- Built-in Functions ---
 
@@ -75,10 +72,8 @@ func cancel() -> void:
 	_stop_flag = true
 	_stop_flag_lock.unlock()
 	
-	# 强制关闭 HTTPClient 连接，让服务器感知到客户端已断开
-	if _http_client != null:
-		_http_client.close()
-
+	# 不再跨线程调用 _http_client.close()
+	# 由工作线程在下一轮 poll 检测到 _stop_flag 后自行 close，避免数据竞争
 
 
 ## 等待工作线程任务完成并清理 WorkerThreadPool 内部资源
@@ -97,8 +92,6 @@ func _thread_task() -> void:
 	_body_json = JSON.stringify(_body_dict)
 	
 	var client: HTTPClient = HTTPClient.new()
-	# 保存引用以便 cancel() 可以强制关闭连接
-	_http_client = client
 	var err: Error = OK
 	
 	# 1. 解析 URL
