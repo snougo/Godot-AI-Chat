@@ -10,7 +10,7 @@ extends Resource
 @export var model_name: String = ""
 @export var supports_vision: bool = false
 
-@export_range(1, 100, 1) var max_chat_turns: int = 40
+@export_range(1, 200, 1) var max_chat_turns: int = 80
 @export var network_timeout: int = 180
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.6
 
