@@ -28,6 +28,7 @@ extends BaseLLMProvider
 ## （官方端点表 @ai-sdk/openai-compatible 对应的模型）
 const CHAT_MODELS: Array[String] = [
 	"grok-4.5",
+	"glm-5.3",
 	"glm-5.2",
 	"glm-5.1",
 	"kimi-k3",
@@ -44,6 +45,8 @@ const CHAT_MODELS: Array[String] = [
 ## （官方端点表 @ai-sdk/openai 对应的模型）
 const RESPONSES_MODELS: Array[String] = [
 	"gpt-5.6-luna",
+	"muse-spark-1.2",
+	"muse-spark-1.2-contributor"
 ]
 
 ## Anthropic Messages 兼容模型
@@ -97,7 +100,8 @@ func get_stream_parser_type() -> StreamParserType:
 ## [修复] opencode 的 /v1/messages (Anthropic 兼容) 端点只接受 x-api-key 头，
 ## 不接受 Authorization: Bearer，否则返回 401 "Missing API key"
 func get_request_headers(p_api_key: String, p_stream: bool) -> PackedStringArray:
-	if _get_handler(_last_model_name) is AnthropicCompatibleProvider:
+	var handler: BaseLLMProvider = _get_handler(_last_model_name)
+	if handler is AnthropicCompatibleProvider:
 		var headers: PackedStringArray = []
 		headers.append("x-api-key: " + p_api_key)
 		headers.append("anthropic-version: " + ANTHROPIC_API_VERSION)
@@ -105,22 +109,24 @@ func get_request_headers(p_api_key: String, p_stream: bool) -> PackedStringArray
 		if p_stream:
 			headers.append("Accept: text/event-stream")
 		return headers
-	return _get_handler(_last_model_name).get_request_headers(p_api_key, p_stream)
+	return handler.get_request_headers(p_api_key, p_stream)
 
 
 ## 获取请求 URL（按模型路由到对应端点）
 ## [p_model_name] 为空时返回 {base}/models，用于动态获取模型列表
 func get_request_url(p_base_url: String, p_model_name: String, p_api_key: String, p_stream: bool) -> String:
-	_last_model_name = p_model_name
+	var handler: BaseLLMProvider = _get_handler(p_model_name)
 	var base: String = _normalize_base_url(p_base_url)
+	_last_model_name = p_model_name
 	# 模型列表请求：官方端点 {base}/models
 	if p_model_name.is_empty():
-		return base + "/models"
-	return _get_handler(p_model_name).get_request_url(base, p_model_name, p_api_key, p_stream)
+		return _chat_handler.get_request_url(base, "", p_api_key, p_stream)
+	return handler.get_request_url(base, p_model_name, p_api_key, p_stream)
 
 
-## 构建请求体（按模型路由到对应协议格式）
-func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
+## [子类覆写] 构建请求体（按模型路由到对应协议格式）
+## 图片净化已由基类模板方法 build_request_body 统一完成
+func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	_last_model_name = p_model_name
 	return _get_handler(p_model_name).build_request_body(p_model_name, p_messages, p_temperature, p_stream, p_tool_definitions)
 

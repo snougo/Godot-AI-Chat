@@ -6,40 +6,6 @@ extends RefCounted
 ## 负责管理 Main-Agent 的核心工具集，并为 Sub-Agent 提供技能列表查询。
 ## Main-Agent 不挂载技能，只拥有固定核心工具集。
 
-# --- Constants ---
-
-## 核心工具路径 (始终加载给 Main-Agent)
-const CORE_TOOLS_PATHS: Array[String] = [
-	"res://addons/godot_ai_chat/scripts/tools/file_tool/read_file_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/list_folder_tool.gd",
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/create_folder_tool.gd",
-	
-	#"res://addons/godot_ai_chat/scripts/tools/default_tool/create_new_skill_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/get_node_properties_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/rollback_files_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/default_tool/run_editor_script_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/manage_todo_list_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/todo_list_tool/check_todo_list_tool.gd",
-	
-	#"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_pr_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_github_repo_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_web_content_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/search_godot_api_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/search_tool/find_code_references_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/memory_tool/delete_memory_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_memories_tool.gd",
-	
-	"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/list_available_skills_tool.gd",
-	"res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/create_sub_agent_tool.gd"
-	]
 
 # --- Public Vars ---
 
@@ -59,6 +25,13 @@ static func load_default_tools() -> void:
 	main_agent_tools.clear()
 	_load_core_tools()
 	AIChatLogger.debug("[ToolRegistry] Core tools loaded. Total Tools: %d" % main_agent_tools.size())
+
+
+## 仅重新加载核心工具集（不重扫技能）
+## 用于工具配置变更后的即时刷新，避免每次聊天循环都产生 skills 目录扫描 IO
+static func reload_core_tools_only() -> void:
+	main_agent_tools.clear()
+	_load_core_tools()
 
 
 ## 获取指定名称的工具实例
@@ -158,19 +131,30 @@ static func _load_skill_from_folder(p_folder_path: String) -> void:
 
 
 static func _load_core_tools() -> void:
-	for path in CORE_TOOLS_PATHS:
+	var config: MainAgentToolConfig = MainAgentToolConfig.get_config()
+	if config == null:
+		AIChatLogger.error("[ToolRegistry] Failed to load MainAgentToolConfig: %s" % PluginPaths.MAIN_AGENT_TOOL_CONFIG_PATH)
+		return
+	if config.tool_scripts.is_empty():
+		AIChatLogger.warn("[ToolRegistry] MainAgentToolConfig '%s' has no tool_scripts, no tools loaded." % config.config_name)
+		return
+	for path in config.tool_scripts:
 		_load_and_register_tool(path)
 
 
 static func _load_and_register_tool(p_path: String) -> void:
-	if not FileAccess.file_exists(p_path):
-		AIChatLogger.warn("[ToolRegistry] Tool file not found: %s" % p_path)
+	var tool_path: String = _resolve_tool_path(p_path)
+	if tool_path.is_empty():
+		AIChatLogger.warn("[ToolRegistry] Cannot resolve tool path: %s" % p_path)
+		return
+	if not FileAccess.file_exists(tool_path):
+		AIChatLogger.warn("[ToolRegistry] Tool file not found: %s" % tool_path)
 		return
 	
-	var script: Resource = load(p_path)
+	var script: Resource = load(tool_path)
 	
 	if script == null:
-		AIChatLogger.error("[ToolRegistry] Failed to load script (null): %s" % p_path)
+		AIChatLogger.error("[ToolRegistry] Failed to load script (null): %s" % tool_path)
 		return
 	
 	if script is GDScript:
@@ -179,3 +163,11 @@ static func _load_and_register_tool(p_path: String) -> void:
 			var t_name: String = tool_instance.tool_name
 			if not t_name.is_empty():
 				main_agent_tools[t_name] = tool_instance
+
+
+# 将工具引用解析为实际脚本路径（兼容 res:// 路径与 uid:// 引用两种存储形式）
+static func _resolve_tool_path(p_path: String) -> String:
+	if p_path.begins_with("uid://"):
+		var uid: int = ResourceUID.text_to_id(p_path)
+		return ResourceUID.get_id_path(uid)
+	return p_path

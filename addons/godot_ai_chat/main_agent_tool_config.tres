@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="MainAgentToolConfig" format=3 uid="uid://dj3jh7wsvn5y1"]
+
+[ext_resource type="Script" uid="uid://b8w3xqvojloej" path="res://addons/godot_ai_chat/scripts/custom_data/main_agent_tool_config.gd" id="1_4h3nd"]
+
+[resource]
+script = ExtResource("1_4h3nd")
+tool_scripts = Array[String](["uid://cw5xgoi1irsaw", "uid://dg6qbnpcuk2g3", "uid://qpajvkxkg2r0", "uid://cdh8qefh0aavx", "uid://ctq7o6yli47nb", "uid://dofrj4yjkbvkv", "uid://ia22hhcbd7e7", "uid://2uwrhjsohhmn", "uid://c1rh151pn1w1h", "uid://bceuw80jx3op4"])
+metadata/_custom_type_script = "uid://b8w3xqvojloej"

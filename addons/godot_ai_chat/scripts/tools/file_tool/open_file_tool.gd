@@ -80,12 +80,13 @@ func _open_script(p_path: String) -> ToolResult:
 	var res = load(p_path)
 	if res is Script:
 		EditorInterface.edit_script(res)
-	elif res is Shader:
-		EditorInterface.edit_resource(res)
 		EditorInterface.set_main_screen_editor("Script")
-		return ToolResult.ok("Shader opened successfully: %s" % p_path)
+		return ToolResult.ok("Script opened successfully: %s" % p_path)
+	elif res is Shader:
+		# 精确在 Shader Editor 中打开。
+		# 注意：不调用 set_main_screen_editor("Script")，
+		# 否则会与 Script Editor 并存，两个编辑器持有同一文件的两份独立 buffer。
+		EditorInterface.edit_resource(res)
+		return ToolResult.ok("Shader opened successfully in Shader Editor: %s" % p_path)
 	else:
 		return ToolResult.fail("Error: The specified file is not a valid script or shader: %s" % p_path)
-	
-	EditorInterface.set_main_screen_editor("Script")
-	return ToolResult.ok("Script opened successfully: %s" % p_path)

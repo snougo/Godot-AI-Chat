@@ -152,7 +152,8 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	
 	# 构建非流式请求
 	var body_dict: Dictionary = provider.build_request_body(model_name, p_messages, temp, false, [])
-	var body_json: String = JSON.stringify(body_dict)
+	#var body_json: String = JSON.stringify(body_dict)
+	var body_json: String = ToolBox.stringify_json_safe(body_dict)
 	var url: String = provider.get_request_url(base_url, model_name, key, false)
 	var headers: PackedStringArray = provider.get_request_headers(key, false)
 	

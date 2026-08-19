@@ -78,8 +78,16 @@ func cancel() -> void:
 
 ## 等待工作线程任务完成并清理 WorkerThreadPool 内部资源
 ## 必须在任务结束后调用（finished/failed 信号触发后，或 cancel 后）
+## 增加超时上限：异常卡死时最多等待 0.5 秒后放弃，避免编辑器主线程永久冻结
 func wait_for_cleanup() -> void:
 	if _task_id >= 0:
+		var deadline: int = Time.get_ticks_msec() + 500
+		while not WorkerThreadPool.is_task_completed(_task_id):
+			if Time.get_ticks_msec() >= deadline:
+				AIChatLogger.warn("StreamRequest: task %d not finished within 0.1s, skip waiting to avoid main thread freeze." % _task_id)
+				_task_id = -1
+				return
+			OS.delay_msec(1)
 		WorkerThreadPool.wait_for_task_completion(_task_id)
 		_task_id = -1
 
@@ -89,7 +97,9 @@ func wait_for_cleanup() -> void:
 # 线程任务主循环
 func _thread_task() -> void:
 	# [Optimization] Perform CPU-intensive JSON serialization in the worker thread
-	_body_json = JSON.stringify(_body_dict)
+	#_body_json = JSON.stringify(_body_dict)
+	_body_json = ToolBox.stringify_json_safe(_body_dict)
+
 	
 	var client: HTTPClient = HTTPClient.new()
 	var err: Error = OK
@@ -160,16 +170,31 @@ func _thread_task() -> void:
 		var error_body: PackedByteArray = PackedByteArray()
 		
 		while client.get_status() == HTTPClient.STATUS_BODY:
+			# [Fix] 错误体读取也响应取消：防止服务器挂起连接时无限忙等，
+			# 导致 cancel 后 wait_for_task_completion 永久阻塞主线程（编辑器卡死）
+			if _should_stop():
+				client.close()
+				return
 			client.poll()
 			if client.get_status() != HTTPClient.STATUS_BODY:
 				break
 			var chunk: PackedByteArray = client.read_response_body_chunk()
 			if chunk.size() > 0:
 				error_body.append_array(chunk)
+			# 防御：错误体读取挂起时超时退出
+			if _timeout_tracker.check().timed_out:
+				_emit_failure("HTTP error body read timeout")
+				client.close()
+				return
+			OS.delay_msec(10)
 		
 		var error_text: String = error_body.get_string_from_utf8()
 		
-		var json_err = JSON.parse_string(error_text)
+		#var json_err = JSON.parse_string(error_text)
+		var json_err: Variant = null
+		if error_text.strip_edges().begins_with("{"):
+			json_err = JSON.parse_string(error_text)
+		
 		if json_err and json_err is Dictionary and json_err.has("error"):
 			var err_msg: String = error_text
 			if json_err.error is Dictionary:

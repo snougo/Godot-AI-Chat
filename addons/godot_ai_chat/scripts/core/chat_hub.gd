@@ -86,6 +86,9 @@ func _bind_ui_signals() -> void:
 func _run_chat_loop() -> void:
 	_chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE)
 	
+	# 每次聊天循环开始前仅重载核心工具（不重扫技能），确保修改 main_agent_tool_config.tres 后立即生效
+	ToolRegistry.reload_core_tools_only()
+	
 	if not _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
 		_network_manager.new_stream_chunk_received.connect(_on_stream_chunk)
 	

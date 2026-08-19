@@ -34,8 +34,8 @@ func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: Strin
 	return "%s:%s" % [url, action]
 
 
-## 构建请求体 (Body)
-func build_request_body(_p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, _p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
+## [子类覆写] 构建请求体 (Body)
+func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, _p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	var gemini_contents: Array = []
 	var system_instruction: Dictionary = {}
 	

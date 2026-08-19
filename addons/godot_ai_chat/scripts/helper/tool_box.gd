@@ -80,6 +80,34 @@ static func is_file_open_in_script_editor(p_path: String) -> bool:
 	return false
 
 
+## 在 Shader Editor 中查找编辑指定 shader 的 CodeEdit。
+## 通过内容匹配定位（Shader Editor 的 CodeEdit buffer 与 shader.get_code() 实时同步），
+## 找到后自动激活对应标签。若目标 shader 未在 Shader Editor 打开，返回 null。
+## 注意：内容匹配在"两个不同 shader 内容完全相同"时会命中第一个，属已知边界情况。
+static func find_shader_code_edit(p_shader: Shader) -> CodeEdit:
+	if p_shader == null:
+		return null
+	var root: Node = EditorInterface.get_base_control()
+	for node in root.find_children("*", "TextShaderEditor", true, false):
+		var code_edits: Array = node.find_children("*", "CodeEdit", true, false)
+		if code_edits.is_empty():
+			continue
+		var code_edit: CodeEdit = code_edits[0] as CodeEdit
+		if code_edit == null:
+			continue
+		# 优先：身份匹配（CodeEdit 的父节点即 ShaderTextEditor，可获取编辑的 shader 资源）
+		var parent: Object = code_edit.get_parent()
+		if parent != null and parent.has_method("get_edited_shader") \
+				and parent.get_edited_shader() == p_shader:
+			_activate_shader_tab(node)
+			return code_edit
+		# 兜底：内容匹配（仅当身份匹配不可用时）
+		if code_edit.text == p_shader.get_code():
+			_activate_shader_tab(node)
+			return code_edit
+	return null
+
+
 ## 更新指定文件的编辑器文件系统状态（增量更新，安全）
 static func update_editor_filesystem(p_path: String) -> void:
 	if Engine.is_editor_hint():
@@ -103,6 +131,21 @@ static func refresh_editor_filesystem() -> void:
 	# 延迟执行，避免与当前帧的其他文件操作冲突
 	var timer: SceneTreeTimer = Engine.get_main_loop().create_timer(_scan_delay_ms / 1000.0)
 	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
+
+
+## 安全序列化 JSON：将 JSON.stringify 输出中未被转义的控制字符（0x00-0x1F）
+## 统一转义为 \uXXXX。Godot 的 JSON.stringify 不会转义这些字符，会生成非法 JSON，
+## 导致 OpenAI/Anthropic 等严格校验的 API 返回 400 (control character found)。
+static func stringify_json_safe(p_value: Variant) -> String:
+	var json_str: String = JSON.stringify(p_value)
+	var out := ""
+	for i in json_str.length():
+		var cp: int = json_str.unicode_at(i)
+		if cp < 0x20:
+			out += "\\u%04X" % cp
+		else:
+			out += json_str[i]
+	return out
 
 
 ## 从 AI 响应中移除  thinking... response 标签块
@@ -268,3 +311,13 @@ static func _perform_scan() -> void:
 	if editor_filesystem:
 		AIChatLogger.debug("[ToolBox] Performing deferred filesystem scan...")
 		editor_filesystem.scan()
+
+
+# 获取Shader编辑器的标签节点
+static func _activate_shader_tab(p_node: Node) -> void:
+	var parent_tab: Node = p_node.get_parent()
+	if parent_tab is TabContainer:
+		for i in parent_tab.get_tab_count():
+			if parent_tab.get_tab_control(i) == p_node:
+				parent_tab.set_current_tab(i)
+				break

@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="ModelCapabilityTable" format=3 uid="uid://de2aqc5qj2a3"]
+
+[ext_resource type="Script" uid="uid://bhoku2teaugtk" path="res://addons/godot_ai_chat/scripts/custom_data/model_capability_entry.gd" id="1_3ymue"]
+[ext_resource type="Script" uid="uid://dtmqixbcgp0g2" path="res://addons/godot_ai_chat/scripts/custom_data/model_capability_table.gd" id="1_q1pwk"]
+
+[sub_resource type="Resource" id="Resource_5sjc6"]
+script = ExtResource("1_3ymue")
+model_name = "deepseek-v4-flash"
+supports_image = false
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_k5mj3"]
+script = ExtResource("1_3ymue")
+model_name = "deepseek-v4-pro"
+supports_image = false
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_ypble"]
+script = ExtResource("1_3ymue")
+model_name = "glm-5.3"
+supports_image = false
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_wat4r"]
+script = ExtResource("1_3ymue")
+model_name = "glm-5.2"
+supports_image = false
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_ph8tt"]
+script = ExtResource("1_3ymue")
+model_name = "kimi-k3"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_8s71h"]
+script = ExtResource("1_3ymue")
+model_name = "kimi-k2.7-coder"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_qok1m"]
+script = ExtResource("1_3ymue")
+model_name = "kimi-k2.6"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_aw0p1"]
+script = ExtResource("1_3ymue")
+model_name = "qwen3.8"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_3ymue"]
+script = ExtResource("1_3ymue")
+model_name = "minimax-m3"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[resource]
+script = ExtResource("1_q1pwk")
+entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_5sjc6"), SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_wat4r"), SubResource("Resource_ph8tt"), SubResource("Resource_8s71h"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_3ymue")])
+metadata/_custom_type_script = "uid://dtmqixbcgp0g2"

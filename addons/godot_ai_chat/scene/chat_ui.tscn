@@ -118,6 +118,7 @@ text_overrun_behavior = 1
 fit_to_longest_item = false
 
 [node name="ForkButton" type="Button" parent="TabContainer/Chat/VBoxContainer/ChatArchiveContainer" unique_id=536218530]
+visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Fork Current Session"

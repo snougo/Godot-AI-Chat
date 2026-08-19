@@ -37,8 +37,8 @@ func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: Strin
 		return url + "/v1/chat/completions"
 
 
-## 构建请求体 (Body)
-func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
+## [子类覆写] 构建请求体 (Body)
+func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	var api_messages: Array[Dictionary] = []
 	
 	for msg in p_messages:

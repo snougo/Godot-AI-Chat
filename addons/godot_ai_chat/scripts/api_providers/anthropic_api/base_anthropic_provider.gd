@@ -27,7 +27,8 @@ func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.SSE
 
 
-func build_request_body(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
+## [子类覆写] 构建请求体 (Body)
+func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	_stream_tool_index_map.clear()
 	
 	# kimi-k2.6 模型只接受固定温度值 1，强制覆盖用户设置

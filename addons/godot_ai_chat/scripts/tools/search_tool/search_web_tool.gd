@@ -68,7 +68,14 @@ func _fetch_search_results(p_query: String, p_api_key: String) -> ToolResult:
 		return ToolResult.fail("Error: Connection failed (status: %d)" % client.get_status())
 	
 	# 发送 POST 请求
-	var body := JSON.stringify({
+	#var body := JSON.stringify({
+		#"api_key": p_api_key,
+		#"query": p_query,
+		#"search_depth": "advanced",
+		#"include_answer": true,
+		#"max_results": 6
+	#})
+	var body := ToolBox.stringify_json_safe({
 		"api_key": p_api_key,
 		"query": p_query,
 		"search_depth": "advanced",

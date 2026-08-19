@@ -79,8 +79,8 @@ func run_task() -> String:
 		# 使用 HTTPClient 直接轮询（主线程，避免 StreamRequest 线程问题）
 		# 传入 provider 以便 SSE 解析时委托到其自身的 process_stream_chunk，
 		# 让 ChatCompletions / Responses / Anthropic 三种 SSE 协议各自走自己的分派
-		var response = await _do_stream_request(url, headers, JSON.stringify(body), provider, _config.network_timeout)
-		
+		#var response = await _do_stream_request(url, headers, JSON.stringify(body), provider, _config.network_timeout)
+		var response = await _do_stream_request(url, headers, ToolBox.stringify_json_safe(body), provider, _config.network_timeout)
 		if response.has("error"):
 			AIChatLogger.error("[Sub Agent] " + response.error)
 			_remove_sub_agent()

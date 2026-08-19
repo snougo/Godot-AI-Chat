@@ -15,6 +15,9 @@ const PLUGIN_DIR: String = "res://addons/godot_ai_chat/"
 ## 插件设置资源文件路径
 const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings_config.tres"
 
+## Main-Agent 工具配置资源文件路径
+const MAIN_AGENT_TOOL_CONFIG_PATH: String = PLUGIN_DIR + "main_agent_tool_config.tres"
+
 ## 上下文压缩配置资源文件路径
 const COMPRESSION_CONFIG_PATH: String = PLUGIN_DIR + "context_compression_config.tres"
 
@@ -61,6 +64,11 @@ const CHAT_HUB_SCENE: String = SCENE_DIR + "chat_hub.tscn"
 
 ## 聊天消息块场景路径
 const CHAT_MESSAGE_BLOCK_SCENE: String = SCENE_DIR + "chat_message_block.tscn"
+
+# --- Model Capability ---
+
+## 模型能力表资源文件路径
+const MODEL_CAPABILITY_TABLE_PATH: String = PLUGIN_DIR + "model_capability_table.tres"
 
 
 # --- Public Functions ---

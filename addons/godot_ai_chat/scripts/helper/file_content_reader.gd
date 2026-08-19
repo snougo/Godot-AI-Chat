@@ -9,51 +9,93 @@ static func read_scene_content(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):
 		return {"success": false, "data": "Error: File not found: " + p_path}
 	
+	# .tscn 是文本格式场景，复用文本读取逻辑直接返回文件内容
+	if p_path.get_extension().to_lower() == "tscn":
+		return read_text_content(p_path)
+	
+	# .scn 二进制场景：基于 SceneState 读取元信息（无需实例化，无副作用）
 	var scene_resource: PackedScene = load(p_path)
 	if not scene_resource:
 		return {"success": false, "data": "Error: Failed to load scene: " + p_path}
 	
-	var scene_instance = scene_resource.instantiate(PackedScene.GEN_EDIT_STATE_MAIN)
-	if not is_instance_valid(scene_instance):
-		return {"success": false, "data": "Error: Failed to instantiate scene: " + p_path}
+	var md: String = "Content for Scene: `%s`\n" % p_path.get_file()
+	md += "- **Type**: %s\n" % scene_resource.get_class()
+	md += "- **Path**: `%s`\n" % scene_resource.resource_path
+	md += "- **Can Instantiate**: %s\n" % str(scene_resource.can_instantiate())
 	
-	var tree_data: Dictionary = _build_scene_node_data(scene_instance)
-	scene_instance.free()
+	var state: SceneState = scene_resource.get_state() as SceneState
+	if not state:
+		return {"success": false, "data": "Error: Failed to get scene state: " + p_path}
 	
-	var md: String = "Context for Scene: `%s`\n```\n" % p_path.get_file()
-	md += "Scene Tree Structure:\n"
-	md += _format_scene_node(tree_data, "", true)
-	md += "```\n"
+	# 继承的基场景
+	var base_state: SceneState = state.get_base_scene_state()
+	if base_state:
+		md += "- **Base Scene**: `%s`\n" % base_state.get_path()
+	
+	# 节点列表
+	var node_count: int = state.get_node_count()
+	md += "\n**Nodes:** (%d)\n" % node_count
+	for i in range(node_count):
+		md += _format_scene_state_node(state, i)
+	
+	# 信号连接
+	var conn_count: int = state.get_connection_count()
+	md += "\n**Connections:** (%d)\n" % conn_count
+	for i in range(conn_count):
+		md += _format_scene_state_connection(state, i)
+	
 	return {"success": true, "data": md}
 
 
-static func _build_scene_node_data(p_node: Node) -> Dictionary:
-	var node_data: Dictionary = {
-		"name": p_node.name,
-		"class": p_node.get_class(),
-		"script": null,
-		"children": []
-	}
-	var script = p_node.get_script()
-	if is_instance_valid(script) and script.resource_path:
-		node_data["script"] = script.resource_path
-	for child in p_node.get_children():
-		node_data["children"].append(_build_scene_node_data(child))
-	return node_data
-
-
-static func _format_scene_node(p_node_data: Dictionary, p_indent: String, p_is_last: bool) -> String:
-	var line: String = p_indent
-	if not p_indent.is_empty():
-		line += "└─ " if p_is_last else "├─ "
-	line += "%s (%s)" % [p_node_data.name, p_node_data.class]
-	if p_node_data.script:
-		line += " [script: `%s`]" % p_node_data.script
-	var md: String = line + "\n"
-	var new_indent: String = p_indent + ("   " if p_is_last else "│  ")
-	for i in range(p_node_data.children.size()):
-		md += _format_scene_node(p_node_data.children[i], new_indent, i == p_node_data.children.size() - 1)
+# 格式化 SceneState 中的单个节点：路径、类型、子场景实例、组、导出/覆写属性
+# [param p_state]: 场景状态
+# [param p_idx]: 节点索引
+# [return]: Markdown 格式的节点信息
+static func _format_scene_state_node(p_state: SceneState, p_idx: int) -> String:
+	var md: String = "- `%s` [%s]" % [p_state.get_node_path(p_idx), p_state.get_node_type(p_idx)]
+	
+	var instance: PackedScene = p_state.get_node_instance(p_idx)
+	if instance:
+		md += " [instance: `%s`]" % instance.resource_path
+	elif p_state.is_node_instance_placeholder(p_idx):
+		md += " [placeholder: `%s`]" % p_state.get_node_instance_placeholder(p_idx)
+	
+	var groups: PackedStringArray = p_state.get_node_groups(p_idx)
+	if not groups.is_empty():
+		md += " [groups: %s]" % ", ".join(groups)
+	
+	md += "\n"
+	
+	var prop_count: int = p_state.get_node_property_count(p_idx)
+	for pi in range(prop_count):
+		var pname: StringName = p_state.get_node_property_name(p_idx, pi)
+		var pvalue: Variant = p_state.get_node_property_value(p_idx, pi)
+		md += "  - **%s**: %s\n" % [pname, _format_property_value(pvalue)]
+	
 	return md
+
+
+# 格式化 SceneState 中的单个信号连接：源/信号/目标/方法，附 flags 与 binds
+# [param p_state]: 场景状态
+# [param p_idx]: 连接索引
+# [return]: Markdown 格式的连接信息
+static func _format_scene_state_connection(p_state: SceneState, p_idx: int) -> String:
+	var md: String = "- `%s.%s` -> `%s.%s`" % [
+		p_state.get_connection_source(p_idx),
+		p_state.get_connection_signal(p_idx),
+		p_state.get_connection_target(p_idx),
+		p_state.get_connection_method(p_idx)
+	]
+	var extras: Array[String] = []
+	var flags: int = p_state.get_connection_flags(p_idx)
+	if flags != 0:
+		extras.append("flags=%d" % flags)
+	var binds: Array = p_state.get_connection_binds(p_idx)
+	if not binds.is_empty():
+		extras.append("binds=%s" % binds)
+	if not extras.is_empty():
+		md += " (%s)" % ", ".join(extras)
+	return md + "\n"
 
 
 # ============================
@@ -192,14 +234,11 @@ static func read_text_content(p_path: String) -> Dictionary:
 		md += "\n" + content + "\n"
 		return {"success": true, "data": md}
 	
-	var lang_tag: String = ""
+	# 语言标签：默认使用扩展名本身，仅少数格式映射到通用标签
+	var lang_tag: String = extension
 	match extension:
-		"json":      lang_tag = "json"
-		"cfg":       lang_tag = "cfg"
-		"tres":      lang_tag = "tres"
-		"res":       lang_tag = "res"
-		"gdshader":  lang_tag = "gdshader"
-		"glsl":      lang_tag = "glsl"
+		"godot", "import":  lang_tag = "ini"
+	
 	md += "```%s\n%s\n```\n" % [lang_tag, content]
 	return {"success": true, "data": md}
 

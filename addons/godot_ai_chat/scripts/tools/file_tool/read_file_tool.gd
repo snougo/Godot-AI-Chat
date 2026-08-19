@@ -12,7 +12,7 @@ extends AiTool
 const EXTENSION_MAP: Dictionary = {
 	"scene":      ["tscn", "scn"],
 	"script":     ["gd", "gdshader", "glsl"],
-	"text":       ["md", "json", "cfg", "txt"],
+	"text":       ["md", "json", "cfg", "txt", "godot", "uid", "import"],
 	"resource":   ["tres", "res"],
 	"image_meta": ["png", "jpg", "jpeg"]
 }
@@ -22,7 +22,7 @@ const EXTENSION_MAP: Dictionary = {
 
 func _init() -> void:
 	tool_name = "read_file"
-	tool_description = "Reads a file. support: scene(tscn/scn)、script(gdscript)、text(md/json/cfg/txt)、resource(tres/res)、image_meta(jpg/jpeg/png)"
+	tool_description = "Reads a file. support: scene(tscn/scn)、script(gdscript)、text(md/json/cfg/txt/godot/uid/import)、resource(tres/res)、image_meta(jpg/jpeg/png)"
 
 
 # --- Public Functions ---
