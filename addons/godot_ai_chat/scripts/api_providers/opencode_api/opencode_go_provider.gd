@@ -36,9 +36,11 @@ const CHAT_MODELS: Array[String] = [
 	"kimi-k2.6",
 	"deepseek-v4-pro",
 	"deepseek-v4-flash",
+	"deepseek-v4-flash-vision-exp",
 	"mimo-v2.5",
 	"mimo-v2.5-pro",
 	"hy3",
+	"ox-alpha-free"
 ]
 
 ## OpenAI Responses 兼容模型
@@ -58,7 +60,7 @@ const ANTHROPIC_MODELS: Array[String] = [
 	"qwen3.8-max",
 	"qwen3.7-max",
 	"qwen3.7-plus",
-	"qwen3.6-plus",
+	"qwen3.6-plus"
 ]
 
 ## Anthropic Messages API 版本头（opencode 兼容端点必需）

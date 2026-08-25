@@ -52,7 +52,17 @@ script = ExtResource("1_3ymue")
 model_name = "minimax-m3"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
+[sub_resource type="Resource" id="Resource_vpktc"]
+script = ExtResource("1_3ymue")
+model_name = "ox-alpha-free"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_5dxxc"]
+script = ExtResource("1_3ymue")
+model_name = "deepseek-v4-flash-vision-exp"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
 [resource]
 script = ExtResource("1_q1pwk")
-entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_5sjc6"), SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_wat4r"), SubResource("Resource_ph8tt"), SubResource("Resource_8s71h"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_3ymue")])
+entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_5sjc6"), SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_wat4r"), SubResource("Resource_ph8tt"), SubResource("Resource_8s71h"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_3ymue"), SubResource("Resource_vpktc"), SubResource("Resource_5dxxc")])
 metadata/_custom_type_script = "uid://dtmqixbcgp0g2"
