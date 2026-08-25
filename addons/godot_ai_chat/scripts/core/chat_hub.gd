@@ -55,7 +55,7 @@ func _bind_ui_signals() -> void:
 	_chat_ui.mouse_entered.connect(_on_chat_ui_mouse_entered)
 	
 	_chat_ui.new_chat_button_pressed.connect(_on_new_chat_requested)
-	_chat_ui.fork_button_pressed.connect(_on_fork_requested)
+	_chat_ui.compress_button_pressed.connect(_on_compress_requested)
 	_chat_ui.load_chat_button_pressed.connect(_on_load_chat_requested)
 	_chat_ui.delete_chat_button_pressed.connect(_on_delete_chat_requested)
 	_chat_ui.save_as_markdown_button_pressed.connect(_on_export_markdown_requested)
@@ -198,9 +198,18 @@ func _on_new_chat_requested() -> void:
 	_chat_controller.create_new_chat()
 
 
-func _on_fork_requested() -> void:
+func _on_compress_requested() -> void:
 	_on_stop_requested()
-	_chat_controller.fork_current_chat()
+	if not _chat_controller.has_active_session() or not _current_chat_window.chat_history:
+		_chat_ui.show_confirmation("No chat active. Please create or load a chat first.")
+		return
+	
+	var compress_result: Dictionary = await _try_compress_context()
+	if compress_result.success:
+		# 压缩成功：已创建新会话并加载，恢复空闲状态
+		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Context compressed. New session loaded.")
+	else:
+		_chat_ui.show_confirmation("Context compression failed.\nError: " + compress_result.get("error", "Unknown"))
 
 
 func _on_load_chat_requested(session_name: String) -> void:

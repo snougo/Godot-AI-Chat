@@ -35,7 +35,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "The folder path to search. Scans recursively."
+				"description": "The full path of the folder to search. Scans recursively."
 			},
 			"search": {
 				"type": "string",

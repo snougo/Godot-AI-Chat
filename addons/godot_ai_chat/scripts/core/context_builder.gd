@@ -32,74 +32,74 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	final_system_prompt += "========================\n\n"
 	
 	# 4. 注入记忆
-	var memory_store_path: String = PluginPaths.MEMORY_STORE_PATH
-	if ResourceLoader.exists(memory_store_path):
-		var store: MemoryStore = load(memory_store_path) as MemoryStore
-		if store and not store.entries.is_empty():
-			var global_memories: Array[MemoryEntry] = []
-			var workspace_memories: Array[MemoryEntry] = []
-			var normalized_workspace: String = _normalize_path(p_settings.workspace_path)
+	#var memory_store_path: String = PluginPaths.MEMORY_STORE_PATH
+	#if ResourceLoader.exists(memory_store_path):
+		#var store: MemoryStore = load(memory_store_path) as MemoryStore
+		#if store and not store.entries.is_empty():
+			#var global_memories: Array[MemoryEntry] = []
+			#var workspace_memories: Array[MemoryEntry] = []
+			#var normalized_workspace: String = _normalize_path(p_settings.workspace_path)
 			
-			for entry in store.entries:
-				if entry.scope == "global":
-					global_memories.append(entry)
-				elif entry.scope == "workspace" and _normalize_path(entry.workspace_path) == normalized_workspace:
-					workspace_memories.append(entry)
+			#for entry in store.entries:
+				#if entry.scope == "global":
+					#global_memories.append(entry)
+				#elif entry.scope == "workspace" and _normalize_path(entry.workspace_path) == normalized_workspace:
+					#workspace_memories.append(entry)
 			
 			# --- 全局记忆：仅注入话题概览（话题名称 + 记忆数量） ---
-			if not global_memories.is_empty():
-				var topic_counts: Dictionary = {}
-				var untopiced_count: int = 0
-				for entry in global_memories:
-					if not entry.topic.is_empty():
-						if not topic_counts.has(entry.topic):
-							topic_counts[entry.topic] = 0
-						topic_counts[entry.topic] += 1
-					else:
-						untopiced_count += 1
+			#if not global_memories.is_empty():
+				#var topic_counts: Dictionary = {}
+				#var untopiced_count: int = 0
+				#for entry in global_memories:
+					#if not entry.topic.is_empty():
+						#if not topic_counts.has(entry.topic):
+							#topic_counts[entry.topic] = 0
+						#topic_counts[entry.topic] += 1
+					#else:
+						#untopiced_count += 1
 				
-				final_system_prompt += "\n===== GLOBAL MEMORIES =====\n"
-				final_system_prompt += "Topic:\n"
+				#final_system_prompt += "\n===== GLOBAL MEMORIES =====\n"
+				#final_system_prompt += "Topic:\n"
 				
-				var topic_names: Array[String] = []
-				for key in topic_counts.keys():
-					topic_names.append(key)
-				topic_names.sort()
+				#var topic_names: Array[String] = []
+				#for key in topic_counts.keys():
+					#topic_names.append(key)
+				#topic_names.sort()
 				
-				for topic_name in topic_names:
-					final_system_prompt += "- **%s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
-				if untopiced_count > 0:
-					final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
+				#for topic_name in topic_names:
+					#final_system_prompt += "- **%s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
+				#if untopiced_count > 0:
+					#final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
 				
-				final_system_prompt += "==============================\n"
+				#final_system_prompt += "==============================\n"
 			
 			# --- 工作区记忆：仅注入话题概览（话题名称 + 记忆数量） ---
-			if not workspace_memories.is_empty():
+			#if not workspace_memories.is_empty():
 				# 按 topic 统计数量
-				var topic_counts: Dictionary = {}
-				var untopiced_count: int = 0
-				for entry in workspace_memories:
-					if not entry.topic.is_empty():
-						if not topic_counts.has(entry.topic):
-							topic_counts[entry.topic] = 0
-						topic_counts[entry.topic] += 1
-					else:
-						untopiced_count += 1
+				#var topic_counts: Dictionary = {}
+				#var untopiced_count: int = 0
+				#for entry in workspace_memories:
+					#if not entry.topic.is_empty():
+						#if not topic_counts.has(entry.topic):
+							#topic_counts[entry.topic] = 0
+						#topic_counts[entry.topic] += 1
+					#else:
+						#untopiced_count += 1
 				
-				final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
-				final_system_prompt += "Topic:\n"
+				#final_system_prompt += "\n\n===== WORKSPACE MEMORIES =====\n"
+				#final_system_prompt += "Topic:\n"
 				
-				var topic_names: Array[String] = []
-				for key in topic_counts.keys():
-					topic_names.append(key)
-				topic_names.sort()
+				#var topic_names: Array[String] = []
+				#for key in topic_counts.keys():
+					#topic_names.append(key)
+				#topic_names.sort()
 				
-				for topic_name in topic_names:
-					final_system_prompt += "- **%s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
-				if untopiced_count > 0:
-					final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
+				#for topic_name in topic_names:
+					#final_system_prompt += "- **%s** (%d 条记忆)\n" % [topic_name, topic_counts[topic_name]]
+				#if untopiced_count > 0:
+					#final_system_prompt += "- **未分组** (%d 条记忆)\n" % untopiced_count
 				
-				final_system_prompt += "==============================\n"
+				#final_system_prompt += "==============================\n"
 			
 			#final_system_prompt += "\n"
 			#final_system_prompt += "\n💡 > **Tip**: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
