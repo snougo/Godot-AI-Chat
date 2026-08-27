@@ -4,8 +4,8 @@ extends AiTool
 
 ## GitHub 工具公共基类
 ##
-## 提供 GitHub 相关工具共享的能力：HTTPS 网络请求、repo/version/path 输入校验、文本截断。
-## 子类只需聚焦各自的业务逻辑（仓库查看 / PR 阅读）。
+## 提供 GitHub 相关工具共享的能力：HTTPS 网络请求、repo/version/path 输入校验与规范化、文本截断。
+## 子类只需聚焦各自的业务逻辑（目录列表 / 文件抓取 / 分支列表 / PR 阅读）。
 
 # --- Enums / Constants ---
 
@@ -58,12 +58,35 @@ func is_valid_version(p_version: String) -> bool:
 	return true
 
 
+## 规范化并校验 version 参数：空值回退默认，非法时返回空字符串
+## [param p_value]: 用户传入的版本值
+## [param p_default]: 默认版本
+func normalize_version(p_value: String, p_default: String) -> String:
+	var version := p_value.strip_edges()
+	if version.is_empty():
+		version = p_default
+	if not is_valid_version(version):
+		return ""
+	return version
+
+
 ## 校验仓库内路径（文件或目录）
 func is_valid_path(p_path: String) -> bool:
 	for ch in p_path:
 		if _ALLOWED_PATH_CHARS.find(ch) == -1:
 			return false
 	return true
+
+
+## 规范化仓库内路径：统一反斜杠、剥离前导 './'、过滤空段（自动消除首尾/重复斜杠）
+## 如 'core/' -> 'core'、'/core/' -> 'core'、'./core' -> 'core'、'a//b' -> 'a/b'
+## [param p_path]: 用户传入的路径
+func normalize_path(p_path: String) -> String:
+	var path := p_path.replace("\\", "/").strip_edges()
+	while path.begins_with("./"):
+		path = path.substr(2)
+	var segments: PackedStringArray = path.split("/", false)
+	return "/".join(segments)
 
 
 ## 文本截断：超长时保留头部并追加截断标记

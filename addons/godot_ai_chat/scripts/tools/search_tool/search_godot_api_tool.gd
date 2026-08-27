@@ -13,7 +13,7 @@ const LOCAL_DOC_PATH: String = "res://godot_doc"
 
 func _init() -> void:
 	tool_name = "search_godot_api"
-	tool_description = "Searches Godot ClassDB, custom global classes, and local API docs."
+	tool_description = "Searches Godot API."
 
 
 # --- Public Functions ---

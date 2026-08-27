@@ -26,8 +26,8 @@ extends BaseLLMProvider
 
 ## OpenAI Chat Completions 兼容模型
 ## （官方端点表 @ai-sdk/openai-compatible 对应的模型）
-const CHAT_MODELS: Array[String] = [
-	"grok-4.5",
+const CHAT_API_ENDPOINT: Array[String] = [
+	"glm-5.3-flash",
 	"glm-5.3",
 	"glm-5.2",
 	"glm-5.1",
@@ -40,27 +40,27 @@ const CHAT_MODELS: Array[String] = [
 	"mimo-v2.5",
 	"mimo-v2.5-pro",
 	"hy3",
-	"ox-alpha-free"
+	"longcat-2.0",
 ]
 
 ## OpenAI Responses 兼容模型
 ## （官方端点表 @ai-sdk/openai 对应的模型）
-const RESPONSES_MODELS: Array[String] = [
+const RESPONSES_API_ENDPOINT: Array[String] = [
 	"gpt-5.6-luna",
-	"muse-spark-1.2",
-	"muse-spark-1.2-contributor"
+	"grok-4.6",
+	"muse-spark-1.2-contributor",
 ]
 
 ## Anthropic Messages 兼容模型
 ## （官方端点表 @ai-sdk/anthropic 对应的模型）
-const ANTHROPIC_MODELS: Array[String] = [
+const ANTHROPIC_API_ENDPOINT: Array[String] = [
 	"minimax-m3",
 	"minimax-m2.7",
 	"minimax-m2.5",
 	"qwen3.8-max",
 	"qwen3.7-max",
 	"qwen3.7-plus",
-	"qwen3.6-plus"
+	"qwen3.6-plus",
 ]
 
 ## Anthropic Messages API 版本头（opencode 兼容端点必需）
@@ -186,9 +186,9 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 ##       2) 供外部在 supports_model_list_api=false 场景下回退使用。
 func get_static_model_list() -> Array[String]:
 	var all_models: Array[String] = []
-	all_models.append_array(CHAT_MODELS)
-	all_models.append_array(RESPONSES_MODELS)
-	all_models.append_array(ANTHROPIC_MODELS)
+	all_models.append_array(CHAT_API_ENDPOINT)
+	all_models.append_array(RESPONSES_API_ENDPOINT)
+	all_models.append_array(ANTHROPIC_API_ENDPOINT)
 	return all_models
 
 
@@ -198,12 +198,12 @@ func get_static_model_list() -> Array[String]:
 # [param p_model_name]: 模型名
 # [return]: 对应的协议 Handler；未知模型兜底走 _chat_handler 并打 warning
 func _get_handler(p_model_name: String) -> BaseLLMProvider:
-	if p_model_name in RESPONSES_MODELS:
+	if p_model_name in RESPONSES_API_ENDPOINT:
 		return _responses_handler
-	if p_model_name in ANTHROPIC_MODELS:
+	if p_model_name in ANTHROPIC_API_ENDPOINT:
 		return _anthropic_handler
 	# 已知 Chat 模型静默返回，不进兜底 warning 分支
-	if p_model_name in CHAT_MODELS:
+	if p_model_name in CHAT_API_ENDPOINT:
 		return _chat_handler
 	# 未知模型兜底：官方 /models 仅含 id，无法判断端点风格。
 	# opencode 绝大多数模型为 Chat Completions 风格，故默认走 _chat_handler。
@@ -211,7 +211,7 @@ func _get_handler(p_model_name: String) -> BaseLLMProvider:
 	# 若选了根端点类型新模型导致调用失败，请将模型 id 补入对应常量。
 	if not p_model_name.is_empty() and not _warned_unknown_models.has(p_model_name):
 		_warned_unknown_models[p_model_name] = true
-		push_warning("[OpenCodeGo]: Unknown model '%s' not in endpoint mapping constants, routing to Chat Completions by default. Update CHAT_MODELS/RESPONSES_MODELS/ANTHROPIC_MODELS if routing is wrong." % p_model_name)
+		push_warning("[OpenCodeGo]: Unknown model '%s' not in endpoint mapping constants, routing to Chat Completions by default. Update CHAT_API_ENDPOINT/RESPONSES_API_ENDPOINT/ANTHROPIC_API_ENDPOINT if routing is wrong." % p_model_name)
 	return _chat_handler
 
 

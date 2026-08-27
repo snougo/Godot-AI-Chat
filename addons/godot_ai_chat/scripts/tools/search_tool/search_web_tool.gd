@@ -11,7 +11,7 @@ const POLL_DELAY: float = 0.01  # 10ms
 
 func _init() -> void:
 	tool_name = "search_web"
-	tool_description = "Performs an online search. Use ONLY when information is NOT available in local files or API docs."
+	tool_description = "Performs an online search."
 
 
 # --- Public Functions ---
