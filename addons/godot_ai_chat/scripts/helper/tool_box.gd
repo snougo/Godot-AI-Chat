@@ -127,10 +127,7 @@ static func refresh_editor_filesystem() -> void:
 		return
 	
 	_scan_pending = true
-	
-	# 延迟执行，避免与当前帧的其他文件操作冲突
-	var timer: SceneTreeTimer = Engine.get_main_loop().create_timer(_scan_delay_ms / 1000.0)
-	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
+	_schedule_deferred_scan()
 
 
 ## 安全序列化 JSON：将 JSON.stringify 输出中未被转义的控制字符（0x00-0x1F）
@@ -300,17 +297,36 @@ static func _restore_text(p_raw_name: String, p_args: String) -> String:
 	return text
 
 
-# 内部：实际执行扫描
-static func _perform_scan() -> void:
-	_scan_pending = false
-	
+# 内部：延迟调度扫描
+static func _schedule_deferred_scan() -> void:
 	if not Engine.is_editor_hint():
+		_scan_pending = false
+		return
+	
+	var timer: SceneTreeTimer = Engine.get_main_loop().create_timer(_scan_delay_ms / 1000.0)
+	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
+
+
+# 内部：实际执行扫描（繁忙时延迟重试，扫描完成后才释放锁）
+static func _perform_scan() -> void:
+	if not Engine.is_editor_hint():
+		_scan_pending = false
 		return
 	
 	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
-	if editor_filesystem:
-		AIChatLogger.debug("[ToolBox] Performing deferred filesystem scan...")
-		editor_filesystem.scan()
+	if editor_filesystem == null:
+		_scan_pending = false
+		return
+	
+	# 文件系统繁忙（正在扫描/导入）时延迟重试，避免重入崩溃，同时保证最终刷新
+	if editor_filesystem.is_scanning() or editor_filesystem.is_importing():
+		AIChatLogger.warn("[ToolBox] Filesystem busy, deferring rescan...")
+		_schedule_deferred_scan()
+		return
+	
+	AIChatLogger.debug("[ToolBox] Performing deferred filesystem scan...")
+	editor_filesystem.scan()
+	_scan_pending = false
 
 
 # 获取Shader编辑器的标签节点

@@ -71,8 +71,8 @@ var _current_popup_code_view_window: PopupCodeViewWindow = null
 # 表格渲染状态
 var _in_table: bool = false
 
-# 工具角色专用：单一 CodeEdit，不走 Markdown 解析器
-var _tool_code_edit: CodeEdit = null
+# 工具角色专用：单一 TextEdit，不走 Markdown 解析器
+var _tool_text_edit: TextEdit = null
 
 
 # --- Built-in Functions ---
@@ -97,10 +97,10 @@ func set_content(p_role: String, p_content: String, p_model_name: String = "", p
 	_set_title(p_role, p_model_name)
 	_clear_content()
 	
-	# 工具角色：不走解析器，全部塞入单个 CodeEdit
+	# 工具角色：不走解析器，全部塞入单个 TextEdit
 	if p_role == ChatMessage.ROLE_TOOL:
 		_create_tool_output_block()
-		_tool_code_edit.text = p_content
+		_tool_text_edit.text = p_content
 		return
 	
 	if not p_reasoning.is_empty():
@@ -136,10 +136,10 @@ func append_chunk(p_text: String) -> void:
 	if p_text.is_empty():
 		return
 	
-	# 工具模式：追加到 CodeEdit，不走解析器
-	if is_instance_valid(_tool_code_edit):
-		_tool_code_edit.text += p_text
-		_tool_code_edit.scroll_vertical = _tool_code_edit.get_line_count() - 1
+	# 工具模式：追加到 TextEdit，不走解析器
+	if is_instance_valid(_tool_text_edit):
+		_tool_text_edit.text += p_text
+		_tool_text_edit.scroll_vertical = _tool_text_edit.get_line_count() - 1
 		return
 	
 	_parser.feed(p_text)
@@ -167,7 +167,7 @@ func append_reasoning(p_text: String) -> void:
 ## 结束流式接收，刷新解析器缓冲区
 func finish_stream() -> void:
 	# 工具模式：无需特殊处理
-	if is_instance_valid(_tool_code_edit):
+	if is_instance_valid(_tool_text_edit):
 		return
 	
 	_flush_reasoning_buffer()
@@ -528,11 +528,22 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 		if check.is_empty():
 			return
 		
+		var cells: Array = MarkdownToBBCode.make_table_row_segments(line)
 		var is_header: bool = not _in_table
-		var bb: String = MarkdownToBBCode.make_table_row(line, is_header)
+		
 		if is_header:
 			_in_table = true
-		_last_ui_node.append_text(bb)
+			_last_ui_node.append_text("[table=%d]" % cells.size())
+			for cell_segs: Array in cells:
+				_last_ui_node.append_text("[cell bg=#2d2d5e][b]")
+				_render_segments(_last_ui_node, cell_segs)
+				_last_ui_node.append_text("[/b][/cell]")
+		else:
+			for cell_segs: Array in cells:
+				_last_ui_node.append_text("[cell]")
+				_render_segments(_last_ui_node, cell_segs)
+				_last_ui_node.append_text("[/cell]")
+		_last_ui_node.append_text("\n")
 		return
 	
 	# 非表格行：先闭合未关闭的表格
@@ -647,18 +658,18 @@ func _append_to_code(p_text: String) -> void:
 
 
 func _create_tool_output_block() -> void:
-	_tool_code_edit = CodeEdit.new()
-	_tool_code_edit.editable = false
-	_tool_code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
-	_tool_code_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_tool_code_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_tool_code_edit.gutters_draw_line_numbers = false
-	_tool_code_edit.minimap_draw = false
-	_tool_code_edit.caret_blink = false
-	_tool_code_edit.highlight_current_line = false
-	_tool_code_edit.custom_minimum_size.y = 300
-	_content_container.add_child(_tool_code_edit)
-	_last_ui_node = _tool_code_edit
+	_tool_text_edit = TextEdit.new()
+	_tool_text_edit.editable = false
+	_tool_text_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_tool_text_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tool_text_edit.scroll_fit_content_height = true
+	_tool_text_edit.custom_maximum_size.y = 600
+	_tool_text_edit.caret_blink = false
+	_tool_text_edit.highlight_current_line = false
+	# 让鼠标滚轮穿透，避免不可编辑的文本框拦截滚动
+	_tool_text_edit.mouse_filter = Control.MOUSE_FILTER_PASS
+	_content_container.add_child(_tool_text_edit)
+	_last_ui_node = _tool_text_edit
 
 
 # 触发打字机效果
@@ -739,7 +750,13 @@ func _render_segments(rtl: RichTextLabel, segments: Array[Dictionary]) -> void:
 	for seg in segments:
 		match seg.type:
 			SEGMENT_PLAIN:
-				rtl.append_text(seg.content)
+				# 字面方括号改用 add_text 渲染，规避流式打字机下 [lb]/[rb] 被字面显示的问题
+				if seg.content == "[lb]":
+					rtl.add_text("[")
+				elif seg.content == "[rb]":
+					rtl.add_text("]")
+				else:
+					rtl.append_text(seg.content)
 			SEGMENT_CODE:
 				rtl.push_color(INLINE_CODE_COLOR)
 				rtl.add_text(seg.content)
@@ -756,7 +773,7 @@ static func _is_blank_segments(segments: Array[Dictionary]) -> bool:
 # 清空所有内容
 func _clear_content() -> void:
 	# queue_free 后变量要清掉
-	_tool_code_edit = null
+	_tool_text_edit = null
 	
 	for c in _content_container.get_children():
 		c.queue_free()
