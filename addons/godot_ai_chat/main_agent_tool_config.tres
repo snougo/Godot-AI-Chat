@@ -4,5 +4,5 @@
 
 [resource]
 script = ExtResource("1_4h3nd")
-tool_scripts = Array[String](["uid://cw5xgoi1irsaw", "uid://dg6qbnpcuk2g3", "uid://bveh71vt8erps", "uid://vt4ggs62k5lq", "uid://qpajvkxkg2r0", "uid://cdh8qefh0aavx", "uid://ctq7o6yli47nb", "uid://bceuw80jx3op4"])
+tool_scripts = Array[String](["uid://cw5xgoi1irsaw", "uid://bveh71vt8erps", "uid://dg6qbnpcuk2g3", "uid://qpajvkxkg2r0", "uid://cdh8qefh0aavx", "uid://ctq7o6yli47nb", "uid://vt4ggs62k5lq", "uid://covvbrv2p0jyr", "uid://b8su2p4dk2is", "uid://4ywcvyomhkfq", "uid://drgkihr2tfy50", "uid://bmwxtw1o3sogr"])
 metadata/_custom_type_script = "uid://b8w3xqvojloej"

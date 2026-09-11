@@ -52,11 +52,14 @@ static func get_table() -> ModelCapabilityTable:
 static func supports_image_input(p_model_name: String) -> bool:
 	if p_model_name.is_empty():
 		return true
+	
 	var table: ModelCapabilityTable = get_table()
 	var normalized_actual: String = _normalize_model_name(p_model_name)
+	
 	for entry in table.entries:
 		if _normalize_model_name(entry.model_name) == normalized_actual:
 			return entry.supports_image
+	
 	return true
 
 
@@ -65,6 +68,7 @@ static func supports_image_input(p_model_name: String) -> bool:
 # 用默认纯文本模型清单填充能力表（仅首次创建时调用）
 func _fill_defaults() -> void:
 	entries.clear()
+	
 	for model in TEXT_ONLY_MODELS:
 		var entry := ModelCapabilityEntry.new()
 		entry.model_name = model
@@ -82,15 +86,20 @@ func _fill_defaults() -> void:
 static func _normalize_model_name(p_name: String) -> String:
 	var name: String = p_name.strip_edges().to_lower()
 	var slash_idx: int = name.rfind("/")
+	
 	if slash_idx != -1:
 		name = name.substr(slash_idx + 1)
+	
 	var colon_idx: int = name.rfind(":")
 	if colon_idx != -1:
 		name = name.substr(colon_idx + 1)
+	
 	# 剥离末尾日期戳（-YYYYMMDD 或 -YYYY-MM-DD），循环处理多层后缀
 	var suffix_regex := RegEx.create_from_string("-(\\d{8}|\\d{4}-\\d{2}-\\d{2})$")
 	var match_result := suffix_regex.search(name)
+	
 	while match_result != null:
 		name = name.substr(0, match_result.get_start())
 		match_result = suffix_regex.search(name)
+	
 	return name

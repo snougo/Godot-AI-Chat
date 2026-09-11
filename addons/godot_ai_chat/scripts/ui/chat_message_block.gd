@@ -7,6 +7,7 @@ extends FoldableContainer
 ## 负责单条消息的 UI 渲染，支持 Markdown 解析、代码高亮、打字机效果和工具调用展示。
 ## Markdown 解析逻辑已分离至 MarkdownStreamParser，本类仅负责 UI 渲染。
 
+
 # --- Constants ---
 
 ## 预加载代码高亮主题
@@ -27,10 +28,25 @@ const INLINE_CODE_COLOR: Color = Color("#d2cf95")
 const SEGMENT_PLAIN: int = 0
 const SEGMENT_CODE: int = 1
 
+## 思考内容单帧渲染上限（字符）
+const REASONING_RENDER_CHUNK_CHARS: int = 8192
+## 思考内容单帧渲染时间预算（微秒）；文档推荐 get_ticks_usec 做精确计时（单调、不受系统时钟影响）
+const REASONING_RENDER_BUDGET_USEC: int = 8000
+## 思考内容可视高度
+const REASONING_VIEW_HEIGHT: float = 200.0
+## 思考内容换行模式
+## LINE_WRAPPING_NONE 时 get_total_visible_line_count() 等价于 get_line_count()（无需逐行换行测量），
+## 是最省 CPU 的模式，代价是超长行需要横向滚动。若横向滚动体验不可接受，改为 LINE_WRAPPING_BOUNDARY。
+const REASONING_WRAP_MODE: TextEdit.LineWrappingMode = TextEdit.LINE_WRAPPING_BOUNDARY
+## [临时探针] 单次写入耗时告警阈值（微秒）：超过则打印，用于确认卡顿是否仍在写入路径
+const REASONING_PROBE_WARN_USEC: int = 30000
+
+
 # --- @onready Vars ---
 
 @onready var _content_container: VBoxContainer = $MarginContainer/VBoxContainer
 @onready var _main_margin_container: Control = $MarginContainer
+
 
 # --- Private Vars ---
 
@@ -50,12 +66,16 @@ var _current_typing_node: RichTextLabel = null
 
 # 思考内容 UI 引用
 var _reasoning_container: FoldableContainer = null
-# [优化P0] 使用 TextEdit 替代 RichTextLabel，自带行级虚拟化，避免超长文本布局阻塞
+# [优化P0] 使用 TextEdit（绘制成本与可见行相关），避免 RichTextLabel + fit_content 必须同步全量高度
 var _reasoning_label: TextEdit = null
-# [优化P1] 思考内容懒加载缓存：折叠时将文本存入缓存并清空 TextEdit，展开时才填充
-var _reasoning_text_cache: String = ""
-# [性能] 思考内容流式写缓冲：攒够量再刷到 TextEdit，避免频繁 text +=
-var _reasoning_write_buffer: String = ""
+# [优化P2] 待渲染分片队列：只保存"尚未灌入 TextEdit 视图"的内容（视图即已渲染结果）
+# 用 PackedStringArray 累积，避免 String 反复整体拼接
+var _reasoning_chunks: PackedStringArray = PackedStringArray()
+# 分帧渲染游标：下一个待渲染分片下标 + 该分片内已渲染的字符数
+var _reasoning_render_chunk: int = 0
+var _reasoning_render_offset: int = 0
+# 分帧渲染是否在运行
+var _reasoning_fill_active: bool = false
 
 # 消息块是否被挂起
 var _is_suspended: bool = false
@@ -154,14 +174,12 @@ func append_reasoning(p_text: String) -> void:
 	if not is_instance_valid(_reasoning_container):
 		_create_reasoning_ui()
 	
-	# [优化] 折叠状态下仅缓存文本，不更新 UI，避免触发布局计算
-	if _reasoning_container.is_folded():
-		_reasoning_text_cache += p_text
-	elif is_instance_valid(_reasoning_label):
-		# 攒入缓冲区
-		_reasoning_write_buffer += p_text
-		if _reasoning_write_buffer.length() >= 20:
-			_flush_reasoning_buffer()
+	# 只入队，不直接写 TextEdit：
+	# 折叠状态下为隐藏控件付排版成本没有意义；展开状态下由分帧渲染统一增量写入
+	_reasoning_chunks.append(p_text)
+	
+	if not _reasoning_container.is_folded():
+		_start_reasoning_fill()
 
 
 ## 结束流式接收，刷新解析器缓冲区
@@ -170,7 +188,10 @@ func finish_stream() -> void:
 	if is_instance_valid(_tool_text_edit):
 		return
 	
-	_flush_reasoning_buffer()
+	# 思考内容收尾：仅展开状态下继续补帧，折叠状态下留到用户展开时再渲染
+	if is_instance_valid(_reasoning_container) and not _reasoning_container.is_folded():
+		_start_reasoning_fill()
+	
 	_parser.flush()
 	_close_table_if_open()
 	_finish_typing()
@@ -303,6 +324,10 @@ func resume_content() -> void:
 	add_child(_main_margin_container)
 	custom_minimum_size.y = 0
 	_is_suspended = false
+	
+	# 挂起期间控件离开场景树，分帧渲染会中断；恢复后接着把未渲染的内容补上
+	if is_instance_valid(_reasoning_container) and not _reasoning_container.is_folded():
+		_start_reasoning_fill()
 
 
 ## 查询是否处于挂起状态
@@ -420,7 +445,7 @@ func _create_reasoning_ui() -> void:
 	_reasoning_container.name = "ReasoningContainer"
 	_reasoning_container.set_title("Thinking Process")
 	_reasoning_container.fold()
-	# [优化P1] 监听折叠/展开信号，实现懒加载
+	# [优化P2] 折叠/展开信号：折叠时暂停补帧，展开时按需补帧
 	_reasoning_container.folding_changed.connect(_on_reasoning_fold_changed)
 	
 	_content_container.add_child(_reasoning_container)
@@ -433,14 +458,14 @@ func _create_reasoning_ui() -> void:
 	
 	_reasoning_container.add_child(margin)
 	
-	# [优化P0] 使用 TextEdit 替代 RichTextLabel
-	# TextEdit 自带行级虚拟化，只渲染可见行，对超长文本性能优异
-	# RichTextLabel + fit_content = true 必须同步计算全部文本高度，长文本会阻塞主线程
+	# [优化P0] 使用 TextEdit（绘制成本与可见行相关）
+	# 常态保持 editable = false：既能拖选/复制（与旧实现一致），也不接受用户编辑。
+	# 注意：editable == false 时引擎会拒绝新增文本（文档："new text cannot be added"），
+	# 因此增量写入由 _insert_reasoning_text() 临时放行后立刻收回，绝不能常开。
 	_reasoning_label = TextEdit.new()
 	_reasoning_label.editable = false
-	_reasoning_label.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_reasoning_label.custom_minimum_size.y = 200
-	# 移除 SIZE_EXPAND_FILL，让 TextEdit 保持固定 200px 高度
+	_reasoning_label.wrap_mode = REASONING_WRAP_MODE
+	_reasoning_label.custom_minimum_size.y = REASONING_VIEW_HEIGHT
 	_reasoning_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	_reasoning_label.caret_blink = false
 	_reasoning_label.highlight_current_line = false
@@ -450,36 +475,104 @@ func _create_reasoning_ui() -> void:
 	_last_ui_node = null
 
 
-# [优化P1] 思考内容折叠/展开懒加载回调
-# 折叠时清空 TextEdit 文本释放布局压力，展开时从缓存填充
-func _on_reasoning_fold_changed(is_folded: bool) -> void:
-	if is_folded:
-		# 折叠：先排空缓冲区，再将 TextEdit 文本保存到缓存后清空
-		_flush_reasoning_buffer()
-		if is_instance_valid(_reasoning_label) and not _reasoning_label.text.is_empty():
-			_reasoning_text_cache = _reasoning_label.text
-			_reasoning_label.text = ""
-	else:
-		# 展开：将缓存内容延迟到下一帧设置
-		if not _reasoning_text_cache.is_empty() and is_instance_valid(_reasoning_label):
-			call_deferred("_set_reasoning_text_deferred")
-
-
-func _set_reasoning_text_deferred() -> void:
-	if not _reasoning_text_cache.is_empty() and is_instance_valid(_reasoning_label):
-		_reasoning_label.text = _reasoning_text_cache
-		_reasoning_text_cache = ""
-
-
-# 将缓冲区的思考内容一次性刷入 TextEdit
-func _flush_reasoning_buffer() -> void:
-	if _reasoning_write_buffer.is_empty() or not is_instance_valid(_reasoning_label):
+# 思考内容折叠/展开回调
+# [优化P2] 折叠时不再清空 TextEdit：已渲染内容原样保留，再次展开为零成本
+# （旧实现每次展开都要重建整篇文本，这是"点开就卡"的直接原因）
+func _on_reasoning_fold_changed(p_is_folded: bool) -> void:
+	if p_is_folded:
+		_reasoning_fill_active = false
 		return
 	
-	var old_scroll: int = _reasoning_label.scroll_vertical
-	_reasoning_label.text += _reasoning_write_buffer
-	_reasoning_label.scroll_vertical = old_scroll
-	_reasoning_write_buffer = ""
+	_start_reasoning_fill()
+
+
+# 启动分帧渲染；已在运行时不重复启动
+func _start_reasoning_fill() -> void:
+	if _reasoning_fill_active or not is_instance_valid(_reasoning_label):
+		return
+	
+	_reasoning_fill_active = true
+	_process_reasoning_fill()
+
+
+# 分帧把待渲染的思考内容灌入 TextEdit
+#
+# 单帧工作量受 REASONING_RENDER_CHUNK_CHARS 与 REASONING_RENDER_BUDGET_USEC 双重约束，
+# 因此无论思考内容多长，都不会出现"某帧做几秒的活"，也就不会卡住编辑器主线程。
+func _process_reasoning_fill() -> void:
+	if not is_instance_valid(_reasoning_label) or not _reasoning_label.is_inside_tree() or not is_inside_tree():
+		_reasoning_fill_active = false
+		return
+	
+	# 折叠状态下停止补帧：剩余内容留在 _reasoning_chunks 中，展开时再从游标续上。
+	# 否则折叠前挂起的下一帧回调仍会继续渲染隐藏控件，白白占用主线程。
+	if is_instance_valid(_reasoning_container) and _reasoning_container.is_folded():
+		_reasoning_fill_active = false
+		return
+	
+	var frame_start_usec: int = Time.get_ticks_usec()
+	
+	while true:
+		var pending_text: String = _take_reasoning_pending_text()
+		if pending_text.is_empty():
+			break
+		
+		_insert_reasoning_text(pending_text)
+		
+		if Time.get_ticks_usec() - frame_start_usec >= REASONING_RENDER_BUDGET_USEC:
+			break
+	
+	if _reasoning_render_chunk < _reasoning_chunks.size():
+		# 还有剩余内容：下一帧继续（单次连接，避免与 _reasoning_fill_active 叠加）
+		get_tree().process_frame.connect(_process_reasoning_fill, CONNECT_ONE_SHOT)
+	else:
+		# 全部渲染完毕：释放已消费的分片（渲染结果已保存在 TextEdit 中）
+		_reasoning_chunks.clear()
+		_reasoning_render_chunk = 0
+		_reasoning_render_offset = 0
+		_reasoning_fill_active = false
+
+
+# 取出下一段待渲染内容（最多 REASONING_RENDER_CHUNK_CHARS 个字符）并推进渲染游标
+func _take_reasoning_pending_text() -> String:
+	var text: String = ""
+	
+	while _reasoning_render_chunk < _reasoning_chunks.size() and text.length() < REASONING_RENDER_CHUNK_CHARS:
+		var chunk: String = _reasoning_chunks[_reasoning_render_chunk]
+		var remain: int = chunk.length() - _reasoning_render_offset
+		
+		if remain <= 0:
+			_reasoning_render_chunk += 1
+			_reasoning_render_offset = 0
+			continue
+		
+		var take: int = mini(remain, REASONING_RENDER_CHUNK_CHARS - text.length())
+		text += chunk.substr(_reasoning_render_offset, take)
+		_reasoning_render_offset += take
+		
+		if _reasoning_render_offset >= chunk.length():
+			_reasoning_render_chunk += 1
+			_reasoning_render_offset = 0
+	
+	return text
+
+
+# 把一段文本增量追加到思考框末尾
+# 只对末尾行做增量插入，单次成本与已渲染总长度无关（这是消除卡顿的关键）。
+# editable 在插入前后临时放行/收回：既让引擎接受增量写入，又保持控件常态只读。
+func _insert_reasoning_text(p_text: String) -> void:
+	var last_line: int = maxi(_reasoning_label.get_line_count() - 1, 0)
+	var last_column: int = _reasoning_label.get_line(last_line).length()
+	
+	var probe_start_usec: int = Time.get_ticks_usec()
+	_reasoning_label.editable = true
+	_reasoning_label.insert_text(p_text, last_line, last_column, false, false)
+	_reasoning_label.editable = false
+	
+	# [临时探针] 写入仍超阈值则说明瓶颈不在扩展脚本侧的写入路径
+	var elapsed_usec: int = Time.get_ticks_usec() - probe_start_usec
+	if elapsed_usec >= REASONING_PROBE_WARN_USEC:
+		AIChatLogger.debug("Reasoning insert slow: %d chars, %d usec" % [p_text.length(), elapsed_usec])
 
 
 # 创建文本块 UI
@@ -659,6 +752,9 @@ func _append_to_code(p_text: String) -> void:
 
 func _create_tool_output_block() -> void:
 	_tool_text_edit = TextEdit.new()
+	# 注意：此处依赖 text 属性 setter（不受 editable 约束）写入内容。
+	# 若将来改用 insert_text() 增量写入，必须仿照 _insert_reasoning_text()
+	# 在调用前后临时放行 editable，否则 editable == false 时新增文本会被引擎静默丢弃。
 	_tool_text_edit.editable = false
 	_tool_text_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_tool_text_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -791,9 +887,11 @@ func _clear_content() -> void:
 	_current_typing_node = null
 	_reasoning_container = null
 	_reasoning_label = null
-	# 清空思考内容缓存
-	_reasoning_text_cache = ""
-	_reasoning_write_buffer = ""
+	# 重置思考内容分帧渲染状态
+	_reasoning_chunks.clear()
+	_reasoning_render_chunk = 0
+	_reasoning_render_offset = 0
+	_reasoning_fill_active = false
 	# 重置时恢复标志位
 	_is_first_text = true
 	_previous_line_was_blank = false

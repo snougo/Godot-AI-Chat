@@ -6,6 +6,8 @@ extends Control
 ##
 ## 负责管理插件的主要 UI 交互，包括状态切换、模型选择、存档管理等。
 ## 作为 UI 层与业务逻辑层的桥梁，转发信号并更新界面状态。
+## Token 计数的累计逻辑由 TokenUsageTracker 承担，本类只负责渲染。
+
 
 # --- Signals ---
 
@@ -32,6 +34,7 @@ signal delete_chat_button_pressed(session_name: String)
 ## 当用户通过 UI 切换工作区时发出
 signal workspace_changed(new_path: String)
 
+
 # --- Enums / Constants ---
 
 ## UI 状态定义
@@ -44,6 +47,7 @@ enum UIState {
 	COMPRESSING,         ## 正在压缩上下文
 	ERROR                ## 发生错误
 }
+
 
 # --- @onready Vars ---
 
@@ -69,10 +73,9 @@ enum UIState {
 @onready var _model_name_filter_input: LineEdit = $TabContainer/Chat/VBoxContainer/NetworkContainer/ModelNameFilterInput
 @onready var _reconnect_button: Button = $TabContainer/Chat/VBoxContainer/NetworkContainer/ReconnectButton
 
-@onready var _settings_panel: Control = $TabContainer/Settings/SettingsPanel
 @onready var _error_dialog: AcceptDialog = $AcceptDialog
 @onready var _file_dialog: FileDialog = $FileDialog
-@onready var _tab_container: TabContainer = $TabContainer 
+@onready var _tab_container: TabContainer = $TabContainer
 
 @onready var _allow_editor_script_checkbutton: CheckButton = $TabContainer/Chat/VBoxContainer/InfoContainer/PandoraBox
 
@@ -91,20 +94,20 @@ var model_list: Array[String] = []
 ## 用于判断是否为首次运行或初始化阶段
 var is_first_init: bool = false
 
+
 # --- Private Vars ---
 
+## Token 用量累计器
+var _token_tracker: TokenUsageTracker = TokenUsageTracker.new()
 # 标记当前是否在等待删除确认
 var _pending_delete_session_name: String = ""
-# [Feature] Token Usage Tracking
-var _archived_total_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
-var _current_turn_usage: Dictionary = { "prompt": 0, "completion": 0, "total": 0 }
 var _current_session_name: String = ""
 
 
 # --- Built-in Functions ---
 
 func _ready() -> void:
-	_settings_panel.settings_saved.connect(_on_settings_save_button_pressed)
+	_settings_panel_node.settings_saved.connect(_on_settings_save_button_pressed)
 	_file_dialog.file_selected.connect(_on_file_selected)
 	
 	_delete_chat_button.pressed.connect(_on_delete_chat_button_pressed)
@@ -122,8 +125,8 @@ func _ready() -> void:
 	_workspace_select_button.pressed.connect(_on_workspace_select_button_pressed)
 	_workspace_file_dialog.dir_selected.connect(_on_workspace_dir_selected)
 	
-	var _cfg: PluginSettingsConfig = ToolBox.get_plugin_settings()
-	_allow_editor_script_checkbutton.button_pressed = _cfg.allow_editor_script_execution
+	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	_allow_editor_script_checkbutton.button_pressed = settings.allow_editor_script_execution
 	_allow_editor_script_checkbutton.toggled.connect(_on_allow_editor_script_toggled)
 	
 	update_session_selector()
@@ -131,7 +134,6 @@ func _ready() -> void:
 	update_ui_state(UIState.IDLE)
 	
 	# 初始化工作区显示
-	var settings := ToolBox.get_plugin_settings()
 	_update_workspace_display(settings.workspace_path)
 
 
@@ -147,10 +149,6 @@ func get_chat_scroll_container() -> ScrollContainer:
 
 func get_settings_panel() -> SettingsPanel:
 	return _settings_panel_node
-
-
-func get_current_session_name() -> String:
-	return _current_session_name
 
 
 ## 初始化编辑器依赖
@@ -279,47 +277,32 @@ func update_turn_display(p_current_turns: int, p_max_turns: int) -> void:
 
 ## 准备开始新的请求：结算上一轮
 func prepare_for_new_request() -> void:
-	_archived_total_usage.prompt += _current_turn_usage.prompt
-	_archived_total_usage.completion += _current_turn_usage.completion
-	_archived_total_usage.total += _current_turn_usage.total
-	
-	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
+	_token_tracker.archive_current()
+	_refresh_token_display()
+
+
+## 载入会话时恢复其存档中的累计用量
+## [param p_archived]: 存档中的累计用量；新建会话时应传全零
+func restore_token_usage(p_archived: Dictionary) -> void:
+	_token_tracker.load_archived(p_archived)
+	_refresh_token_display()
+
+
+## 获取当前累计用量的快照，供调用方落库到会话存档
+func get_token_usage_snapshot() -> Dictionary:
+	return _token_tracker.get_total_usage()
 
 
 ## 更新 UI 界面的 Token 数据
 func update_token_usage_display(p_usage: Dictionary) -> void:
-	var p: int = p_usage.get("prompt_tokens", 0)
-	var c: int = p_usage.get("completion_tokens", 0)
-	
-	if p < _current_turn_usage.prompt:
-		p = _current_turn_usage.prompt
-	if c < _current_turn_usage.completion:
-		c = _current_turn_usage.completion
-	
-	var t: int = p_usage.get("total_tokens", p + c)
-	
-	_current_turn_usage = {
-		"prompt": p,
-		"completion": c,
-		"total": t
-	}
-	
-	var display_total: int = _archived_total_usage.total + t
-	var display_prompt: int = _archived_total_usage.prompt + p
-	var display_completion: int = _archived_total_usage.completion + c
-	
-	_current_token_usage.text = "Total Tokens: %d" % display_total
-	
-	_current_token_usage.tooltip_text = "Current Request:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\n" % [p, c, t]
+	_token_tracker.update_current(p_usage)
+	_refresh_token_display()
 
 
 ## 重置 Token 显示
 func reset_token_usage_display() -> void:
-	_archived_total_usage = { "prompt": 0, "completion": 0, "total": 0 }
-	_current_turn_usage = { "prompt": 0, "completion": 0, "total": 0 }
-	
-	_current_token_usage.text = "Total Tokens: 0"
-	_current_token_usage.tooltip_text = ""
+	_token_tracker.reset()
+	_refresh_token_display()
 
 
 ## 显示一个确认/成功对话框
@@ -335,6 +318,29 @@ func show_confirmation(p_message: String) -> void:
 
 
 # --- Private Functions ---
+
+# 把 TokenUsageTracker 的数据渲染到 UI 控件
+func _refresh_token_display() -> void:
+	var display: Dictionary = _token_tracker.get_display_usage()
+	var archived: Dictionary = _token_tracker.get_archived()
+	
+	# 多数协议在流末尾才下发用量：此时展示区回落为「上一轮」，
+	# 标题同步切换并显式标注，避免用户把上一轮数据误读为当前请求
+	var section_title: String = "Current Request"
+	if _token_tracker.is_showing_last_round():
+		section_title = "Last Request (current request not reported yet)"
+	
+	_current_token_usage.text = "Total Tokens: %d" % _token_tracker.get_display_total()
+	_current_token_usage.tooltip_text = "%s:\n - Prompt: %d\n - Completion: %d\n - Total: %d\n\nSession Total:\n - Prompt: %d\n - Completion: %d\n - Total: %d" % [
+		section_title,
+		int(display.prompt),
+		int(display.completion),
+		int(display.total),
+		int(archived.prompt),
+		int(archived.completion),
+		int(archived.total)
+	]
+
 
 func _get_default_status_text(p_state: UIState) -> String:
 	match p_state:
@@ -388,7 +394,7 @@ func _apply_model_filter() -> void:
 		previously_selected = _model_selector.get_item_text(_model_selector.selected)
 	
 	var filtered_models: Array[String] = []
-	for model_name in model_list:
+	for model_name: String in model_list:
 		if filter_text.is_empty() or model_name.to_lower().contains(filter_text):
 			filtered_models.append(model_name)
 	
@@ -399,13 +405,13 @@ func _apply_model_filter() -> void:
 		model_selection_changed.emit("")
 	else:
 		_model_selector.disabled = false
-		for name in filtered_models:
+		for name: String in filtered_models:
 			_model_selector.add_item(name)
 		
 		var new_selection_index: int = filtered_models.find(previously_selected)
 		if new_selection_index != -1:
 			_model_selector.select(new_selection_index)
-			_on_model_selected(new_selection_index) 
+			_on_model_selected(new_selection_index)
 		else:
 			_model_selector.select(0)
 			_on_model_selected(0)
@@ -518,7 +524,7 @@ func _on_filesystem_changed() -> void:
 func _on_workspace_select_button_pressed() -> void:
 	_workspace_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 	_workspace_file_dialog.title = "Select Workspace Directory"
-	var settings := ToolBox.get_plugin_settings()
+	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	if not settings.workspace_path.is_empty():
 		_workspace_file_dialog.current_dir = settings.workspace_path
 	_workspace_file_dialog.popup_centered()
@@ -530,6 +536,6 @@ func _on_workspace_dir_selected(p_dir: String) -> void:
 
 
 func _on_allow_editor_script_toggled(p_toggled_on: bool) -> void:
-	var _cfg: PluginSettingsConfig = ToolBox.get_plugin_settings()
-	_cfg.allow_editor_script_execution = p_toggled_on
-	ResourceSaver.save(_cfg, PluginPaths.SETTINGS_PATH)
+	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	settings.allow_editor_script_execution = p_toggled_on
+	ResourceSaver.save(settings, PluginPaths.SETTINGS_PATH)

@@ -9,9 +9,8 @@ extends RefCounted
 ## - 不构建 AST、不校验语法合法性，宽容式扫描；
 ## - 与安全策略解耦：本类只输出词法事实，是否拦截由消费方决定。
 
-# ============================================================================
-# Enums / Constants
-# ============================================================================
+
+# --- Enums / Constants ---
 
 enum TokenType {
 	KEYWORD,      ## 关键字（if/for/var/self...）
@@ -59,9 +58,8 @@ const IGNORED_RHS_KEYWORDS: Array[String] = [
 	"return", "self", "super", "await", "pass", "break", "continue",
 ]
 
-# ============================================================================
-# Public Functions
-# ============================================================================
+
+# --- Public Functions ---
 
 ## 将源码切分为扁平 Token 流（含精确行列号）。
 static func tokenize(p_code: String) -> Array[Token]:
@@ -162,9 +160,7 @@ static func build_path_var_table(p_code: String) -> Dictionary:
 	return _resolve_refs(literals, refs)
 
 
-# ============================================================================
-# Private Functions
-# ============================================================================
+# --- Private Functions ---
 
 # 收集所有"变量赋值"（`x := RHS` / `x = RHS`），返回 {lhs: String, rhs: Array[Token]} 列表。
 static func _collect_assignments(p_tokens: Array[Token]) -> Array[Dictionary]:
@@ -289,9 +285,7 @@ static func _strip_quote(p_value: String) -> String:
 	return v
 
 
-# ============================================================================
-# Inner Classes
-# ============================================================================
+# --- Inner Classes ---
 
 ## 单个 Token：保留原始文本（含引号/转义），携带 1-based 行列号。
 class Token:

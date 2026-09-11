@@ -13,6 +13,7 @@ extends RefCounted
 ##   3. 流结束时调用 flush() 刷新残余缓冲区
 ##   4. 重置时调用 reset()
 
+
 # --- Signals ---
 
 ## 当解析出一个段落时触发
@@ -20,6 +21,7 @@ extends RefCounted
 ## [param p_content]: 段落内容（TEXT 和 CODE_BLOCK_CONTENT 含尾随换行符）
 ## [param p_meta]: 附加信息（仅 CODE_BLOCK_START 时为语言标识符，其余为空字符串）
 signal segment_parsed(p_type: int, p_content: String, p_meta: String)
+
 
 # --- Enums ---
 
@@ -36,6 +38,7 @@ enum _ParseState {
 	TEXT,   ## 普通文本模式
 	CODE,   ## 围栏代码块模式
 }
+
 
 # --- Private Vars ---
 

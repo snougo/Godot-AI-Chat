@@ -4,12 +4,23 @@ extends RefCounted
 
 ## 通用工具箱
 ##
-## 包含设置管理、Token 估算、文件系统刷新等辅助功能。
+## 包含设置管理、文件系统刷新、JSON 安全序列化与工具调用清洗等辅助功能。
 
-# --- Static Variables for Debouncing ---
+
+# --- Constants ---
+
+## 文件系统全量扫描的延迟执行时间（毫秒），用于节流与防重入
+const SCAN_DELAY_MSEC: int = 100
+
+
+# --- Static Vars ---
+
+## 是否有待执行的定时扫描
 static var _scan_pending: bool = false
-static var _scan_delay_ms: int = 100  # 延迟 100ms 执行
+## 控制字符检测正则（懒加载缓存）
 static var _control_char_regex: RegEx = null
+## 工具名合法性校验正则（懒加载缓存）
+static var _tool_name_regex: RegEx = null
 
 
 # --- Public Functions ---
@@ -32,55 +43,6 @@ static func get_plugin_settings() -> PluginSettingsConfig:
 	return plugin_settings
 
 
-## 用于结构化打印聊天历史上下文的调试函数
-static func print_structured_context(p_title: String, p_messages: Array, p_context_info: Dictionary = {}) -> void:
-	AIChatLogger.debug("\n--- [调试] 上下文报告: %s ---" % p_title)
-	
-	if not p_context_info.is_empty():
-		for key in p_context_info:
-			AIChatLogger.debug("    - %s: %s" % [key, str(p_context_info[key])])
-	
-	AIChatLogger.debug("    - 消息总数: %d" % p_messages.size())
-	AIChatLogger.debug("--- 上下文内容 (角色 | 内容片段) ---")
-	
-	if p_messages.is_empty():
-		AIChatLogger.debug("    [上下文为空]")
-	else:
-		for i in range(p_messages.size()):
-			var msg: Variant = p_messages[i]
-			var role: String = "NO_ROLE"
-			var content: String = "[NO_CONTENT]"
-			
-			if msg is Dictionary:
-				role = msg.get("role", "NO_ROLE")
-				content = str(msg.get("content", "[NO_CONTENT]"))
-			elif msg is ChatMessage:
-				role = msg.role
-				content = msg.content
-			
-			var snippet: String = content.replace("\n", "\\n")
-			if snippet.length() > 100:
-				snippet = snippet.left(100) + "..."
-				
-			AIChatLogger.debug("    [%d] 角色: \"%s\" | 内容: \"%s\"" % [i, role, snippet])
-	
-	AIChatLogger.debug("--- 报告结束 ---\n")
-
-
-## 检查文件是否已在 ScriptEditor 中打开
-static func is_file_open_in_script_editor(p_path: String) -> bool:
-	var script_editor: ScriptEditor = EditorInterface.get_script_editor()
-	if not script_editor:
-		return false
-	
-	# 遍历打开的编辑器实例，检查元数据中的文件路径
-	for editor in script_editor.get_open_script_editors():
-		if editor.has_meta("_edit_res_path") and editor.get_meta("_edit_res_path") == p_path:
-			return true
-	
-	return false
-
-
 ## 在 Shader Editor 中查找编辑指定 shader 的 CodeEdit。
 ## 通过内容匹配定位（Shader Editor 的 CodeEdit buffer 与 shader.get_code() 实时同步），
 ## 找到后自动激活对应标签。若目标 shader 未在 Shader Editor 打开，返回 null。
@@ -89,7 +51,7 @@ static func find_shader_code_edit(p_shader: Shader) -> CodeEdit:
 	if p_shader == null:
 		return null
 	var root: Node = EditorInterface.get_base_control()
-	for node in root.find_children("*", "TextShaderEditor", true, false):
+	for node: Node in root.find_children("*", "TextShaderEditor", true, false):
 		var code_edits: Array = node.find_children("*", "CodeEdit", true, false)
 		if code_edits.is_empty():
 			continue
@@ -152,7 +114,7 @@ static func stringify_json_safe(p_value: Variant) -> String:
 	var total: int = json_str.length()
 	var parts: PackedStringArray = PackedStringArray()
 	var run_start: int = 0
-	for i in total:
+	for i: int in total:
 		var cp: int = json_str.unicode_at(i)
 		if cp >= 0x20:
 			continue
@@ -163,44 +125,6 @@ static func stringify_json_safe(p_value: Variant) -> String:
 	if run_start < total:
 		parts.append(json_str.substr(run_start))
 	return "".join(parts)
-
-
-## 从 AI 响应中移除  thinking... response 标签块
-static func remove_think_tags(p_text: String) -> String:
-	if p_text.is_empty():
-		return ""
-	var think_regex: RegEx = RegEx.create_from_string("(?s) thinking.*? response")
-	var cleaned_text: String = think_regex.sub(p_text, "", true)
-	return cleaned_text.strip_edges()
-
-
-## 过滤掉那些在 thinking 标签尚未闭合时产生的工具调用
-static func filter_hallucinated_tool_calls(p_content: String, p_tool_calls: Array) -> Array:
-	if p_tool_calls.is_empty():
-		return p_tool_calls
-	
-	# 同时检测 <think> 和  thinking 两种格式
-	var has_think_open: bool = "<think>" in p_content or " thinking" in p_content
-	if not has_think_open:
-		return p_tool_calls
-	
-	# 查找 thinking 开始位置（支持两种格式）
-	var think_start: int = p_content.find(" thinking")
-	if think_start == -1:
-		think_start = p_content.find("<think>")
-	
-	# 查找闭合位置（支持两种格式）
-	var think_end: int = p_content.find(" response")
-	if think_end == -1:
-		think_end = p_content.find("</think>")
-	
-	# 如果找到了 thinking 开始但没找到闭合 → 思考未结束，全部拦截
-	if think_start != -1 and think_end == -1:
-		AIChatLogger.warn("[ToolBox] Intercepted %d tool calls during unclosed thinking block." % p_tool_calls.size())
-		return []
-	
-	# thinking 已闭合 → 放行
-	return p_tool_calls
 
 
 ## 验证工具名称是否有效
@@ -215,12 +139,15 @@ static func is_valid_tool_name(p_name: String) -> bool:
 	if "\n" in p_name or "(" in p_name or ")" in p_name:
 		return false
 	# 必须符合函数命名规范
-	var regex := RegEx.create_from_string("^[a-zA-Z][a-zA-Z0-9_-]*$")
+	if _tool_name_regex == null:
+		_tool_name_regex = RegEx.create_from_string("^[a-zA-Z][a-zA-Z0-9_-]*$")
 	
-	return regex.search(p_name) != null
+	return _tool_name_regex.search(p_name) != null
 
 
 ## 清洗、过滤工具调用，并将被服务端误判的纯文本"抢救"回消息内容中
+## [param p_msg]: 待清洗的助手消息（会被原地修改）
+## [param p_valid_tools]: 可选的合法工具表；为空时使用 Main-Agent 核心工具集校验
 static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dictionary = {}) -> void:
 	# 防御：确保 ToolRegistry 已初始化
 	if ToolRegistry.main_agent_tools.is_empty():
@@ -229,18 +156,23 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dict
 	var valid_calls: Array = []
 	var salvaged_text: String = ""
 	
-	for tc in p_msg.tool_calls:
-		var raw_name: String = tc.get("function", {}).get("name", "")
-		var args: String = tc.get("function", {}).get("arguments", "")
+	for raw_call: Variant in p_msg.tool_calls:
+		if not raw_call is Dictionary:
+			continue
+		var tc: Dictionary = raw_call
+		
+		var func_dict: Dictionary = tc.get("function", {})
+		var raw_name: String = String(func_dict.get("name", ""))
+		var args: String = String(func_dict.get("arguments", ""))
 		
 		# Step 1: 检测 XML 伪标签
 		var extract_result: Dictionary = _extract_from_xml_wrapper(raw_name)
-		var clean_name: String = extract_result.clean_name
+		var clean_name: String = String(extract_result.clean_name)
 		
 		# Step 2: 判断工具合法性
 		#   子Agent路径 → 使用自己的 _sub_agent_tools 字典精确校验
 		#   主Agent路径 → 使用核心工具集校验
-		var is_valid := false
+		var is_valid: bool = false
 		if not clean_name.is_empty():
 			if not p_valid_tools.is_empty():
 				is_valid = p_valid_tools.has(clean_name)
@@ -249,8 +181,8 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dict
 		
 		if is_valid:
 			# 合法工具：更新清洗后的名称，补充 ID
-			tc.function["name"] = clean_name
-			if tc.get("id", "").is_empty():
+			func_dict["name"] = clean_name
+			if String(tc.get("id", "")).is_empty():
 				tc["id"] = "call_%d" % Time.get_ticks_msec()
 			valid_calls.append(tc)
 		else:
@@ -272,30 +204,32 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dict
 
 # 从 raw_name 中检测并提取 XML 伪标签
 # 处理服务端懒惰解析场景：<tool_call>xxx（无闭合）、xxx</tool_call>、完整闭合等
+# [param p_raw_name]: 原始工具名
 # [return]: {"clean_name": String, "has_xml_wrapper": bool}
 static func _extract_from_xml_wrapper(p_raw_name: String) -> Dictionary:
-	var result := {
+	var result: Dictionary = {
 		"clean_name": p_raw_name,
 		"has_xml_wrapper": false
 	}
 	
 	# 检测开放标签前缀（服务端看到 <tool_call> 就懒惰解析的典型场景）
 	var open_patterns: Array[String] = ["<tool_call>", "<function_call>", "<function>"]
-	for pattern in open_patterns:
+	for pattern: String in open_patterns:
 		if p_raw_name.begins_with(pattern):
-			result.has_xml_wrapper = true
-			result.clean_name = p_raw_name.substr(pattern.length())
+			result["has_xml_wrapper"] = true
+			result["clean_name"] = p_raw_name.substr(pattern.length())
 			break
 	
 	# 检测闭合标签后缀（即使前面没有开放标签，仅后缀也算伪信号）
 	var close_patterns: Array[String] = ["</tool_call>", "</function_call>", "</function>"]
-	for pattern in close_patterns:
-		if result.clean_name.ends_with(pattern):
-			result.has_xml_wrapper = true
-			result.clean_name = result.clean_name.left(-pattern.length())
+	for pattern: String in close_patterns:
+		var current: String = String(result["clean_name"])
+		if current.ends_with(pattern):
+			result["has_xml_wrapper"] = true
+			result["clean_name"] = current.left(-pattern.length())
 			break
 	
-	result.clean_name = result.clean_name.strip_edges()
+	result["clean_name"] = String(result["clean_name"]).strip_edges()
 	return result
 
 
@@ -323,7 +257,7 @@ static func _schedule_deferred_scan() -> void:
 		_scan_pending = false
 		return
 	
-	var timer: SceneTreeTimer = Engine.get_main_loop().create_timer(_scan_delay_ms / 1000.0)
+	var timer: SceneTreeTimer = Engine.get_main_loop().create_timer(SCAN_DELAY_MSEC / 1000.0)
 	timer.timeout.connect(_perform_scan, ConnectFlags.CONNECT_ONE_SHOT)
 
 
@@ -353,7 +287,8 @@ static func _perform_scan() -> void:
 static func _activate_shader_tab(p_node: Node) -> void:
 	var parent_tab: Node = p_node.get_parent()
 	if parent_tab is TabContainer:
-		for i in parent_tab.get_tab_count():
-			if parent_tab.get_tab_control(i) == p_node:
-				parent_tab.set_current_tab(i)
+		var tab_container: TabContainer = parent_tab
+		for i in tab_container.get_tab_count():
+			if tab_container.get_tab_control(i) == p_node:
+				tab_container.set_current_tab(i)
 				break

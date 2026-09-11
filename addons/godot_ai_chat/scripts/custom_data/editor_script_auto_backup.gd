@@ -7,25 +7,18 @@ extends Resource
 
 ## 备份唯一标识（如 rollback_20260730_225500）
 @export var backup_id: String = ""
-
 ## 创建时间戳（Unix 时间）
 @export var timestamp: int = 0
-
 ## 执行的原脚本代码
 @export var script_code: String = ""
-
 ## 备份的文件路径列表（与 file_contents 一一对应）
 @export var file_paths: Array[String] = []
-
 ## 备份的文件内容列表（与 file_paths 一一对应）
 @export var file_contents: Array[PackedByteArray] = []
-
 ## 审计：执行后创建的文件
 @export var audit_created: Array[String] = []
-
 ## 审计：执行后修改的文件
 @export var audit_modified: Array[String] = []
-
 ## 审计：执行后删除的文件
 @export var audit_deleted: Array[String] = []
 

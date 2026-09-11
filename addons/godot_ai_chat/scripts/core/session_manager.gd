@@ -3,11 +3,13 @@ extends RefCounted
 
 ## 会话管理器
 ##
-## 负责聊天会话的创建、加载、删除和自动保
+## 负责聊天会话的创建、加载、删除和自动保存。
+
 
 # --- Public Vars ---
 
 var current_session_path: String = ""
+
 
 # --- Private Vars ---
 
@@ -42,7 +44,8 @@ func fork_session(p_history: ChatMessageHistory) -> ChatMessageHistory:
 func load_session(p_session_name: String) -> ChatMessageHistory:
 	var path: String = PluginPaths.SESSION_DIR.path_join(p_session_name)
 	if FileAccess.file_exists(path):
-		var resource = ResourceLoader.load(path)
+		var resource: Resource = ResourceLoader.load(path)
+		
 		if resource is ChatMessageHistory:
 			_disconnect_auto_save()
 			current_session_path = path
@@ -50,6 +53,7 @@ func load_session(p_session_name: String) -> ChatMessageHistory:
 			_bind_auto_save(resource)
 			_bind_opencode_session()
 			return resource
+	
 	return null
 
 
@@ -58,6 +62,7 @@ func load_session(p_session_name: String) -> ChatMessageHistory:
 ## [return]: 是否删除成功
 func delete_session(p_session_name: String) -> bool:
 	var archive_path: String = PluginPaths.SESSION_DIR.path_join(p_session_name)
+	
 	if not FileAccess.file_exists(archive_path):
 		return false
 	if DirAccess.remove_absolute(archive_path) == OK:
@@ -67,13 +72,14 @@ func delete_session(p_session_name: String) -> bool:
 			_current_history = null
 		ToolBox.update_editor_filesystem(archive_path)
 		return true
+	
 	return false
 
 
 ## 加载最新的会话
 ## [return]: 加载的历史记录对象，如果没有则返回 null
 func load_latest_session() -> ChatMessageHistory:
-	var archive_list := SessionStorage.get_session_list()
+	var archive_list: Array[String] = SessionStorage.get_session_list()
 	if not archive_list.is_empty():
 		return load_session(archive_list[0])
 	return null
@@ -87,10 +93,10 @@ func has_active_session() -> bool:
 
 ## 保存当前会话
 ## [param p_history]: 历史记录对象
-func save_current_session(history: ChatMessageHistory) -> void:
-	if not current_session_path.is_empty() and history:
-		_validate_message_integrity(history)
-		ResourceSaver.save(history, current_session_path)
+func save_current_session(p_history: ChatMessageHistory) -> void:
+	if not current_session_path.is_empty() and p_history:
+		_validate_message_integrity(p_history)
+		ResourceSaver.save(p_history, current_session_path)
 
 
 # --- Private Functions ---
@@ -102,13 +108,16 @@ func save_current_session(history: ChatMessageHistory) -> void:
 func _save_as_new_session(p_history: ChatMessageHistory, p_name_suffix: String) -> ChatMessageHistory:
 	_ensure_archive_dir()
 	_disconnect_auto_save()
+	
 	var now: Dictionary = Time.get_datetime_dict_from_system(false)
-	var base := "chat_%d-%02d-%02d_%02d-%02d-%02d%s" % [now.year, now.month, now.day, now.hour, now.minute, now.second, p_name_suffix]
-	var path := PluginPaths.SESSION_DIR.path_join(base + ".tres")
-	var counter := 1
+	var base: String = "chat_%d-%02d-%02d_%02d-%02d-%02d%s" % [now.year, now.month, now.day, now.hour, now.minute, now.second, p_name_suffix]
+	var path: String = PluginPaths.SESSION_DIR.path_join(base + ".tres")
+	var counter: int = 1
+	
 	while FileAccess.file_exists(path):
 		path = PluginPaths.SESSION_DIR.path_join("%s_%d.tres" % [base, counter])
 		counter += 1
+	
 	if ResourceSaver.save(p_history, path) == OK:
 		current_session_path = path
 		_current_history = p_history
@@ -116,6 +125,7 @@ func _save_as_new_session(p_history: ChatMessageHistory, p_name_suffix: String) 
 		_bind_auto_save(p_history)
 		_bind_opencode_session()
 		return p_history
+	
 	AIChatLogger.error("[SessionManager] Failed to save session: %s" % path)
 	return null
 
@@ -145,7 +155,7 @@ func _auto_save() -> void:
 
 # 验证消息完整性
 func _validate_message_integrity(p_history: ChatMessageHistory) -> void:
-	for msg in p_history.messages:
+	for msg: ChatMessage in p_history.messages:
 		if msg.content == null or typeof(msg.content) != TYPE_STRING:
 			msg.content = ""
 

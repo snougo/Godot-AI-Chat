@@ -3,6 +3,9 @@ class_name ZhipuAIProvider
 extends OpenAIChatCompletionsProvider
 
 ## 智谱 AI (ZhipuAI) 的服务提供商实现
+##
+## 请求体/流式解析完全复用 Chat Completions 实现，仅覆盖 URL 与模型列表来源。
+
 
 # --- Constants ---
 
@@ -15,11 +18,6 @@ const ZHIPUAI_MODELS: Array[String] = ["glm-4.5-air"]
 ## 智谱 V4 完美兼容 SSE
 func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.SSE
-
-
-## 获取模型列表URL（智谱AI不提供此端点，返回空字符串）
-func get_model_list_url(_p_base_url: String) -> String:
-	return ""
 
 
 ## 重写模型列表解析 - 直接返回硬编码的模型列表

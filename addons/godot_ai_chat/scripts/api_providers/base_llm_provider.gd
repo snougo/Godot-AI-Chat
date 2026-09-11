@@ -4,7 +4,12 @@ extends RefCounted
 
 ## LLM 服务提供商的基类
 ##
-## 定义了所有 LLM Provider 必须实现的接口，包括请求构建、响应解析和流式处理协议。
+## 定义所有 LLM Provider 必须实现的接口，包括请求构建、响应解析与流式处理协议。
+## 流式处理契约：
+## 1. Provider 只把原始数据块翻译成协议无关的 LLMStreamDelta；
+## 2. Provider 不修改 ChatMessage；
+## 3. 数据落地由 StreamMessageAssembler 负责。
+
 
 # --- Enums / Constants ---
 
@@ -21,6 +26,25 @@ enum StreamParserType {
 ## [必需] 返回该 Provider 使用的流式解析协议
 func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.SSE
+
+
+## [可覆写] 开始新一轮流式接收前，重置 Provider 自身的流内状态
+## 由消费端在一次请求发起前调用，用于清除上一轮残留的槽位映射等信息
+func reset_stream_state() -> void:
+	pass
+
+
+## [必需] 解析一个流式数据块，返回协议无关的增量描述
+##
+## 实现约定：
+## 1. 只读取 p_raw_chunk 与 Provider 自身的流内状态；
+## 2. 禁止修改任何 ChatMessage；
+## 3. 禁止生成 UI 语义（颜色、状态文案、界面提示）。
+##
+## [param p_raw_chunk]: 原始数据块（已由传输层切分并解析为 Dictionary）
+## [return]: LLMStreamDelta 实例，无任何可提取内容时返回空增量
+func parse_stream_chunk(p_raw_chunk: Dictionary) -> LLMStreamDelta:
+	return LLMStreamDelta.new()
 
 
 ## [必需] 获取 HTTP 请求头
@@ -72,15 +96,6 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 	return {}
 
 
-## 处理流式响应块
-## 接收原始网络数据(raw_chunk)，直接修改目标消息对象(target_msg)的数据层
-## 返回 UI 需要的增量信息： { "content_delta": String, "usage": Dictionary (可选) }
-## [param p_target_msg]: 目标消息对象（将被修改）
-## [param p_raw_chunk]: 原始数据块
-func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) -> Dictionary:
-	return { "content_delta": "" }
-
-
 ## [可覆写] 当前 Provider 是否支持通过 API 端点获取模型列表
 ## [param p_base_url]: 当前配置的 API Base URL（用于运行时判断，如 DeepSeek 特判）
 func supports_model_list_api(p_base_url: String) -> bool:
@@ -93,6 +108,15 @@ func supports_inline_tool_images() -> bool:
 	return false
 
 
+## [可覆写] 工具定义是否需要转换为 Gemini 兼容格式（顶展 schema、type 大写）
+##
+## Gemini 的 functionDeclarations 不接受 OpenAI 的
+## {"type":"function","function":{...}} 嵌套结构，调用方据此决定
+## 是否经由 ToolRegistry.convert_schema_to_gemini() 转换。
+func requires_gemini_tool_schema() -> bool:
+	return false
+
+
 ## [可覆写] 返回静态内置模型列表（当 supports_model_list_api() 返回 false 时使用）
 func get_static_model_list() -> Array[String]:
 	return []
@@ -100,7 +124,7 @@ func get_static_model_list() -> Array[String]:
 
 # --- Private Functions ---
 
-# [P0] 通用图片净化：查询全局模型能力表，纯文本模型剥离图片
+# 通用图片净化：查询全局模型能力表，纯文本模型剥离图片
 # 必须在副本上操作！p_messages 元素与 ChatMessageHistory.messages 是同一引用，
 # 原地 clear 会永久污染历史记录（主 Agent / Sub-Agent / 上下文压缩均受影响）。
 # [param p_messages]: 原始消息数组（不会被修改）
@@ -113,7 +137,7 @@ func _sanitize_messages(p_messages: Array[ChatMessage], p_model_name: String) ->
 	var has_image: bool = false
 	var sanitized: Array[ChatMessage] = []
 	
-	for msg in p_messages:
+	for msg: ChatMessage in p_messages:
 		if msg.images.is_empty():
 			sanitized.append(msg)
 			continue

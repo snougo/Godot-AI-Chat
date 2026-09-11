@@ -6,12 +6,14 @@ extends RefCounted
 ## 管理两阶段超时：等待首token → 流式接收
 ## 纯计算组件，不依赖场景树，线程/主线程通用。
 
+
 # --- Enums ---
 
 enum Phase {
 	WAITING_FIRST_TOKEN,  ## 等待首token阶段（连接+请求+等首数据）
 	STREAMING             ## 流式接收阶段（停顿超时）
 }
+
 
 # --- Private Vars ---
 

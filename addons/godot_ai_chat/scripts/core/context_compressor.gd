@@ -34,34 +34,38 @@ func compress_context(p_history: ChatMessageHistory, p_network_manager: NetworkM
 	var summary_messages: Array[ChatMessage] = []
 	summary_messages.append(ChatMessage.new(ChatMessage.ROLE_SYSTEM, p_config.summary_prompt))
 	
-	var user_prompt := "Please summarize the following conversation:\n\n---\n" + conversation_text + "\n---\n"
+	var user_prompt: String = "Please summarize the following conversation:\n\n---\n" + conversation_text + "\n---\n"
 	summary_messages.append(ChatMessage.new(ChatMessage.ROLE_USER, user_prompt))
 	
 	# 4. 发送非流式摘要请求
 	var result: Dictionary = await p_network_manager.request_non_stream_async(summary_messages, p_config)
 	
 	if not result.success:
-		return {"success": false, "error": result.error}
+		return {"success": false, "error": String(result.error)}
 	
-	var summary_content: String = result.content.strip_edges()
+	var summary_content: String = String(result.content).strip_edges()
 	if summary_content.is_empty():
 		return {"success": false, "error": "Summary content is empty."}
 	
 	AIChatLogger.info("[ContextCompressor] Summary received (%d chars)." % summary_content.length(), "ContextCompressor")
 	
 	# 5. 构造新的对话历史
-	var new_history := ChatMessageHistory.new()
+	var new_history: ChatMessageHistory = ChatMessageHistory.new()
+	
+	# 5.0 继承原会话的累计 Token 用量：
+	# 压缩产生的是同一段对话的延续，若从零开始会让「会话累计」在压缩后突然归零
+	new_history.set_token_usage(p_history.token_usage)
 	
 	# 5.1 深拷贝第一轮消息（确保新会话与旧会话数据独立）
-	for msg in first_turn:
-		var msg_copy := msg.duplicate(true) as ChatMessage
+	for raw_msg: ChatMessage in first_turn:
+		var msg_copy: ChatMessage = raw_msg.duplicate(true) as ChatMessage
 		if msg_copy:
 			new_history.add_message(msg_copy)
 		else:
-			new_history.add_message(msg)
+			new_history.add_message(raw_msg)
 	
 	# 5.2 添加摘要作为 User 消息
-	var summary_wrapper := "**[Previous Conversation Summary]**\n\n" + summary_content
+	var summary_wrapper: String = "**[Previous Conversation Summary]**\n\n" + summary_content
 	new_history.add_user_message(summary_wrapper)
 	
 	return {"success": true, "new_history": new_history}
@@ -77,7 +81,7 @@ static func _format_turns_for_summary(p_turns: Array) -> String:
 		var turn: Array = p_turns[i]
 		lines.append("--- Turn %d ---" % (i + 2))
 		
-		for msg in turn:
+		for msg: ChatMessage in turn:
 			if msg.role == ChatMessage.ROLE_SYSTEM:
 				continue
 			
@@ -97,9 +101,13 @@ static func _format_turns_for_summary(p_turns: Array) -> String:
 					if not msg.tool_calls.is_empty():
 						if not msg.content.is_empty():
 							lines.append("[%s]: %s" % [role_label, msg.content])
-						for tc in msg.tool_calls:
-							var func_name: String = tc.get("function", {}).get("name", "unknown")
-							var args: String = tc.get("function", {}).get("arguments", "{}")
+						for raw_call: Variant in msg.tool_calls:
+							if not raw_call is Dictionary:
+								continue
+							var tc: Dictionary = raw_call
+							var func_dict: Dictionary = tc.get("function", {})
+							var func_name: String = String(func_dict.get("name", "unknown"))
+							var args: String = String(func_dict.get("arguments", "{}"))
 							if args.length() > 500:
 								args = args.substr(0, 500) + "..."
 							lines.append("  → Called tool: %s(%s)" % [func_name, args])

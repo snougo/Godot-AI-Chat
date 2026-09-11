@@ -1,10 +1,12 @@
 class_name MarkdownToBBCode
 extends RefCounted
+
 ## Markdown 转 BBCode 转换器
 ##
 ## 纯文本处理，无任何 UI 依赖。
 ## 将 Markdown 文本行转换为 RichTextLabel 可用的 BBCode 格式。
 ## 支持：标题、粗体/斜体/粗斜体、行内代码、链接、自动链接、删除线、表格、反斜杠转义。
+
 
 # --- Constants ---
 
@@ -22,6 +24,7 @@ const ESCAPABLE_CHARS: String = "\\`*_~[]()<>#-+.!|"
 ## 段落实体类型
 const SEGMENT_PLAIN: int = 0
 const SEGMENT_CODE: int = 1
+
 
 # --- Public Static Functions ---
 

@@ -22,7 +22,6 @@ func get_request_headers(p_api_key: String, p_stream: bool) -> PackedStringArray
 	
 	if p_stream:
 		headers.append("Accept: text/event-stream")
-	
 	if not p_api_key.is_empty():
 		headers.append("Authorization: Bearer " + p_api_key)
 	
@@ -34,9 +33,9 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
 	var list: Array[String] = []
 	
-	if json is Dictionary and json.has("data"):
-		for item in json.data:
-			if item.has("id"):
-				list.append(item.id)
+	if json is Dictionary and json.has("data") and json.data is Array:
+		for raw_item: Variant in (json.data as Array):
+			if raw_item is Dictionary and raw_item.has("id"):
+				list.append(String(raw_item.id))
 	
 	return list

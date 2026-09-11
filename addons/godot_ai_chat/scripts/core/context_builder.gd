@@ -3,12 +3,15 @@ extends RefCounted
 
 ## 上下文构建器
 ##
-## 负责构建发送给 AI 的上下文消息列表（System Prompt + History + Skills）。
+## 负责构建发送给 AI 的上下文消息列表（System Prompt + History）。
 
 
 # --- Public Functions ---
 
 ## 构建完整的上下文
+## [param p_history]: 对话历史
+## [param p_settings]: 插件设置
+## [return]: 可直接发送给 Provider 的消息数组
 static func build_context(p_history: ChatMessageHistory, p_settings: PluginSettingsConfig) -> Array[ChatMessage]:
 	if not p_history or not p_settings:
 		return []
@@ -32,6 +35,10 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	final_system_prompt += "========================\n\n"
 	
 	# 4. 注入记忆
+	# [已停用] 记忆子系统当前整体处于关闭状态：
+	#   - memory_tool 下的三个工具未注册进 main_agent_tool_config.tres；
+	#   - 以下注入逻辑被整段注释。
+	# 如需恢复，请连同工具注册一并启用（相关类：MemoryStore / MemoryEntry）。
 	#var memory_store_path: String = PluginPaths.MEMORY_STORE_PATH
 	#if ResourceLoader.exists(memory_store_path):
 		#var store: MemoryStore = load(memory_store_path) as MemoryStore
@@ -102,7 +109,7 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 				#final_system_prompt += "==============================\n"
 			
 			#final_system_prompt += "\n"
-			#final_system_prompt += "\n💡 > **Tip**: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
+			#final_system_prompt += "\n > **Tip**: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
 	
 	# 5. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(
@@ -125,7 +132,7 @@ static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: 
 	var messages: Array[ChatMessage] = []
 	
 	# 1. 加载技能指令（SKILL.md）
-	var skill_instruction := ""
+	var skill_instruction: String = ""
 	var skill_res: Resource = ToolRegistry.available_skills.get(p_skill_name)
 	if skill_res and "instruction_file" in skill_res:
 		var path: String = skill_res.instruction_file
@@ -140,7 +147,7 @@ static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: 
 	messages.append(ChatMessage.new(ChatMessage.ROLE_SYSTEM, final_sys_prompt))
 	
 	# 3. 组装 Task Prompt
-	var final_user_prompt := "Please execute the following task using your tools:\n\n==== TASK DESCRIPTION ====\n" + p_task_description
+	var final_user_prompt: String = "Please execute the following task using your tools:\n\n==== TASK DESCRIPTION ====\n" + p_task_description
 	messages.append(ChatMessage.new(ChatMessage.ROLE_USER, final_user_prompt))
 	
 	return messages
@@ -149,5 +156,6 @@ static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: 
 # --- Private Functions ---
 
 # 路径归一化：去除尾部斜杠
+# [备注] 仅被上方已停用的记忆注入块引用；若确认记忆子系统不再恢复，可连同该块一并删除
 static func _normalize_path(p_path: String) -> String:
 	return p_path.trim_suffix("/").trim_suffix("\\")

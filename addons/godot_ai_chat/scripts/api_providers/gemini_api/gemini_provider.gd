@@ -5,6 +5,12 @@ extends BaseLLMProvider
 ## Google Gemini API 的服务提供商实现
 
 
+# --- Private Vars ---
+
+## 流内工具调用序号：Gemini 的 functionCall 不携带 ID，需自行生成稳定槽位键
+var _function_call_seq: int = 0
+
+
 # --- Public Functions ---
 
 ## 返回该 Provider 使用的流式解析协议
@@ -15,6 +21,16 @@ func get_stream_parser_type() -> StreamParserType:
 ## Gemini 原生支持将工具返回的图片直接嵌入 Tool 消息（通过 inline_data）
 func supports_inline_tool_images() -> bool:
 	return true
+
+
+## Gemini 的 functionDeclarations 需要顶展 schema，且 type 需大写
+func requires_gemini_tool_schema() -> bool:
+	return true
+
+
+## 重置流内状态
+func reset_stream_state() -> void:
+	_function_call_seq = 0
 
 
 ## 获取 HTTP 请求头
@@ -40,7 +56,7 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 	var system_instruction: Dictionary = {}
 	
 	# 1. 转换消息 (OpenAI Role -> Gemini Role)
-	for msg in p_messages:
+	for msg: ChatMessage in p_messages:
 		if msg.role == ChatMessage.ROLE_SYSTEM:
 			system_instruction = {"parts": [{"text": msg.content}]}
 			continue
@@ -55,7 +71,11 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 				parts.append({"text": msg.content})
 			
 			if not msg.tool_calls.is_empty():
-				for call in msg.tool_calls:
+				for raw_call: Variant in msg.tool_calls:
+					if not raw_call is Dictionary:
+						continue
+					
+					var call: Dictionary = raw_call
 					var func_def: Dictionary = call.get("function", {})
 					var args: Variant = JSON.parse_string(func_def.get("arguments", "{}"))
 					
@@ -65,9 +85,11 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 							"args": args if args else {}
 						}
 					}
+					
 					# 签名附着
-					if msg.gemini_thought_signature:
-						part["thoughtSignature"] = msg.gemini_thought_signature
+					var thought_signature: String = String(msg.metadata.get(ChatMessage.META_GEMINI_THOUGHT_SIGNATURE, ""))
+					if not thought_signature.is_empty():
+						part["thoughtSignature"] = thought_signature
 					
 					parts.append(part)
 			
@@ -80,7 +102,7 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 				"functionResponse": {
 					"name": msg.name,
 					"response": {
-						"content": msg.content 
+						"content": msg.content
 					}
 				}
 			})
@@ -91,7 +113,7 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 		# --- 多模态多图支持 ---
 		# 新版多图数组
 		if not msg.images.is_empty():
-			for img in msg.images:
+			for img: Dictionary in msg.images:
 				parts.append({
 					"inline_data": {
 						"mime_type": img.mime,
@@ -128,76 +150,103 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 	var list: Array[String] = []
 	
 	if json is Dictionary and json.has("models"):
-		for item in json.models:
-			if item.has("name"):
-				list.append(item.name.replace("models/", ""))
+		for item: Variant in json.models:
+			if item is Dictionary and item.has("name"):
+				list.append(String(item.name).replace("models/", ""))
 	
 	return list
 
 
 ## 解析非流式响应 (完整 Body)
+## Gemini 的非流式与流式响应共用同一份 JSON 结构，故复用新契约后统一装配
 func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
 	
-	if json is Dictionary:
-		# 复用流式解析逻辑
-		var dummy_msg: ChatMessage = ChatMessage.new()
-		process_stream_chunk(dummy_msg, json)
-		return {
-			"content": dummy_msg.content,
-			"tool_calls": dummy_msg.tool_calls,
-			"role": "assistant"
-		}
+	if not json is Dictionary:
+		return {"error": "Invalid Gemini response"}
 	
-	return {"error": "Invalid Gemini response"}
+	reset_stream_state()
+	var assembler: StreamMessageAssembler = StreamMessageAssembler.new()
+	assembler.begin()
+	assembler.apply(parse_stream_chunk(json))
+	
+	var msg: ChatMessage = assembler.take()
+	if msg == null:
+		return {"content": "", "tool_calls": [], "role": "assistant"}
+	
+	return {
+		"content": msg.content,
+		"tool_calls": msg.tool_calls,
+		"role": "assistant",
+		"reasoning_content": msg.reasoning_content,
+	}
 
 
-## 实现 Gemini 流式完整对象合并
-func process_stream_chunk(p_target_msg: ChatMessage, p_chunk_data: Dictionary) -> Dictionary:
-	var ui_update: Dictionary = { "content_delta": "" }
+## 解析单个流式数据块为协议无关增量
+func parse_stream_chunk(p_raw_chunk: Dictionary) -> LLMStreamDelta:
+	var result: LLMStreamDelta = LLMStreamDelta.new()
 	
 	# 1. 提取 Usage
-	if p_chunk_data.has("usageMetadata"):
-		var meta: Dictionary = p_chunk_data.usageMetadata
-		var prompt_tokens: int = meta.get("promptTokenCount", 0)
-		var completion_tokens: int = meta.get("candidatesTokenCount", 0)
-		var total_tokens: int = meta.get("totalTokenCount", 0)
-		ui_update["usage"] = {
+	var raw_meta: Variant = p_raw_chunk.get("usageMetadata")
+	if raw_meta is Dictionary:
+		var meta: Dictionary = raw_meta
+		var prompt_tokens: int = int(meta.get("promptTokenCount", 0))
+		var completion_tokens: int = int(meta.get("candidatesTokenCount", 0))
+		var total_tokens: int = int(meta.get("totalTokenCount", 0))
+		result.usage = {
 			"prompt_tokens": prompt_tokens,
 			"completion_tokens": completion_tokens,
 			"total_tokens": total_tokens
 		}
 	
-	if not p_chunk_data.has("candidates") or p_chunk_data.candidates.is_empty():
-		return ui_update
+	var raw_candidates: Variant = p_raw_chunk.get("candidates")
+	if not raw_candidates is Array:
+		return result
 	
-	var candidate: Dictionary = p_chunk_data.candidates[0]
-	var parts: Array = candidate.get("content", {}).get("parts", [])
+	var candidates: Array = raw_candidates
+	if candidates.is_empty():
+		return result
 	
-	for part in parts:
+	var raw_candidate: Variant = candidates[0]
+	if not raw_candidate is Dictionary:
+		return result
+	
+	var raw_content: Variant = (raw_candidate as Dictionary).get("content")
+	if not raw_content is Dictionary:
+		return result
+	
+	var raw_parts: Variant = (raw_content as Dictionary).get("parts")
+	if not raw_parts is Array:
+		return result
+	
+	for raw_part: Variant in (raw_parts as Array):
+		if not raw_part is Dictionary:
+			continue
+		var part: Dictionary = raw_part
+		
 		# 2. 文本
-		if part.has("text"):
-			var text: String = part.text
-			p_target_msg.content += text
-			ui_update["content_delta"] += text
+		var raw_text: Variant = part.get("text")
+		if raw_text is String and not (raw_text as String).is_empty():
+			result.content_delta += raw_text
 		
 		# 3. 工具 (一次性完整)
-		if part.has("functionCall"):
-			var fc: Dictionary = part.functionCall
-			var tool_call: Dictionary = {
-				"id": "call_" + str(Time.get_ticks_msec()), # 生成唯一 ID
-				"type": "function",
-				"function": {
-					"name": fc.get("name", ""),
-					"arguments": JSON.stringify(fc.get("args", {}))
-				}
-			}
-			
-			# 移除所有去重逻辑，直接信任并添加模型返回的调用
-			p_target_msg.tool_calls.append(tool_call)
+		var raw_function_call: Variant = part.get("functionCall")
+		if raw_function_call is Dictionary:
+			var fc: Dictionary = raw_function_call
+			_function_call_seq += 1
+			var call_key: String = "gemini_fc_%d" % _function_call_seq
+			var call_id: String = "call_%d_%d" % [Time.get_ticks_msec(), _function_call_seq]
+			var tool_delta: Dictionary = LLMStreamDelta.make_tool_call_start(
+				call_key,
+				call_id,
+				String(fc.get("name", ""))
+			)
+			tool_delta[LLMStreamDelta.FIELD_ARGUMENTS] = JSON.stringify(fc.get("args", {}))
+			result.tool_call_deltas.append(tool_delta)
 			
 			# 签名
-			if part.has("thoughtSignature"):
-				p_target_msg.gemini_thought_signature = part.thoughtSignature
+			var raw_signature: Variant = part.get("thoughtSignature")
+			if raw_signature is String and not (raw_signature as String).is_empty():
+				result.metadata_updates[ChatMessage.META_GEMINI_THOUGHT_SIGNATURE] = raw_signature
 	
-	return ui_update
+	return result

@@ -5,17 +5,31 @@ extends RefCounted
 ## HTTP 流式请求处理类
 ##
 ## 负责底层的 HTTP 流式请求处理，支持 SSE 和 JSON List 协议，在后台线程中运行。
+##
+## [线程模型] 网络 IO 全部在 WorkerThreadPool 任务中完成；本类对外暴露的信号
+## 一律通过 call_deferred 投递回主线程，因此消费端无需关心线程安全问题。
+##
+## [资源回收] WorkerThreadPool 要求每个任务最终都被 wait_for_task_completion() 等待一次。
+## 直接等待会阻塞主线程，故本类采用「逐帧轮询 is_task_completed()，确认完成后再等待」的策略：
+## 轮询本身无阻塞，等待时任务已结束因而立即返回。
+
 
 # --- Signals ---
 
 ## 当接收到一个完整的 JSON 数据块时触发
 signal chunk_received(chunk_data: Dictionary)
-## 当接收到 Usage 数据时触发
-signal usage_received(usage: Dictionary)
 ## 请求正常结束时触发
 signal finished
 ## 请求失败时触发
 signal failed(error_message: String)
+
+
+# --- Constants ---
+
+## 任务结束后的回收等待告警阈值（毫秒）
+## 超过该时长仍未结束只打印一次告警，不做阻塞等待，也不放弃对该任务的回收
+const CLEANUP_WARN_MSEC: int = 1000
+
 
 # --- Private Vars ---
 
@@ -24,7 +38,7 @@ var _url: String
 var _headers: PackedStringArray
 var _body_json: String
 # [Optimization] Store raw dict to stringify in thread
-var _body_dict: Dictionary 
+var _body_dict: Dictionary
 
 var _stop_flag: bool = false
 var _stop_flag_lock: Mutex = Mutex.new()
@@ -41,6 +55,11 @@ var _incoming_text_buffer: String = ""
 # SSE 状态跟踪：当前正在处理的事件类型
 var _current_sse_event: String = ""
 
+# 线程池任务回收状态
+var _cleanup_request_msec: int = 0
+var _cleanup_warned: bool = false
+var _cleanup_scheduled: bool = false
+
 
 # --- Built-in Functions ---
 
@@ -48,9 +67,9 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 	_provider = p_provider
 	_url = p_url
 	_headers = p_headers
+	
 	# [Optimization] Do NOT stringify here (Main Thread), just store the reference.
 	_body_dict = p_body_dict
-	
 	# 使用传入的 TimeoutTracker，或创建默认
 	_timeout_tracker = p_timeout_tracker if p_timeout_tracker else TimeoutTracker.from_network_timeout(180)
 
@@ -65,7 +84,9 @@ func start() -> void:
 	AIChatLogger.debug("StreamRequest: Task ID %d started" % _task_id)
 
 
-## 取消当前请求
+## 请求取消当前请求
+## 仅置位停止标志并唤醒工作线程，不在调用线程做任何等待。
+## 工作线程会在下一个轮询周期（约 10ms）自行关闭连接并退出。
 func cancel() -> void:
 	# 使用 Mutex 保护跨线程访问
 	_stop_flag_lock.lock()
@@ -76,23 +97,62 @@ func cancel() -> void:
 	# 由工作线程在下一轮 poll 检测到 _stop_flag 后自行 close，避免数据竞争
 
 
-## 等待工作线程任务完成并清理 WorkerThreadPool 内部资源
-## 必须在任务结束后调用（finished/failed 信号触发后，或 cancel 后）
-## 增加超时上限：异常卡死时最多等待 0.5 秒后放弃，避免编辑器主线程永久冻结
-func wait_for_cleanup() -> void:
-	if _task_id >= 0:
-		var deadline: int = Time.get_ticks_msec() + 500
-		while not WorkerThreadPool.is_task_completed(_task_id):
-			if Time.get_ticks_msec() >= deadline:
-				AIChatLogger.warn("StreamRequest: task %d not finished within 0.1s, skip waiting to avoid main thread freeze." % _task_id)
-				_task_id = -1
-				return
-			OS.delay_msec(1)
-		WorkerThreadPool.wait_for_task_completion(_task_id)
-		_task_id = -1
+## 请求回收线程池任务槽位（非阻塞）
+## 必须在任务结束（finished / failed 信号）或 cancel() 之后调用。
+## 本方法不会阻塞调用线程：它先检查任务是否已结束，未结束则推迟到后续帧继续检查。
+func request_thread_cleanup() -> void:
+	if _task_id < 0:
+		return
+	
+	# 仅在首次请求回收时记录起始时间：
+	# 重复调用（如 cancel() 后再由请求结束路径调用一次）不应重置告警窗口
+	if _cleanup_request_msec == 0:
+		_cleanup_request_msec = Time.get_ticks_msec()
+	
+	_poll_thread_cleanup()
 
 
 # --- Private Functions ---
+
+# 检查任务是否已结束；已结束则立即回收（此处的等待调用不会阻塞）
+# 未结束则安排到下一帧继续检查
+func _poll_thread_cleanup() -> void:
+	if _task_id < 0:
+		return
+	
+	if not WorkerThreadPool.is_task_completed(_task_id):
+		var elapsed_msec: int = Time.get_ticks_msec() - _cleanup_request_msec
+		if not _cleanup_warned and elapsed_msec >= CLEANUP_WARN_MSEC:
+			_cleanup_warned = true
+			AIChatLogger.warn("StreamRequest: task %d still running after %d ms; cleanup deferred to keep the editor responsive." % [_task_id, elapsed_msec])
+		_schedule_cleanup_poll()
+		return
+	
+	# is_task_completed() 已确认为 true，此调用会立即返回
+	WorkerThreadPool.wait_for_task_completion(_task_id)
+	_task_id = -1
+
+
+# 在下一帧再次检查任务状态
+func _schedule_cleanup_poll() -> void:
+	if _cleanup_scheduled:
+		return
+	_cleanup_scheduled = true
+	
+	var tree: SceneTree = Engine.get_main_loop() as SceneTree
+	if tree == null:
+		_task_id = -1
+		_cleanup_scheduled = false
+		return
+	
+	tree.process_frame.connect(_on_cleanup_frame, CONNECT_ONE_SHOT)
+
+
+# process_frame 回调：归还调度标记并继续轮询
+func _on_cleanup_frame() -> void:
+	_cleanup_scheduled = false
+	_poll_thread_cleanup()
+
 
 # 线程任务主循环
 func _thread_task() -> void:
@@ -109,24 +169,24 @@ func _thread_task() -> void:
 	
 	# 1. 解析 URL
 	var url_parts: Dictionary = URLHelper.parse_url(_url)
-	var protocol: String = url_parts.protocol
-	var host: String = url_parts.host
-	var port: int = url_parts.port
-	var path: String = url_parts.path
+	var protocol: String = String(url_parts.protocol)
+	var host: String = String(url_parts.host)
+	var port: int = int(url_parts.port)
+	var path: String = String(url_parts.path)
 	
 	# 2. 连接服务器
 	var tls_opts: TLSOptions = TLSOptions.client() if protocol == "https" else null
 	err = client.connect_to_host(host, port, tls_opts)
 	if err != OK:
 		_emit_failure("Connection failed: %s" % error_string(err))
-		client.close() 
+		client.close()
 		return
 	
 	# 等待连接（WAITING_FIRST_TOKEN 阶段）
 	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
 		client.poll()
 		if _should_stop():
-			client.close() 
+			client.close()
 			return
 		
 		if _timeout_tracker.check().timed_out:
@@ -140,21 +200,21 @@ func _thread_task() -> void:
 	
 	if client.get_status() != HTTPClient.STATUS_CONNECTED:
 		_emit_failure("Could not connect. Status: %d" % client.get_status())
-		client.close() 
+		client.close()
 		return
 	
 	# 3. 发送请求
 	err = client.request(HTTPClient.METHOD_POST, path, _headers, _body_json)
 	if err != OK:
 		_emit_failure("Request sending failed: %s" % error_string(err))
-		client.close() 
+		client.close()
 		return
 	
 	# 4. 等待响应（仍在 WAITING_FIRST_TOKEN 阶段）
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
 		if _should_stop():
-			client.close() 
+			client.close()
 			return
 		
 		if _timeout_tracker.check().timed_out:
@@ -166,7 +226,7 @@ func _thread_task() -> void:
 	
 	if not client.has_response():
 		_emit_failure("No response from server.")
-		client.close() 
+		client.close()
 		return
 	
 	var response_code: int = client.get_response_code()
@@ -176,16 +236,16 @@ func _thread_task() -> void:
 		
 		while client.get_status() == HTTPClient.STATUS_BODY:
 			# [Fix] 错误体读取也响应取消：防止服务器挂起连接时无限忙等，
-			# 导致 cancel 后 wait_for_task_completion 永久阻塞主线程（编辑器卡死）
+			# 导致 cancel 后回收任务时阻塞主线程（编辑器卡死）
 			if _should_stop():
 				client.close()
 				return
 			client.poll()
 			if client.get_status() != HTTPClient.STATUS_BODY:
 				break
-			var chunk: PackedByteArray = client.read_response_body_chunk()
-			if chunk.size() > 0:
-				error_body.append_array(chunk)
+			var error_chunk: PackedByteArray = client.read_response_body_chunk()
+			if error_chunk.size() > 0:
+				error_body.append_array(error_chunk)
 			# 防御：错误体读取挂起时超时退出
 			if _timeout_tracker.check().timed_out:
 				_emit_failure("HTTP error body read timeout")
@@ -203,14 +263,14 @@ func _thread_task() -> void:
 		if json_err and json_err is Dictionary and json_err.has("error"):
 			var err_msg: String = error_text
 			if json_err.error is Dictionary:
-				err_msg = json_err.error.get("message", error_text)
+				err_msg = String(json_err.error.get("message", error_text))
 			else:
 				err_msg = str(json_err.error)
 			_emit_failure("API Error (%d): %s" % [response_code, err_msg])
 		else:
 			_emit_failure("HTTP Error %d: %s" % [response_code, error_text])
 		
-		client.close() 
+		client.close()
 		return
 	
 	# 5. 流式读取循环
@@ -218,7 +278,7 @@ func _thread_task() -> void:
 	
 	while client.get_status() == HTTPClient.STATUS_BODY:
 		if _should_stop():
-			client.close() 
+			client.close()
 			return
 		
 		client.poll()
@@ -249,7 +309,7 @@ func _thread_task() -> void:
 		
 		OS.delay_msec(10)
 	
-	client.close() 
+	client.close()
 	finished.emit.call_deferred()
 
 
@@ -266,7 +326,7 @@ func _process_sse_buffer() -> void:
 		if line.is_empty():
 			# 空行通常意味着一个 Event 块的结束，重置 event 状态
 			# 但有些实现可能不发空行，直接发下一个 event，所以这里只做清理
-			# _current_sse_event = "" 
+			# _current_sse_event = ""
 			# 注意：Anthropic 的 event 和 data 是紧挨着的，不一定有空行分隔
 			continue
 		
@@ -312,20 +372,20 @@ func _process_json_list_buffer() -> void:
 		var escape: bool = false
 		
 		for i in range(open_brace, _incoming_text_buffer.length()):
-			var char: String = _incoming_text_buffer[i]
-			if escape: 
+			var character: String = _incoming_text_buffer[i]
+			if escape:
 				escape = false
 				continue
-			if char == "\\": 
+			if character == "\\":
 				escape = true
 				continue
-			if char == '"': 
+			if character == '"':
 				in_string = not in_string
 				continue
 			if not in_string:
-				if char == "{": 
+				if character == "{":
 					brace_level += 1
-				elif char == "}":
+				elif character == "}":
 					brace_level -= 1
 					if brace_level == 0:
 						close_brace = i

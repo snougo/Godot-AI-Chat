@@ -7,16 +7,25 @@ extends BaseOpenAIProvider
 ## 实现标准的 OpenAI Responses API 接口，支持:
 ## - instructions（系统指令）替代 system role message
 ## - input 字段替代 messages 数组
-## - previous_response_id 自动状态管理
 ## - output 数组（typed Items）替代 choices 嵌套结构
 ## - reasoning Item 支持（GPT-5 等推理模型）
 
-# --- Constants ---
 
-const RESPONSE_ID_META_KEY: String = "openai_response_id"
+# --- Private Vars ---
+
+## 本轮流内已产出的思考文本长度：用于对 done 事件下发的完整文本去重
+var _reasoning_length: int = 0
+## 本轮流内已登记的工具槽位键（按出现顺序），用于 item_id 缺失时的兜底匹配
+var _tool_keys: Array[String] = []
 
 
 # --- Public Functions ---
+
+## 重置流内状态
+func reset_stream_state() -> void:
+	_reasoning_length = 0
+	_tool_keys.clear()
+
 
 ## 获取请求的 URL
 func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: String, _p_stream: bool) -> String:
@@ -53,7 +62,7 @@ func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage
 	# 工具定义（Chat Completions 嵌套格式 → Responses API 扁平格式）
 	if not p_tool_definitions.is_empty():
 		var responses_tools: Array = []
-		for tool in p_tool_definitions:
+		for tool: Dictionary in p_tool_definitions:
 			if tool.get("type") == "function" and tool.has("function"):
 				var func_data: Dictionary = tool["function"]
 				responses_tools.append({
@@ -72,7 +81,7 @@ func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage
 	var instructions: String = ""
 	var input_items: Array = []
 	
-	for msg in p_messages:
+	for msg: ChatMessage in p_messages:
 		match msg.role:
 			ChatMessage.ROLE_SYSTEM:
 				if not instructions.is_empty():
@@ -90,7 +99,7 @@ func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage
 					var content_array: Array = []
 					if not msg.content.is_empty():
 						content_array.append({"type": "input_text", "text": msg.content})
-					for img in msg.images:
+					for img: Dictionary in msg.images:
 						var base64_str: String = Marshalls.raw_to_base64(img.data)
 						var mime: String = img.get("mime", "image/png")
 						content_array.append({
@@ -112,9 +121,13 @@ func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage
 				
 				# 2) 工具调用部分：每个 tool_call 回传为 function_call item
 				#    （与后续 function_call_output 通过 call_id 配对，符合官方规范）
-				for tc in msg.tool_calls:
-					var call_id: String = tc.get("id", tc.get("call_id", ""))
-					var func_data: Dictionary = tc.get("function", {})
+				for raw_call: Variant in msg.tool_calls:
+					if not raw_call is Dictionary:
+						continue
+					var tc: Dictionary = raw_call
+					var call_id: String = String(tc.get("id", tc.get("call_id", "")))
+					var raw_func: Variant = tc.get("function", {})
+					var func_data: Dictionary = raw_func if raw_func is Dictionary else {}
 					input_items.append({
 						"type": "function_call",
 						"call_id": call_id,
@@ -150,165 +163,152 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 	return {"error": "Unknown response format", "raw": json_str}
 
 
-## 处理流式响应块 — Responses API SSE 事件格式
-func process_stream_chunk(p_target_msg: ChatMessage, p_raw_chunk: Dictionary) -> Dictionary:
-	var ui_update: Dictionary = { "content_delta": "" }
-	var event_type: String = p_raw_chunk.get("_event_type", "")
+## 解析单个流式数据块为协议无关增量
+## Responses API 使用具名事件，事件类型经传输层注入到 "_event_type" 字段
+func parse_stream_chunk(p_raw_chunk: Dictionary) -> LLMStreamDelta:
+	var result: LLMStreamDelta = LLMStreamDelta.new()
+	var event_type: String = String(p_raw_chunk.get("_event_type", ""))
 	
 	# 1. 文本增量 (response.output_text.delta)
 	if event_type == "response.output_text.delta":
-		var delta: String = p_raw_chunk.get("delta", "")
+		var delta: String = String(p_raw_chunk.get("delta", ""))
 		if not delta.is_empty():
-			p_target_msg.content += delta
-			ui_update["content_delta"] = delta
-		return ui_update
+			result.content_delta = delta
+		return result
 	
-	# 1.5 推理摘要增量 (response.reasoning_summary_text.delta)
+	# 2. 推理摘要增量 (response.reasoning_summary_text.delta)
 	# [修复 Bug 6] 补上缺失的 reasoning 流式事件，让思考内容实时显示
 	if event_type == "response.reasoning_summary_text.delta":
-		var reasoning_delta: String = p_raw_chunk.get("delta", "")
-		if not reasoning_delta.is_empty():
-			p_target_msg.reasoning_content += reasoning_delta
-			ui_update["reasoning_delta"] = reasoning_delta
-		return ui_update
+		_emit_reasoning(result, String(p_raw_chunk.get("delta", "")))
+		return result
 	
-	# 1.6 推理完整文本增量 (response.reasoning_text.delta)
+	# 3. 推理完整文本增量 (response.reasoning_text.delta)
 	# [修复] gpt-oss 等模型使用此事件而非 reasoning_summary_text.delta
 	if event_type == "response.reasoning_text.delta":
-		var reasoning_delta: String = p_raw_chunk.get("delta", "")
-		if not reasoning_delta.is_empty():
-			p_target_msg.reasoning_content += reasoning_delta
-			ui_update["reasoning_delta"] = reasoning_delta
-		return ui_update
+		_emit_reasoning(result, String(p_raw_chunk.get("delta", "")))
+		return result
 	
-	# 1.7 推理摘要完成 (response.reasoning_summary_text.done) — 部分端点只发此事件
+	# 4. 推理摘要完成 (response.reasoning_summary_text.done) — 部分端点只发此事件
 	if event_type == "response.reasoning_summary_text.done":
-		var full_text: String = p_raw_chunk.get("text", "")
-		var already: int = p_target_msg.reasoning_content.length()
-		if full_text.length() > already:
-			var new_part: String = full_text.substr(already)
-			p_target_msg.reasoning_content += new_part
-			ui_update["reasoning_delta"] = new_part
-		return ui_update
+		_emit_reasoning_tail(result, String(p_raw_chunk.get("text", "")))
+		return result
 	
-	# 2. 新 Item 添加 (response.output_item.added)
+	# 5. 新 Item 添加 (response.output_item.added)
 	if event_type == "response.output_item.added":
-		var item: Dictionary = p_raw_chunk.get("item", {})
+		var added_item: Dictionary = _as_dictionary(p_raw_chunk.get("item"))
 		
-		if item.get("type") == "function_call":
-			var call_id: String = item.get("call_id", item.get("id", ""))
-			var tool_call: Dictionary = {
-				"id": call_id,
-				# [修复 Bug 1] 额外保存 item.id（fc_xxx），供后续 delta/done 事件匹配
-				"item_id": item.get("id", ""),
-				"type": "function",
-				"function": {
-					"name": item.get("name", ""),
-					"arguments": ""
-				}
-			}
-			p_target_msg.tool_calls.append(tool_call)
-			ui_update["tool_call_started"] = true
+		if added_item.get("type") == "function_call":
+			var item_key: String = String(added_item.get("id", ""))
+			var call_id: String = String(added_item.get("call_id", item_key))
+			var call_name: String = String(added_item.get("name", ""))
+			result.tool_call_deltas.append(
+				LLMStreamDelta.make_tool_call_start(item_key, call_id, call_name)
+			)
+			if not item_key.is_empty() and not _tool_keys.has(item_key):
+				_tool_keys.append(item_key)
 		
-		elif item.get("type") == "reasoning":
-			ui_update["reasoning_started"] = true
-		
-		return ui_update
+		return result
 	
-	# 3. 函数调用参数增量 (response.function_call_arguments.delta)
+	# 6. 函数调用参数增量 (response.function_call_arguments.delta)
 	if event_type == "response.function_call_arguments.delta":
-		var delta: String = p_raw_chunk.get("delta", "")
-		var item_id: String = p_raw_chunk.get("item_id", "")
-		
-		if not delta.is_empty():
-			var found: bool = false
-			for tc in p_target_msg.tool_calls:
-				# [修复 Bug 1] item_id 对应 item.id（fc_xxx），同时兼容 id（call_xxx）
-				if tc.get("item_id", "") == item_id or tc.get("id", "") == item_id:
-					tc.function.arguments += delta
-					found = true
-					break
-			
-			# 兜底：服务端可能省略 item_id，仍回退到最后一个（单工具调用场景）
-			if not found and not p_target_msg.tool_calls.is_empty():
-				p_target_msg.tool_calls[-1].function.arguments += delta
-		
-		return ui_update
+		var delta_key: String = _resolve_tool_key(String(p_raw_chunk.get("item_id", "")))
+		var delta_fragment: String = String(p_raw_chunk.get("delta", ""))
+		if not delta_key.is_empty() and not delta_fragment.is_empty():
+			result.tool_call_deltas.append(
+				LLMStreamDelta.make_tool_call_arguments_append(delta_key, delta_fragment)
+			)
+		return result
 	
-	# 4. 函数调用参数完成 (response.function_call_arguments.done)
+	# 7. 函数调用参数完成 (response.function_call_arguments.done)
 	if event_type == "response.function_call_arguments.done":
-		var item_id: String = p_raw_chunk.get("item_id", "")
-		var arguments: String = p_raw_chunk.get("arguments", "")
-		
-		if not arguments.is_empty():
-			var found: bool = false
-			for tc in p_target_msg.tool_calls:
-				# [修复 Bug 1] 同上：匹配 item_id 或 id
-				if tc.get("item_id", "") == item_id or tc.get("id", "") == item_id:
-					tc.function.arguments = arguments
-					found = true
-					break
-			
-			# [修复 Bug 7] 补上与 delta 分支一致的兜底逻辑
-			if not found and not p_target_msg.tool_calls.is_empty():
-				p_target_msg.tool_calls[-1].function.arguments = arguments
-		
-		ui_update["tool_call_completed"] = true
-		return ui_update
+		var done_key: String = _resolve_tool_key(String(p_raw_chunk.get("item_id", "")))
+		var done_arguments: String = String(p_raw_chunk.get("arguments", ""))
+		if not done_key.is_empty() and not done_arguments.is_empty():
+			result.tool_call_deltas.append(
+				LLMStreamDelta.make_tool_call_arguments_replace(done_key, done_arguments)
+			)
+		return result
 	
-	# 5. 输出项完成 (response.output_item.done)
+	# 8. 输出项完成 (response.output_item.done)
 	if event_type == "response.output_item.done":
-		var item: Dictionary = p_raw_chunk.get("item", {})
+		var done_item: Dictionary = _as_dictionary(p_raw_chunk.get("item"))
 		
-		if item.get("type") == "function_call":
-			if item.has("arguments"):
-				# 此分支原本就用 call_id 匹配，是正确的，保持不变
-				var call_id: String = item.get("call_id", item.get("id", ""))
-				for tc in p_target_msg.tool_calls:
-					if tc.get("id") == call_id:
-						tc.function.arguments = item.get("arguments", "")
-						break
-			ui_update["tool_call_completed"] = true
+		if done_item.get("type") == "function_call":
+			if done_item.has("arguments"):
+				var item_key: String = _resolve_tool_key(String(done_item.get("id", "")))
+				if not item_key.is_empty():
+					result.tool_call_deltas.append(
+						LLMStreamDelta.make_tool_call_arguments_replace(
+							item_key, String(done_item.get("arguments", ""))
+						)
+					)
 		
-		elif item.get("type") == "reasoning":
-			if item.has("summary") and item.summary is Array:
+		elif done_item.get("type") == "reasoning":
+			var raw_summary: Variant = done_item.get("summary")
+			if raw_summary is Array:
 				var summary_text: String = ""
-				for s in item.summary:
-					if s is Dictionary and s.get("type") == "summary_text":
-						summary_text += s.get("text", "")
-				# 已通过流式 delta 累积的部分不重复追加
-				var already: int = p_target_msg.reasoning_content.length()
-				if summary_text.length() > already:
-					var new_part: String = summary_text.substr(already)
-					p_target_msg.reasoning_content += new_part
-					ui_update["reasoning_delta"] = new_part
-			ui_update["reasoning_completed"] = true
+				for raw_entry: Variant in (raw_summary as Array):
+					if raw_entry is Dictionary and raw_entry.get("type") == "summary_text":
+						summary_text += String(raw_entry.get("text", ""))
+				_emit_reasoning_tail(result, summary_text)
 		
-		return ui_update
+		return result
 	
-	# 6. 响应完成 (response.completed) — 捕获 response_id 和 usage
+	# 9. 响应完成 (response.completed) — 捕获 usage
 	if event_type == "response.completed":
-		if p_raw_chunk.has("response"):
-			var resp_obj: Dictionary = p_raw_chunk["response"]
-			
-			if resp_obj.has("id"):
-				p_target_msg.set_meta(RESPONSE_ID_META_KEY, resp_obj["id"])
-			
-			if resp_obj.has("usage"):
-				var usage_obj: Dictionary = resp_obj["usage"]
-				ui_update["usage"] = {
-					"prompt_tokens": usage_obj.get("input_tokens", 0),
-					"completion_tokens": usage_obj.get("output_tokens", 0),
-					"total_tokens": usage_obj.get("total_tokens", 0)
+		result.is_stream_finished = true
+		
+		var raw_response: Variant = p_raw_chunk.get("response")
+		if raw_response is Dictionary:
+			var resp_obj: Dictionary = raw_response
+			var raw_usage: Variant = resp_obj.get("usage")
+			if raw_usage is Dictionary:
+				var usage_obj: Dictionary = raw_usage
+				result.usage = {
+					"prompt_tokens": int(usage_obj.get("input_tokens", 0)),
+					"completion_tokens": int(usage_obj.get("output_tokens", 0)),
+					"total_tokens": int(usage_obj.get("total_tokens", 0))
 				}
 		
-		return ui_update
+		return result
 	
-	# 7. 忽略其他中间状态事件
-	return ui_update
+	# 10. 忽略其他中间状态事件
+	return result
 
 
 # --- Private Functions ---
+
+# 追加思考增量，并同步记录本轮流内已产出的思考长度
+func _emit_reasoning(p_delta: LLMStreamDelta, p_text: String) -> void:
+	if p_text.is_empty():
+		return
+	p_delta.reasoning_delta += p_text
+	_reasoning_length += p_text.length()
+
+
+# 追加 done 事件下发的完整思考文本中「尚未产出的尾部」
+func _emit_reasoning_tail(p_delta: LLMStreamDelta, p_full_text: String) -> void:
+	if p_full_text.length() <= _reasoning_length:
+		return
+	_emit_reasoning(p_delta, p_full_text.substr(_reasoning_length))
+
+
+# 解析工具槽位键：优先使用事件携带的 item_id；
+# [修复 Bug 1 / Bug 7] 服务端可能省略 item_id，此时回退到本轮流内最后一个已登记的槽位
+func _resolve_tool_key(p_raw_key: String) -> String:
+	if not p_raw_key.is_empty():
+		return p_raw_key
+	if _tool_keys.is_empty():
+		return ""
+	return _tool_keys.back()
+
+
+# 安全取值：非 Dictionary 时返回空字典，避免调用方反复做类型判断
+func _as_dictionary(p_value: Variant) -> Dictionary:
+	if p_value is Dictionary:
+		return p_value
+	return {}
+
 
 ## 解析 Responses API 的 output 数组为内部统一格式
 func _parse_output_items(p_json: Dictionary) -> Dictionary:
@@ -316,21 +316,27 @@ func _parse_output_items(p_json: Dictionary) -> Dictionary:
 	var tool_calls: Array = []
 	var reasoning: String = ""
 	
-	for item in p_json.output:
-		match item.get("type", ""):
+	for raw_item: Variant in p_json.output:
+		if not raw_item is Dictionary:
+			continue
+		var item: Dictionary = raw_item
+		
+		match String(item.get("type", "")):
 			"message":
-				var content_arr: Array = item.get("content", [])
-				for block in content_arr:
-					if block.get("type") == "output_text":
-						content += block.get("text", "")
+				var content_arr: Variant = item.get("content", [])
+				if not content_arr is Array:
+					continue
+				for raw_block: Variant in (content_arr as Array):
+					if raw_block is Dictionary and raw_block.get("type") == "output_text":
+						content += String(raw_block.get("text", ""))
 			
 			"reasoning":
 				# [修复 Bug 5] 增加类型检查，避免 summary 非数组时强转报错
 				var summary: Variant = item.get("summary", [])
 				if summary is Array:
-					for s in summary:
-						if s is Dictionary and s.get("type") == "summary_text":
-							reasoning += s.get("text", "")
+					for raw_entry: Variant in (summary as Array):
+						if raw_entry is Dictionary and raw_entry.get("type") == "summary_text":
+							reasoning += String(raw_entry.get("text", ""))
 			
 			"function_call":
 				tool_calls.append({
@@ -350,9 +356,6 @@ func _parse_output_items(p_json: Dictionary) -> Dictionary:
 	
 	if not reasoning.is_empty():
 		result["reasoning_content"] = reasoning
-	
-	if p_json.has("id"):
-		result["response_id"] = p_json["id"]
 	
 	if p_json.has("usage") and p_json["usage"] is Dictionary:
 		# [修复 Bug 4] 统一映射为与流式一致的内部格式

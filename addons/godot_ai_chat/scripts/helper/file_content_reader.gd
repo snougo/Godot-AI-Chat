@@ -1,9 +1,8 @@
 class_name FileContentReader
 extends RefCounted
 
-# ============================
-#  场景树读取
-# ============================
+
+#  --- 场景树读取 ---
 
 static func read_scene_content(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):
@@ -101,9 +100,7 @@ static func _format_scene_state_connection(p_state: SceneState, p_idx: int) -> S
 	return md + "\n"
 
 
-# ============================
-#  脚本读取
-# ============================
+#  --- 脚本读取 ---
 
 static func read_script_content(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):
@@ -156,9 +153,7 @@ static func read_script_content(p_path: String) -> Dictionary:
 	#return result
 
 
-# ============================
-#  资源文件读取（.tres / .res）
-# ============================
+#  --- 资源文件读取（.tres / .res） ---
 
 static func read_resource_content(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):
@@ -210,9 +205,7 @@ static func _format_property_value(p_val: Variant) -> String:
 			return str(p_val)
 
 
-# ============================
-#  文本文件读取
-# ============================
+#  --- 文本文件读取 ---
 
 static func read_text_content(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):
@@ -246,9 +239,7 @@ static func read_text_content(p_path: String) -> Dictionary:
 	return {"success": true, "data": md}
 
 
-# ============================
-#  图片元数据读取
-# ============================
+#  --- 图片元数据读取 ---
 
 static func read_image_metadata(p_path: String) -> Dictionary:
 	if not FileAccess.file_exists(p_path):

@@ -4,7 +4,9 @@ extends Resource
 
 ## Sub Agent 独立配置文件
 
+
 @export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "Anthropic-Compatible", "OpenCode Go") var api_provider: String = "OpenAI-ChatCompletions"
+
 @export var api_base_url: String = ""
 @export var api_key: String = ""
 @export var model_name: String = ""
@@ -35,6 +37,7 @@ extends Resource
 ## 获取单例配置（如果不存在则自动创建）
 static func get_config() -> SubAgentConfig:
 	var path: String = PluginPaths.SUB_AGENT_CONFIG_PATH
+	
 	if ResourceLoader.exists(path):
 		return ResourceLoader.load(path, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:

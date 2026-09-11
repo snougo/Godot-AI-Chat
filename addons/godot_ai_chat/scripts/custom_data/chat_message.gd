@@ -4,7 +4,10 @@ extends Resource
 
 ## 聊天消息数据结构
 ##
-## 定义单条聊天消息的数据结构，支持多模态和工具调用。
+## 定义单条聊天消息的数据结构，支持多模态与工具调用。
+## 厂商/协议专属的流内信息统一收入 metadata 字典，
+## 使数据模型不再暴露任何具体协议概念。
+
 
 # --- Constants ---
 
@@ -16,6 +19,15 @@ const ROLE_ASSISTANT: String = "assistant"
 const ROLE_SYSTEM: String = "system"
 ## 工具角色
 const ROLE_TOOL: String = "tool"
+## metadata 键：生成该条消息时使用的模型名
+const META_MODEL_NAME: String = "model_name"
+
+
+## metadata 键：Anthropic extended thinking 块签名（多轮 thinking 会话回传必需）
+const META_THINKING_SIGNATURE: String = "thinking_signature"
+## metadata 键：Gemini thoughtSignature（多轮工具调用中维持思维链必需）
+const META_GEMINI_THOUGHT_SIGNATURE: String = "gemini_thought_signature"
+
 
 # --- @export Vars ---
 
@@ -25,7 +37,7 @@ const ROLE_TOOL: String = "tool"
 ## 发送者的名称
 ## 1. 对于 role="tool"，这里必须存储工具的名称 (Gemini 必需)。
 ## 2. 对于 role="user"，可以存储用户名 (OpenAI 支持)。
-@export var name: String = "" 
+@export var name: String = ""
 
 ## 消息正文内容
 @export_multiline var content: String = ""
@@ -34,9 +46,15 @@ const ROLE_TOOL: String = "tool"
 ## 用于存储 DeepSeek-R1 / Kimi 等模型输出的思维链内容
 @export_multiline var reasoning_content: String = ""
 
-## [新增] 多图支持
+## 多图支持
 ## 存储格式: [{"data": PackedByteArray, "mime": String}]
 @export var images: Array[Dictionary] = []
+
+## 协议适配元数据：厂商专属的流内信息
+## 已知键见 META_THINKING_SIGNATURE / META_GEMINI_THOUGHT_SIGNATURE
+## 由 Provider 通过 LLMStreamDelta.metadata_updates 写入
+@export var metadata: Dictionary = {}
+
 
 # --- Tool Call Vars ---
 
@@ -45,12 +63,6 @@ const ROLE_TOOL: String = "tool"
 
 ## [Tool 专用] 如果这是一条 role="tool" 的消息，该字段存储对应的 call_id
 @export var tool_call_id: String = ""
-
-## [Gemini 专用] 用于在多轮工具调用中维持 Gemini 的思维链签名
-@export var gemini_thought_signature: String = ""
-
-## [Anthropic 专用] 存储 thinking 块的签名（extended thinking 多轮对话回传必需）
-@export var thinking_signature: String = ""
 
 
 # --- Built-in Functions ---

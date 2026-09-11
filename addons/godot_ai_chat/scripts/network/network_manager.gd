@@ -2,6 +2,13 @@
 class_name NetworkManager
 extends Node
 
+## 网络管理器
+##
+## 负责 Provider 配置装配、模型列表拉取，以及主对话链路的中继与生命周期管理。
+
+
+# --- Signals ---
+
 signal get_model_list_request_started
 signal get_model_list_request_succeeded(model_list: Array[String])
 signal get_model_list_request_failed(error: String)
@@ -9,9 +16,14 @@ signal get_model_list_request_failed(error: String)
 # 保留流式数据信号供 UI 实时更新
 signal new_chat_request_sending
 signal new_stream_chunk_received(chunk: Dictionary)
-signal chat_usage_data_received(usage: Dictionary)
+
+
+# --- @onready Vars ---
 
 @onready var _http_request_node: HTTPRequest = $HTTPRequest
+
+
+# --- Public Vars ---
 
 var current_provider: BaseLLMProvider = null
 var current_stream_request: StreamRequest = null
@@ -21,10 +33,19 @@ var api_base_url: String = ""
 var temperature: float = 0.7
 var current_model_name: String = ""
 
+## 发起当前流式请求时所用的 Provider 实例
+## [为什么与 current_provider 分开] current_provider 会被 get_model_list() 等操作重建，
+## 而流式解析必须始终使用**发起该请求的那个实例**（其内部持有槽位映射、用量累计等流内状态）。
+var streaming_provider: BaseLLMProvider = null
+
+
+# --- Built-in Functions ---
 
 func _ready() -> void:
 	_http_request_node.timeout = 10.0
 
+
+# --- Public Functions ---
 
 ## 设置当前模型名称
 func set_model_name(p_model_name: String) -> void:
@@ -43,8 +64,8 @@ func get_model_list() -> void:
 	get_model_list_request_started.emit()
 	
 	if not current_provider.supports_model_list_api(api_base_url):
-		var models: Array[String] = current_provider.get_static_model_list()
-		get_model_list_request_succeeded.emit(models)
+		var static_models: Array[String] = current_provider.get_static_model_list()
+		get_model_list_request_succeeded.emit(static_models)
 		return
 	
 	var url: String = current_provider.get_request_url(api_base_url, "", api_key, false)
@@ -71,33 +92,38 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	if not _update_provider_config():
 		return {"success": false, "error": "Configuration Error"}
 	
-	var is_gemini: bool = (current_provider is GeminiProvider)
-	var tools: Array = ToolRegistry.get_all_tool_definitions(is_gemini)
+	# 以能力查询替代 Provider 类型特判：工具 schema 方言由 Provider 自行声明
+	var requires_gemini_schema: bool = current_provider.requires_gemini_tool_schema()
+	var tools: Array = ToolRegistry.get_all_tool_definitions(requires_gemini_schema)
+	
 	var body: Dictionary = current_provider.build_request_body(current_model_name, p_messages, temperature, true, tools)
 	var url: String = current_provider.get_request_url(api_base_url, current_model_name, api_key, true)
 	var headers: PackedStringArray = current_provider.get_request_headers(api_key, true)
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	streaming_provider = current_provider
 	current_stream_request = StreamRequest.new(current_provider, url, headers, body, TimeoutTracker.from_network_timeout(settings.network_timeout))
-	var _local_request_ref: StreamRequest = current_stream_request
+	var local_request_ref: StreamRequest = current_stream_request
 	
-	var result := {"success": false, "error": ""}
-	var state := {"is_finished": false}
+	var result: Dictionary = {"success": false, "error": ""}
+	var state: Dictionary = {"is_finished": false}
 	
 	current_stream_request.chunk_received.connect(_relay_stream_chunk)
-	current_stream_request.usage_received.connect(_relay_stream_usage)
 	
-	current_stream_request.failed.connect(func(err_msg: String): 
+	current_stream_request.failed.connect(func(err_msg: String):
 		result.error = err_msg
 		state.is_finished = true
 		_clear_current_stream_request()
 	, CONNECT_ONE_SHOT)
 	
-	current_stream_request.finished.connect(func(): 
+	current_stream_request.finished.connect(func():
 		result.success = true
 		state.is_finished = true
 		_clear_current_stream_request()
 	, CONNECT_ONE_SHOT)
+	
+	# 发起新请求前重置 Provider 的流内状态（槽位映射、用量累计等）
+	current_provider.reset_stream_state()
 	
 	new_chat_request_sending.emit()
 	current_stream_request.start()
@@ -110,9 +136,9 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 		result.success = false
 		result.error = "Cancelled by User"
 	
-	# [Fix] 等待 WorkerThreadPool 任务完成，清理内部资源
-	if _local_request_ref != null:
-		_local_request_ref.wait_for_cleanup()
+	# [Fix] 请求线程池任务回收（非阻塞），清理内部资源
+	if local_request_ref != null:
+		local_request_ref.request_thread_cleanup()
 	
 	_clear_current_stream_request()
 	return result
@@ -158,14 +184,14 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	var headers: PackedStringArray = provider.get_request_headers(key, false)
 	
 	# 创建专用 HTTPRequest 节点（避免与模型列表请求冲突）
-	var http_req := HTTPRequest.new()
+	var http_req: HTTPRequest = HTTPRequest.new()
 	add_child(http_req)
 	
-	var settings := ToolBox.get_plugin_settings()
+	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	http_req.timeout = float(settings.network_timeout)
 	
-	var state := {"is_done": false}
-	var result := {"success": false, "error": "", "content": ""}
+	var state: Dictionary = {"is_done": false}
+	var result: Dictionary = {"success": false, "error": "", "content": ""}
 	
 	var on_completed := func(p_res: int, p_code: int, _p_headers: PackedStringArray, p_body: PackedByteArray):
 		state.is_done = true
@@ -187,7 +213,7 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	
 	http_req.request_completed.connect(on_completed, CONNECT_ONE_SHOT)
 	
-	var err := http_req.request(url, headers, HTTPClient.METHOD_POST, body_json)
+	var err: Error = http_req.request(url, headers, HTTPClient.METHOD_POST, body_json)
 	if err != OK:
 		http_req.queue_free()
 		return {"success": false, "error": "Request failed: %s" % error_string(err)}
@@ -199,15 +225,19 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	return result
 
 
+## 取消当前流式请求
+##
+## 非阻塞：置位停止标志后立即交由后台线程自行收尾，主线程不做任何等待。
 func cancel_stream() -> void:
 	if current_stream_request:
 		current_stream_request.cancel()
-		# [修复] 取消后立即等待任务结束并清理 WorkerThreadPool 槽位，
-		# 避免旧任务后台滞留。cancel() 已置 stop flag 并关闭连接，
-		# 任务通常在下一个 10ms 轮询周期退出，阻塞时间可忽略。
-		current_stream_request.wait_for_cleanup()
+		# [修复] 取消后请求线程池槽位回收。回收过程完全异步：
+		# cancel() 已置 stop flag 并关闭连接，任务通常在下一个 10ms 轮询周期退出。
+		current_stream_request.request_thread_cleanup()
 		_clear_current_stream_request()
 
+
+# --- Private Functions ---
 
 func _update_provider_config() -> bool:
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
@@ -223,9 +253,9 @@ func _clear_current_stream_request() -> void:
 	if current_stream_request:
 		if current_stream_request.chunk_received.is_connected(_relay_stream_chunk):
 			current_stream_request.chunk_received.disconnect(_relay_stream_chunk)
-		if current_stream_request.usage_received.is_connected(_relay_stream_usage):
-			current_stream_request.usage_received.disconnect(_relay_stream_usage)
 		current_stream_request = null
+	
+	streaming_provider = null
 
 
 func _on_model_list_completed(p_result: int, p_response_code: int, _p_headers: PackedStringArray, p_body: PackedByteArray) -> void:
@@ -244,8 +274,3 @@ func _on_model_list_completed(p_result: int, p_response_code: int, _p_headers: P
 # 中继 StreamRequest 的流式数据块到 UI 信号
 func _relay_stream_chunk(p_chunk: Dictionary) -> void:
 	new_stream_chunk_received.emit(p_chunk)
-
-
-# 中继 StreamRequest 的用量数据到 UI 信号
-func _relay_stream_usage(p_usage: Dictionary) -> void:
-	chat_usage_data_received.emit(p_usage)

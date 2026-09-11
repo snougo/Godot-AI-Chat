@@ -35,10 +35,17 @@ static func reload_core_tools_only() -> void:
 
 
 ## 获取指定名称的工具实例
-static func get_tool(p_tool_name: String) -> Object:
+## [param p_tool_name]: 工具名称
+## [return]: 工具实例；不存在或类型不符时返回 null
+static func get_tool(p_tool_name: String) -> AiTool:
 	if main_agent_tools.is_empty():
 		load_default_tools()
-	return main_agent_tools.get(p_tool_name)
+	
+	var tool: Variant = main_agent_tools.get(p_tool_name)
+	if tool is AiTool:
+		return tool
+	
+	return null
 
 
 ## 构建 OpenAI / Gemini 两种格式的工具定义数组
@@ -47,8 +54,14 @@ static func get_tool(p_tool_name: String) -> Object:
 ## [return]: 工具定义数组
 static func build_tool_definitions(p_tools: Dictionary, p_for_gemini: bool) -> Array[Dictionary]:
 	var definitions: Array[Dictionary] = []
-	for tool_instance in p_tools.values():
+	
+	for raw_tool: Variant in p_tools.values():
+		if not raw_tool is AiTool:
+			continue
+		
+		var tool_instance: AiTool = raw_tool
 		var schema: Dictionary = tool_instance.get_parameters_schema()
+		
 		if p_for_gemini:
 			schema = convert_schema_to_gemini(schema)
 			definitions.append({
@@ -65,6 +78,7 @@ static func build_tool_definitions(p_tools: Dictionary, p_for_gemini: bool) -> A
 					"parameters": schema
 				}
 			})
+	
 	return definitions
 
 
@@ -76,19 +90,30 @@ static func get_all_tool_definitions(p_for_gemini: bool = false) -> Array[Dictio
 
 
 ## 获取所有可用技能的名称
-static func get_available_skill_names() -> Array:
+static func get_available_skill_names() -> Array[String]:
 	_scan_skills()
-	return available_skills.keys()
+	var names: Array[String] = []
+	
+	for raw_key: Variant in available_skills.keys():
+		names.append(String(raw_key))
+	
+	return names
 
 
 ## 将 Schema 转换为 Gemini 兼容格式
 static func convert_schema_to_gemini(p_schema: Dictionary) -> Dictionary:
 	var new_schema: Dictionary = p_schema.duplicate(true)
+	
 	if new_schema.has("type") and new_schema["type"] is String:
-		new_schema["type"] = new_schema["type"].to_upper()
+		new_schema["type"] = String(new_schema["type"]).to_upper()
+	
 	if new_schema.has("properties") and new_schema["properties"] is Dictionary:
-		for key in new_schema["properties"]:
-			new_schema["properties"][key] = convert_schema_to_gemini(new_schema["properties"][key])
+		var properties: Dictionary = new_schema["properties"]
+		for key: Variant in properties.keys():
+			# [防御] 属性 schema 不一定是 Dictionary（如某些自由格式字段），跳过非字典项避免强转报错
+			if properties[key] is Dictionary:
+				properties[key] = convert_schema_to_gemini(properties[key])
+	
 	return new_schema
 
 
@@ -96,6 +121,7 @@ static func convert_schema_to_gemini(p_schema: Dictionary) -> Dictionary:
 
 static func _scan_skills() -> void:
 	available_skills.clear()
+	
 	if not DirAccess.dir_exists_absolute(PluginPaths.SKILLS_DIR):
 		return
 	
@@ -112,34 +138,38 @@ static func _scan_skills() -> void:
 
 static func _load_skill_from_folder(p_folder_path: String) -> void:
 	var dir: DirAccess = DirAccess.open(p_folder_path)
+	
 	if dir:
 		dir.list_dir_begin()
 		var file_name: String = dir.get_next()
+		
 		while file_name != "":
 			if not dir.current_is_dir() and (file_name.ends_with(".tres") or file_name.ends_with(".res")):
 				var resource: Resource = load(p_folder_path.path_join(file_name))
 				if resource is AiSkill:
-					if not resource.skill_name.is_empty():
-						available_skills[resource.skill_name] = resource
-						AIChatLogger.debug("[ToolRegistry] -> SUCCESS: Loaded ", resource.skill_name)
+					var skill: AiSkill = resource
+					if not skill.skill_name.is_empty():
+						available_skills[skill.skill_name] = skill
+						AIChatLogger.debug("[ToolRegistry] -> SUCCESS: Loaded ", skill.skill_name)
 					else:
 						AIChatLogger.warn("[ToolRegistry] -> AiSkill resource has empty skill_name: ", file_name)
 				# 非 AiSkill 的资源（如 SubAgentConfig）静默跳过，不再报错
-			
 			file_name = dir.get_next()
+		
 		dir.list_dir_end()
 
 
 static func _load_core_tools() -> void:
 	var config: MainAgentToolConfig = MainAgentToolConfig.get_config()
+	
 	if config == null:
 		AIChatLogger.error("[ToolRegistry] Failed to load MainAgentToolConfig: %s" % PluginPaths.MAIN_AGENT_TOOL_CONFIG_PATH)
 		return
 	if config.tool_scripts.is_empty():
 		AIChatLogger.warn("[ToolRegistry] MainAgentToolConfig '%s' has no tool_scripts, no tools loaded." % config.config_name)
 		return
-	for path in config.tool_scripts:
-		_load_and_register_tool(path)
+	for tool_path: String in config.tool_scripts:
+		_load_and_register_tool(tool_path)
 
 
 static func _load_and_register_tool(p_path: String) -> void:
@@ -158,11 +188,15 @@ static func _load_and_register_tool(p_path: String) -> void:
 		return
 	
 	if script is GDScript:
-		var tool_instance: Object = script.new()
-		if tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):
-			var t_name: String = tool_instance.tool_name
+		var gd_script: GDScript = script
+		var tool_instance: Object = gd_script.new()
+		if tool_instance is AiTool and tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):
+			var tool: AiTool = tool_instance
+			var t_name: String = tool.tool_name
 			if not t_name.is_empty():
-				main_agent_tools[t_name] = tool_instance
+				main_agent_tools[t_name] = tool
+		else:
+			AIChatLogger.error("[ToolRegistry] Script does not extend AiTool, skipped: %s" % tool_path)
 
 
 # 将工具引用解析为实际脚本路径（兼容 res:// 路径与 uid:// 引用两种存储形式）

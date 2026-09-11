@@ -99,6 +99,7 @@ theme_override_constants/margin_left = 10
 [node name="ScrollContainer" type="ScrollContainer" parent="TabContainer/Chat/VBoxContainer/ChatDisplayView" unique_id=176257922]
 layout_mode = 2
 theme = ExtResource("2_p4tj1")
+vertical_scroll_mode = 4
 
 [node name="ChatListContainer" type="VBoxContainer" parent="TabContainer/Chat/VBoxContainer/ChatDisplayView/ScrollContainer" unique_id=1200744928]
 layout_mode = 2
@@ -245,6 +246,15 @@ vertical_alignment = 1
 [node name="CurrentTokenUsage" type="Label" parent="TabContainer/Chat/VBoxContainer/InfoContainer" unique_id=430120038]
 layout_mode = 2
 size_flags_horizontal = 3
+tooltip_text = "Current Request:
+ - Prompt: 0
+ - Completion: 0
+ - Total: 0
+
+Session Total:
+ - Prompt: 0
+ - Completion: 0
+ - Total: 0"
 mouse_filter = 0
 text = "Total Tokens: 0"
 label_settings = SubResource("LabelSettings_yewlv")

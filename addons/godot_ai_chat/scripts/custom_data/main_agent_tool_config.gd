@@ -11,10 +11,8 @@ extends Resource
 
 ## 配置的唯一标识/名称 (例如 "Main Agent Tools")
 @export var config_name: String = "Main Agent Tools"
-
 ## 配置的简短描述 (用于 UI 显示或 Tooltip)
 @export_multiline var description: String = "Main-Agent 的核心工具集配置"
-
 ## Main-Agent 可用的工具脚本路径列表
 @export_file("*.gd") var tool_scripts: Array[String] = []
 
@@ -24,6 +22,7 @@ extends Resource
 ## 获取工具配置（如果不存在则自动创建默认配置）
 static func get_config() -> MainAgentToolConfig:
 	var path: String = PluginPaths.MAIN_AGENT_TOOL_CONFIG_PATH
+	
 	if ResourceLoader.exists(path):
 		return ResourceLoader.load(path, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:

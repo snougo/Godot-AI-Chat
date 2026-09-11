@@ -11,9 +11,11 @@ extends BaseAnthropicProvider
 ## 2. 自动修正 Base URL 路径。
 ## 警告：切勿在日志中打印 API Key
 
+
 # --- Constants ---
 
 const ANTHROPIC_API_VERSION := "2023-06-01"
+
 
 # --- Private Vars ---
 
@@ -48,7 +50,7 @@ func get_request_url(p_base_url: String, p_model: String, _p_key: String, _p_str
 	# 如果 model 为空，通常意味着这是在请求模型列表 (NetworkManager.get_model_list)
 	# 或者是某些特殊的检查。
 	# 大多数兼容网关使用 /v1/models 来获取列表
-	if p_model.is_empty(): 
+	if p_model.is_empty():
 		return _build_url(p_base_url, "models")
 	
 	return _build_url(p_base_url, "messages")
@@ -66,9 +68,9 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 		return []
 	
 	if json is Dictionary and json.has("data") and json.data is Array:
-		for item in json.data:
-			if item is Dictionary and item.has("id") and item.id is String:
-				list.append(item.id)
+		for raw_item: Variant in (json.data as Array):
+			if raw_item is Dictionary and raw_item.has("id") and raw_item.id is String:
+				list.append(String(raw_item.id))
 	
 	# 如果解析失败或列表为空，返回空数组（而非包含空字符串的数组）
 	if list.is_empty():
@@ -98,7 +100,7 @@ func _build_url(p_base: String, p_endpoint: String) -> String:
 		url = url.left(url.length() - 1)
 	
 	# 检查是否已包含完整路径
-	var full_path := "/v1/" + p_endpoint
+	var full_path: String = "/v1/" + p_endpoint
 	if url.ends_with(full_path):
 		return url  # 已经是完整路径，直接返回
 	

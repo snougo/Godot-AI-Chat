@@ -6,7 +6,13 @@ extends RefCounted
 ## 提供工厂方法统一构造成功/失败/带图片/带元数据的结果，
 ## 替代旧的 Dictionary + 字符串 key 约定模式。
 
+
+# --- Constants ---
+
 enum Status { OK, FAIL }
+
+
+# --- Public Vars ---
 
 ## 元数据（extra，避免与 Object.has_meta/get_meta 重名）
 var extra: Dictionary:
@@ -21,12 +27,17 @@ var attachments: Dictionary:
 			"mime": _image_mime
 		}
 
+
+# --- Private Vars ---
+
 var _status: Status
 var _data: String
 var _image_data: PackedByteArray
 var _image_mime: String
 var _meta: Dictionary = {}
 
+
+# --- Built-in Functions ---
 
 func _init(p_status: Status, p_data: String, p_image_data: PackedByteArray, p_image_mime: String, p_meta: Dictionary = {}) -> void:
 	_status = p_status
@@ -36,8 +47,9 @@ func _init(p_status: Status, p_data: String, p_image_data: PackedByteArray, p_im
 	_meta = p_meta
 
 
-# --- 工厂方法 ---
+# --- Public Functions ---
 
+# --- 工厂方法 ---
 static func ok(p_data: String = "", p_meta: Dictionary = {}) -> ToolResult:
 	return ToolResult.new(Status.OK, p_data, PackedByteArray(), "", p_meta)
 
@@ -49,7 +61,6 @@ static func ok_with_image(p_data: String, p_image_data: PackedByteArray, p_mime:
 
 
 # --- 查询方法 ---
-
 func is_ok() -> bool:
 	return _status == Status.OK
 

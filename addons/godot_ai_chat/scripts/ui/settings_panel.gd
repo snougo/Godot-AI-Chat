@@ -6,12 +6,12 @@ extends Control
 ##
 ## 负责管理插件的设置界面，包括加载、显示和保存用户配置。
 
+
 # --- Signals ---
 
 ## 当用户点击保存按钮并且设置成功保存后发出
 signal settings_saved
-## 当请求关闭面板时发出
-signal close_requested
+
 
 # --- Enums / Constants ---
 
@@ -20,6 +20,7 @@ enum SaveButtonState {
 	IDLE,   ## 空闲状态
 	SAVING  ## 正在保存状态
 }
+
 
 # --- @onready Vars ---
 
@@ -77,13 +78,10 @@ func _ready() -> void:
 	_temperature_value.value_changed.connect(_on_temperature_value_changed)
 	_save_button.pressed.connect(_on_save_button_pressed)
 	
+	# Provider 类型名的唯一来源是 ProviderFactory.PROVIDER_TYPES，避免工厂与面板两处字面量各自漂移
 	_api_provider_options.clear()
-	_api_provider_options.add_item("OpenAI-ChatCompletions")
-	_api_provider_options.add_item("OpenAI-Responses")
-	_api_provider_options.add_item("OpenCode Go")
-	_api_provider_options.add_item("ZhipuAI")
-	_api_provider_options.add_item("Google Gemini")
-	_api_provider_options.add_item("Anthropic-Compatible")
+	for provider_type: String in ProviderFactory.PROVIDER_TYPES:
+		_api_provider_options.add_item(provider_type)
 	
 	_load_and_display_settings()
 	_update_ui(SaveButtonState.IDLE)
@@ -91,7 +89,7 @@ func _ready() -> void:
 
 # --- Private Functions ---
 
-## 根据新的状态更新 UI 元素
+# 根据新的状态更新 UI 元素
 func _update_ui(p_new_state: SaveButtonState) -> void:
 	match p_new_state:
 		SaveButtonState.IDLE:
@@ -102,7 +100,7 @@ func _update_ui(p_new_state: SaveButtonState) -> void:
 			_save_button.text = "Saving..."
 
 
-## 从文件加载设置，如果文件不存在则创建一个新的
+# 从文件加载设置，如果文件不存在则创建一个新的
 func _load_and_display_settings() -> void:
 	if ResourceLoader.exists(PluginPaths.SETTINGS_PATH):
 		settings_resource = load(PluginPaths.SETTINGS_PATH)
@@ -114,7 +112,7 @@ func _load_and_display_settings() -> void:
 	_update_ui(SaveButtonState.IDLE)
 
 
-## 将从资源文件加载的设置值填充到各个 UI 控件中
+# 将从资源文件加载的设置值填充到各个 UI 控件中
 func _populate_ui_from_resource() -> void:
 	var selected_index: int = -1
 	for i in range(_api_provider_options.item_count):

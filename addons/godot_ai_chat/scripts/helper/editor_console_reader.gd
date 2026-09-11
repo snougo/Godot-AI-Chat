@@ -7,6 +7,7 @@ extends RefCounted
 ## 面板通过类指纹定位（内部 C++ 类，脚本无法指名），停靠布局变化不会让读取失效；
 ## 面板找不到时诚实报错，绝不假装空控制台。所有方法均为静态。
 
+
 # --- Constants ---
 
 ## 默认返回的最新输出行数
@@ -17,6 +18,7 @@ const DEFAULT_ERROR_LIMIT: int = 10
 const MAX_LINE_CHARS: int = 400
 ## 每个错误条目最多中继的详情行数（引擎错误、源码行、栈帧）
 const MAX_ERROR_DETAIL_ROWS: int = 12
+
 ## 面板消息类型过滤按钮的 EditorSettings 持久化键（4.7 MessageType 顺序）：
 ## 被关闭的类型会从面板文本中整体消失，不披露就会把"被阉割的面板"当成全量日志
 const OUTPUT_FILTER_SETTINGS: Array = [
@@ -79,6 +81,7 @@ static func capture_error_delta(p_before: String, p_after: String) -> String:
 	
 	var lines: PackedStringArray = new_text.split("\n")
 	var filtered: PackedStringArray = []
+	
 	for line in lines:
 		var trimmed: String = line.strip_edges()
 		if trimmed.is_empty():
@@ -103,15 +106,19 @@ static func _format_output(p_text: String, p_lines: int, p_filter: String) -> St
 	var all: Array = _output_lines(p_text)
 	if all.is_empty():
 		return "The Output console is currently empty — nothing has been printed since it was last cleared."
+	
 	var cap: int = p_lines if p_lines > 0 else DEFAULT_OUTPUT_LINES
 	var pool: Array = all
+	
 	if p_filter != "":
 		var needle: String = p_filter.to_lower()
 		pool = all.filter(func(line: Variant) -> bool: return String(line).to_lower().contains(needle))
 		if pool.is_empty():
 			return "Output console: %d lines; none contain \"%s\"." % [all.size(), p_filter]
+	
 	var shown: Array = pool.slice(maxi(0, pool.size() - cap))
 	var body: Array = []
+	
 	for line in shown:
 		body.append(_clip_line(String(line)))
 	return "%s\n%s" % [_output_header(all.size(), pool.size(), shown.size(), p_filter), "\n".join(PackedStringArray(body))]
@@ -121,21 +128,27 @@ static func _format_output(p_text: String, p_lines: int, p_filter: String) -> St
 static func _format_errors(p_entries: Array, p_limit: int, p_filter: String) -> String:
 	if p_entries.is_empty():
 		return "The debugger's error history is empty: no errors or warnings have been recorded from running the project (nothing has run, or the user cleared it). Errors raised inside the editor itself land in the Output console instead — read_output shows those."
+	
 	var cap: int = p_limit if p_limit > 0 else DEFAULT_ERROR_LIMIT
 	var errors: int = 0
+	
 	for entry: Dictionary in p_entries:
 		if String(entry["kind"]) == "error":
 			errors += 1
+	
 	var pool: Array = p_entries
 	if p_filter != "":
 		var needle: String = p_filter.to_lower()
 		pool = p_entries.filter(func(entry: Variant) -> bool: return _entry_text(entry).to_lower().contains(needle))
 		if pool.is_empty():
 			return "Debugger error history: %d entries (%d errors, %d warnings); none contain \"%s\"." % [p_entries.size(), errors, p_entries.size() - errors, p_filter]
+	
 	var shown: Array = pool.slice(maxi(0, pool.size() - cap))
 	var body: Array = []
+	
 	for entry: Dictionary in shown:
 		body.append(_format_entry(entry))
+	
 	return "%s\n%s" % [_errors_header(p_entries.size(), errors, pool.size(), shown.size(), p_filter), "\n".join(PackedStringArray(body))]
 
 
@@ -143,12 +156,16 @@ static func _format_errors(p_entries: Array, p_limit: int, p_filter: String) -> 
 static func _error_entries(p_tree: Tree) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var root: TreeItem = p_tree.get_root()
+	
 	if root == null:
 		return out
+	
 	var item: TreeItem = root.get_first_child()
+	
 	while item != null:
 		var detail: Array = []
 		var child: TreeItem = item.get_first_child()
+		
 		while child != null:
 			detail.append(("%s %s" % [child.get_text(0), child.get_text(1)]).strip_edges())
 			child = child.get_next()
@@ -159,14 +176,17 @@ static func _error_entries(p_tree: Tree) -> Array[Dictionary]:
 			"detail": detail,
 		})
 		item = item.get_next()
+	
 	return out
 
 
 # 分割行并去掉尾部空行
 static func _output_lines(p_text: String) -> Array:
 	var all: Array = Array(p_text.split("\n"))
+	
 	while not all.is_empty() and String(all[all.size() - 1]).strip_edges() == "":
 		all.remove_at(all.size() - 1)
+	
 	return all
 
 
@@ -177,8 +197,10 @@ static func _output_header(p_total: int, p_matched: int, p_shown: int, p_filter:
 		if p_shown == p_total:
 			return "Output console (%d lines):" % p_total
 		return "Output console: %d lines total, showing the newest %d (raise \"lines\", or pass \"filter\" to reach older ones by content):" % [p_total, p_shown]
+	
 	if p_shown == p_matched:
 		return "Output console: %d lines total; %d contain \"%s\":" % [p_total, p_matched, p_filter]
+	
 	return "Output console: %d lines total; %d contain \"%s\", showing the newest %d of those (raise \"lines\", or narrow the filter):" % [p_total, p_matched, p_filter, p_shown]
 
 
@@ -188,8 +210,10 @@ static func _errors_header(p_total: int, p_errors: int, p_matched: int, p_shown:
 		if p_shown == p_total:
 			return "Debugger error history, %s, oldest first:" % tally
 		return "Debugger error history, %s, showing the newest %d (oldest of those first — raise \"limit\", or pass \"filter\" to reach older entries by content):" % [tally, p_shown]
+	
 	if p_shown == p_matched:
 		return "Debugger error history, %s; %d contain \"%s\":" % [tally, p_matched, p_filter]
+	
 	return "Debugger error history, %s; %d contain \"%s\", showing the newest %d of those (raise \"limit\", or narrow the filter):" % [tally, p_matched, p_filter, p_shown]
 
 
@@ -198,10 +222,13 @@ static func _errors_header(p_total: int, p_errors: int, p_matched: int, p_shown:
 static func _format_entry(p_entry: Dictionary) -> String:
 	var rows: Array = ["[%s] %s: %s" % [p_entry["time"], String(p_entry["kind"]).to_upper(), _clip_line(String(p_entry["title"]))]]
 	var detail: Array = p_entry["detail"]
+	
 	for i in mini(detail.size(), MAX_ERROR_DETAIL_ROWS):
 		rows.append("  %s" % _clip_line(String(detail[i])))
+	
 	if detail.size() > MAX_ERROR_DETAIL_ROWS:
 		rows.append("  (+%d more detail rows)" % (detail.size() - MAX_ERROR_DETAIL_ROWS))
+	
 	return "\n".join(PackedStringArray(rows))
 
 
@@ -222,12 +249,14 @@ static func _clip_line(p_line: String) -> String:
 static func _find_by_class(p_root: Node, p_cls: String) -> Array[Node]:
 	var found: Array[Node] = []
 	var stack: Array[Node] = [p_root]
+	
 	while not stack.is_empty():
 		var node: Node = stack.pop_back()
 		for child in node.get_children(true):
 			stack.append(child)
 		if node.get_class() == p_cls:
 			found.append(node)
+	
 	return found
 
 
@@ -235,11 +264,13 @@ static func _find_by_class(p_root: Node, p_cls: String) -> Array[Node]:
 # 直接挂 VBoxContainer，内含两列 Tree
 static func _error_trees() -> Array[Dictionary]:
 	var found: Array[Dictionary] = []
+	
 	for debugger in _find_by_class(EditorInterface.get_base_control(), "EditorDebuggerNode"):
 		for session in _find_by_class(debugger, "ScriptEditorDebugger"):
 			var tree := _session_error_tree(session)
 			if tree != null:
 				found.append({"session": String(session.name), "tree": tree})
+	
 	return found
 
 
@@ -247,12 +278,14 @@ static func _session_error_tree(p_session: Node) -> Tree:
 	for tabs in p_session.get_children(true):
 		if not tabs is TabContainer:
 			continue
+		
 		for tab in tabs.get_children(true):
 			if tab.get_class() != "VBoxContainer":
 				continue
 			for child in tab.get_children(true):
 				if child is Tree and child.columns == 2:
 					return child as Tree
+	
 	return null
 
 
@@ -262,6 +295,7 @@ static func _session_error_tree(p_session: Node) -> Tree:
 static func _output_hidden_note() -> String:
 	var hidden: Array = []
 	var settings := EditorInterface.get_editor_settings()
+	
 	for entry: Array in OUTPUT_FILTER_SETTINGS:
 		var key := "_editor_log_filter_%d" % int(entry[0])
 		if settings.has_setting(key) and not bool(settings.get_setting(key)):
@@ -270,6 +304,7 @@ static func _output_hidden_note() -> String:
 	var parts: Array = []
 	if not hidden.is_empty():
 		parts.append("the %s filter button(s) are toggled off, so those message types are missing from the panel and from this read" % " and ".join(PackedStringArray(hidden)))
+	
 	var search := _output_search_text()
 	if search != "":
 		parts.append("its search box is set to \"%s\", so only lines matching that are readable" % search)
