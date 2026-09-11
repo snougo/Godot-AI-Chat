@@ -59,6 +59,7 @@ const ANTHROPIC_API_ENDPOINT: Array[String] = [
 	"minimax-m2.7",
 	"minimax-m2.5",
 	"qwen3.8-max",
+	"qwen3.8-flash",
 	"qwen3.7-max",
 	"qwen3.7-plus",
 	"qwen3.6-plus",
@@ -69,6 +70,21 @@ const ANTHROPIC_API_VERSION := "2023-06-01"
 
 ## 官方默认 Base URL
 const DEFAULT_BASE_URL := "https://opencode.ai/zen/go/v1"
+
+## 客户端 User-Agent：opencode 要求客户端以自身身份标识，而非通用 SDK / HTTP 库名
+## （版本号与 plugin.cfg 保持同步）
+const USER_AGENT := "GodotAIChat/1.5.0 (Godot Editor Plugin)"
+
+## opencode 会话路由头：同一对话的所有请求必须携带同一个稳定 ID
+const SESSION_HEADER := "x-opencode-session"
+
+# --- Static Vars ---
+
+## 当前对话的会话 ID（作为 x-opencode-session 的值）
+## [为什么用 static] Provider 由 ProviderFactory 按“每次操作”新建实例，
+## 实例变量无法跨请求保持；只有 static 才能让同一对话的多次请求复用同一 ID。
+## 为空时会在首次请求前自动生成，保证该请求头永不为空。
+static var _session_id: String = ""
 
 # --- Private Vars ---
 
@@ -102,17 +118,27 @@ func get_stream_parser_type() -> StreamParserType:
 ## 获取 HTTP 请求头（按模型路由到对应协议的认证方式）
 ## [修复] opencode 的 /v1/messages (Anthropic 兼容) 端点只接受 x-api-key 头，
 ## 不接受 Authorization: Bearer，否则返回 401 "Missing API key"
+## [修复] opencode 服务端还要求客户端 (1) 使用自定义 User-Agent 自我标识，
+## (2) 每个对话携带稳定的 x-opencode-session，否则返回 400:
+## "Request is missing x-opencode-session and cannot be routed efficiently."
 func get_request_headers(p_api_key: String, p_stream: bool) -> PackedStringArray:
 	var handler: BaseLLMProvider = _get_handler(_last_model_name)
+	var headers: PackedStringArray = []
+	
 	if handler is AnthropicCompatibleProvider:
-		var headers: PackedStringArray = []
 		headers.append("x-api-key: " + p_api_key)
 		headers.append("anthropic-version: " + ANTHROPIC_API_VERSION)
 		headers.append("Content-Type: application/json")
 		if p_stream:
 			headers.append("Accept: text/event-stream")
-		return headers
-	return handler.get_request_headers(p_api_key, p_stream)
+	else:
+		headers = handler.get_request_headers(p_api_key, p_stream)
+	
+	# opencode 路由标识（模型列表 GET 请求同样经由本方法，需一并携带）
+	headers.append("User-Agent: " + USER_AGENT)
+	headers.append(SESSION_HEADER + ": " + _get_session_id())
+	
+	return headers
 
 
 ## 获取请求 URL（按模型路由到对应端点）
@@ -193,6 +219,12 @@ func get_static_model_list() -> Array[String]:
 	return all_models
 
 
+## 设置当前对话的会话 ID（供会话管理侧在新建/加载/分叉会话时调用）
+## [param p_session_id]: 会话标识；传空串表示清除，下次请求前会自动生成新的随机 ID
+static func set_conversation_session_id(p_session_id: String) -> void:
+	_session_id = p_session_id.strip_edges()
+
+
 # --- Private Functions ---
 
 # 按模型名返回对应的协议 Handler
@@ -228,3 +260,29 @@ func _normalize_base_url(p_base_url: String) -> String:
 	while url.ends_with("/"):
 		url = url.substr(0, url.length() - 1)
 	return url
+
+
+# 获取当前生效的会话 ID（未设置则懒生成，保证请求头永不为空）
+static func _get_session_id() -> String:
+	if _session_id.is_empty():
+		_session_id = _generate_session_id()
+	return _session_id
+
+
+# 生成 UUID v4 形态的随机会话 ID（opencode 只要求稳定且唯一，不限定格式）
+static func _generate_session_id() -> String:
+	var bytes: PackedByteArray = Crypto.new().generate_random_bytes(16)
+	if bytes.size() != 16:
+		# 极端异常兜底：保证返回非空 ID，避免再次触发 400
+		return "godot-ai-chat-%d-%d" % [int(Time.get_unix_time_from_system()), randi()]
+	# 按 RFC 4122 写入版本号 (4) 与变体位
+	bytes[6] = (bytes[6] & 0x0F) | 0x40
+	bytes[8] = (bytes[8] & 0x3F) | 0x80
+	var hex: String = bytes.hex_encode()
+	return "%s-%s-%s-%s-%s" % [
+		hex.substr(0, 8),
+		hex.substr(8, 4),
+		hex.substr(12, 4),
+		hex.substr(16, 4),
+		hex.substr(20, 12),
+	]

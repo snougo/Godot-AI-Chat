@@ -48,6 +48,7 @@ func load_session(p_session_name: String) -> ChatMessageHistory:
 			current_session_path = path
 			_current_history = resource
 			_bind_auto_save(resource)
+			_bind_opencode_session()
 			return resource
 	return null
 
@@ -113,6 +114,7 @@ func _save_as_new_session(p_history: ChatMessageHistory, p_name_suffix: String) 
 		_current_history = p_history
 		ToolBox.update_editor_filesystem(path)
 		_bind_auto_save(p_history)
+		_bind_opencode_session()
 		return p_history
 	AIChatLogger.error("[SessionManager] Failed to save session: %s" % path)
 	return null
@@ -146,3 +148,10 @@ func _validate_message_integrity(p_history: ChatMessageHistory) -> void:
 	for msg in p_history.messages:
 		if msg.content == null or typeof(msg.content) != TYPE_STRING:
 			msg.content = ""
+
+
+# 将当前会话文件绑定为 opencode 的会话路由 ID（x-opencode-session 的值）
+# 同一会话（含存档回载）恒定，新建/分叉/压缩产生的新会话自动获得新 ID；
+# 未使用 OpenCode Go 作为 Provider 时，此赋值无任何副作用。
+func _bind_opencode_session() -> void:
+	OpenCodeGoProvider.set_conversation_session_id(current_session_path.get_file())

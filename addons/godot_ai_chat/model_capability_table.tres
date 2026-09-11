@@ -27,7 +27,12 @@ metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [sub_resource type="Resource" id="Resource_aw0p1"]
 script = ExtResource("1_3ymue")
-model_name = "qwen3.8"
+model_name = "qwen3.8-max"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_e0s22"]
+script = ExtResource("1_3ymue")
+model_name = "qwen3.8-flash"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [sub_resource type="Resource" id="Resource_3ymue"]
@@ -63,5 +68,5 @@ metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [resource]
 script = ExtResource("1_q1pwk")
-entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y"), SubResource("Resource_nb5fw")])
+entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_e0s22"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y"), SubResource("Resource_nb5fw")])
 metadata/_custom_type_script = "uid://dtmqixbcgp0g2"
