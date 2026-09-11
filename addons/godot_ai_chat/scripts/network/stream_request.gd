@@ -96,10 +96,13 @@ func wait_for_cleanup() -> void:
 
 # 线程任务主循环
 func _thread_task() -> void:
-	# [Optimization] Perform CPU-intensive JSON serialization in the worker thread
-	#_body_json = JSON.stringify(_body_dict)
+	var t_begin: int = Time.get_ticks_msec()
 	_body_json = ToolBox.stringify_json_safe(_body_dict)
-
+	var t_serialized: int = Time.get_ticks_msec()
+	AIChatLogger.debug("StreamRequest: body=%.2f MB, serialize=%d ms" % [_body_json.length() / 1048576.0, t_serialized - t_begin])
+	
+	# 预处理不计入网络超时预算
+	_timeout_tracker.restart_phase_timer()
 	
 	var client: HTTPClient = HTTPClient.new()
 	var err: Error = OK
@@ -132,6 +135,8 @@ func _thread_task() -> void:
 			return
 		
 		OS.delay_msec(10)
+	
+	AIChatLogger.debug("StreamRequest: connect phase finished in %d ms, status=%d" % [Time.get_ticks_msec() - t_serialized, client.get_status()])
 	
 	if client.get_status() != HTTPClient.STATUS_CONNECTED:
 		_emit_failure("Could not connect. Status: %d" % client.get_status())

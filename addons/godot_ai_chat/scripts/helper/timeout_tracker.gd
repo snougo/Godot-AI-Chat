@@ -75,6 +75,11 @@ func get_current_phase() -> Phase:
 	return _phase
 
 
+## 重启当前阶段的计时（用于耗时预处理之后重新起表）
+func restart_phase_timer() -> void:
+	_phase_start_time = Time.get_ticks_msec()
+
+
 # --- Private Functions ---
 
 func _get_current_timeout() -> int:

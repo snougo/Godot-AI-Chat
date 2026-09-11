@@ -3,12 +3,6 @@
 [ext_resource type="Script" uid="uid://bhoku2teaugtk" path="res://addons/godot_ai_chat/scripts/custom_data/model_capability_entry.gd" id="1_3ymue"]
 [ext_resource type="Script" uid="uid://dtmqixbcgp0g2" path="res://addons/godot_ai_chat/scripts/custom_data/model_capability_table.gd" id="1_q1pwk"]
 
-[sub_resource type="Resource" id="Resource_5sjc6"]
-script = ExtResource("1_3ymue")
-model_name = "deepseek-v4-flash"
-supports_image = false
-metadata/_custom_type_script = "uid://bhoku2teaugtk"
-
 [sub_resource type="Resource" id="Resource_k5mj3"]
 script = ExtResource("1_3ymue")
 model_name = "deepseek-v4-pro"
@@ -41,11 +35,6 @@ script = ExtResource("1_3ymue")
 model_name = "minimax-m3"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
-[sub_resource type="Resource" id="Resource_5dxxc"]
-script = ExtResource("1_3ymue")
-model_name = "deepseek-v4-flash-vision-exp"
-metadata/_custom_type_script = "uid://bhoku2teaugtk"
-
 [sub_resource type="Resource" id="Resource_55nqm"]
 script = ExtResource("1_3ymue")
 model_name = "glm-5.3-flash"
@@ -67,7 +56,12 @@ script = ExtResource("1_3ymue")
 model_name = "gpt-5.6-luna"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
+[sub_resource type="Resource" id="Resource_nb5fw"]
+script = ExtResource("1_3ymue")
+model_name = "deepseek-flash"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
 [resource]
 script = ExtResource("1_q1pwk")
-entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_5sjc6"), SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_3ymue"), SubResource("Resource_5dxxc"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y")])
+entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y"), SubResource("Resource_nb5fw")])
 metadata/_custom_type_script = "uid://dtmqixbcgp0g2"

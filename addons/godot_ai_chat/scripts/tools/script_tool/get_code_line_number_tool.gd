@@ -81,28 +81,30 @@ func execute(p_args: Dictionary) -> ToolResult:
 			return ToolResult.fail("Error: Unknown mode: " + mode)
 
 
-# ============================================================
-#  Exact 模式：精确查找并返回所有匹配行 + 代码内容
-# ============================================================
-
 func _search_exact(p_content: String, p_lines: PackedStringArray, p_search: String, p_file_name: String) -> ToolResult:
 	var search_len := p_search.length()
 	var results: Array[Dictionary] = []  # {line: int, content: String}
 	var pos: int = 0
+	# [性能] 旧实现为每个匹配都从头逐字符扫描统计换行（O(匹配数 × 文件长度)）。
+	# 改为用 find() 增量推进换行游标，整体 O(文件长度)。
+	var nl_scan_pos: int = 0
+	var nl_count: int = 0
 	
 	while pos < p_content.length():
 		var found := p_content.find(p_search, pos)
 		if found == -1:
 			break
 		
-		# 字符位置 → 1-based 行号
-		var line_num := 1
-		for i in range(found):
-			if p_content[i] == "\n":
-				line_num += 1
-		
 		# 词边界检查
 		if _is_word_boundary(p_content, found, search_len):
+			# 增量推进到匹配位置之前的所有换行 → 1-based 行号
+			while true:
+				var nl: int = p_content.find("\n", nl_scan_pos)
+				if nl == -1 or nl >= found:
+					break
+				nl_count += 1
+				nl_scan_pos = nl + 1
+			var line_num: int = nl_count + 1
 			results.append({"line": line_num, "content": p_lines[line_num - 1]})
 			pos = found + search_len
 		else:
@@ -111,16 +113,14 @@ func _search_exact(p_content: String, p_lines: PackedStringArray, p_search: Stri
 	if results.is_empty():
 		return ToolResult.fail("Error: No match found for: '%s'" % p_search)
 	
-	var msg := "Found %d occurrence(s) of \"%s\" in `%s`:\n" % [results.size(), p_search, p_file_name]
+	# [性能] 结果可能包含大量匹配行，改为收集后一次 join
+	var parts: PackedStringArray = PackedStringArray()
+	parts.append("Found %d occurrence(s) of \"%s\" in `%s`:\n" % [results.size(), p_search, p_file_name])
 	for r in results:
-		msg += "  Line %d: %s\n" % [r["line"], r["content"]]
+		parts.append("  Line %d: %s\n" % [r["line"], r["content"]])
 	
-	return ToolResult.ok(msg)
+	return ToolResult.ok("".join(parts))
 
-
-# ============================================================
-#  Function 模式：搜索函数定义，返回完整函数体
-# ============================================================
 
 func _search_function(p_lines: PackedStringArray, p_func_name: String, p_file_name: String) -> ToolResult:
 	# 查找所有匹配的函数定义
@@ -138,7 +138,9 @@ func _search_function(p_lines: PackedStringArray, p_func_name: String, p_file_na
 	if func_defs.is_empty():
 		return ToolResult.fail("Error: No function named '%s' found in `%s`." % [p_func_name, p_file_name])
 	
-	var msg := "Found %d definition(s) of function \"%s\" in `%s`:\n\n" % [func_defs.size(), p_func_name, p_file_name]
+	# [性能] 函数体可能很长，旧实现用 msg += ... 逐行拼接（O(n²)），改为收集后一次 join
+	var parts: PackedStringArray = PackedStringArray()
+	parts.append("Found %d definition(s) of function \"%s\" in `%s`:\n\n" % [func_defs.size(), p_func_name, p_file_name])
 	
 	for fd in func_defs:
 		var def_line: int = fd["def_line"]          # 1-based
@@ -148,7 +150,7 @@ func _search_function(p_lines: PackedStringArray, p_func_name: String, p_file_na
 		# 函数最后一行（1-based）= end_idx（0-based 的下一函数起始，正好等于最后一行号）
 		var last_line := end_idx
 		
-		msg += "── Function at lines %d-%d ──\n" % [def_line, last_line]
+		parts.append("── Function at lines %d-%d ──\n" % [def_line, last_line])
 		
 		for j in range(def_line - 1, end_idx):
 			var line_content := p_lines[j]
@@ -156,11 +158,11 @@ func _search_function(p_lines: PackedStringArray, p_func_name: String, p_file_na
 			# 跳过纯注释行和空行
 			if stripped.is_empty() or stripped.begins_with("#"):
 				continue
-			msg += "  %d: %s\n" % [j + 1, line_content]
+			parts.append("  %d: %s\n" % [j + 1, line_content])
 		
-		msg += "\n"
+		parts.append("\n")
 	
-	return ToolResult.ok(msg)
+	return ToolResult.ok("".join(parts))
 
 
 # 查找函数体的结束位置（0-based 独占索引）
@@ -204,10 +206,6 @@ static func _get_indent(p_line: String) -> int:
 			break
 	return indent
 
-
-# ============================================================
-#  词边界检查
-# ============================================================
 
 static func _is_word_boundary(p_content: String, p_match_pos: int, p_match_len: int) -> bool:
 	if p_match_pos > 0:

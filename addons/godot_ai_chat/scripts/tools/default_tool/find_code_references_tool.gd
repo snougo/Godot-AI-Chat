@@ -88,23 +88,26 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var file_count := all_files.size()
 	var search_preview := _truncate(search)
 	
-	var msg: String = "Grep result for \"%s\" in `%s`:\n" % [search_preview, path]
-	msg += "  Scanned: %d files (%s)\n" % [file_count, ", ".join(SEARCH_EXTENSIONS)]
-	msg += "  Matches: %d files\n\n" % [match_files.size()]
+	# [性能] 旧实现用 msg += ... 在匹配项循环内拼接；本工具不截断输出，结果可达数百 KB，
+	# GDScript 的 String += 会复制整个已累积字符串（O(n²)）。改为收集后一次 join。
+	var parts: PackedStringArray = PackedStringArray()
+	parts.append("Grep result for \"%s\" in `%s`:\n" % [search_preview, path])
+	parts.append("  Scanned: %d files (%s)\n" % [file_count, ", ".join(SEARCH_EXTENSIONS)])
+	parts.append("  Matches: %d files\n\n" % [match_files.size()])
 	
 	if match_files.is_empty():
-		msg += "── No matches found ──\n"
-		return ToolResult.ok(msg)
+		parts.append("── No matches found ──\n")
+		return ToolResult.ok("".join(parts))
 	
 	# 完整展示所有匹配项目，不截断
-	msg += "── Matches ──\n"
+	parts.append("── Matches ──\n")
 	for m in match_files:
-		msg += "%s\n" % m["path"]
+		parts.append("%s\n" % m["path"])
 		for line in m["lines"]:
-			msg += "  Line %d\n" % line
-		msg += "\n"
+			parts.append("  Line %d\n" % line)
+		parts.append("\n")
 	
-	return ToolResult.ok(msg)
+	return ToolResult.ok("".join(parts))
 
 
 # --- Private Functions ---
@@ -139,6 +142,8 @@ func _collect_scripts(p_folder: String, p_results: Array[String]) -> void:
 
 # 在单个文件中搜索，返回匹配行号列表（1-based）
 # 返回空数组表示无匹配
+# [性能] 旧实现为每个匹配都从头逐字符扫描统计换行（O(匹配数 × 文件长度)，
+# 1 MB 文件里几十个匹配即可耗费数秒）。改为用 find() 增量推进换行游标，整体 O(文件长度)。
 func _search_in_file(p_path: String, p_search: String, p_search_len: int) -> Array[int]:
 	var file: FileAccess = FileAccess.open(p_path, FileAccess.READ)
 	if not is_instance_valid(file):
@@ -158,6 +163,9 @@ func _search_in_file(p_path: String, p_search: String, p_search_len: int) -> Arr
 	# 搜索
 	var results: Array[int] = []
 	var pos: int = 0
+	# 换行游标：[0, nl_scan_pos) 区间内的换行已统计完毕，避免为每个匹配重复扫描
+	var nl_scan_pos: int = 0
+	var nl_count: int = 0
 	
 	while pos < content.length():
 		var found := content.find(p_search, pos)
@@ -166,12 +174,14 @@ func _search_in_file(p_path: String, p_search: String, p_search_len: int) -> Arr
 		
 		# 词边界检查：防止匹配到标识符的子串（如 class_name 匹配到 global_class_name）
 		if _is_word_boundary(content, found, p_search_len):
-			# 字符位置 → 1-based 行号
-			var line_num := 1
-			for i in range(found):
-				if content[i] == "\n":
-					line_num += 1
-			results.append(line_num)
+			# 增量推进到匹配位置之前的所有换行 → 1-based 行号
+			while true:
+				var nl: int = content.find("\n", nl_scan_pos)
+				if nl == -1 or nl >= found:
+					break
+				nl_count += 1
+				nl_scan_pos = nl + 1
+			results.append(nl_count + 1)
 			pos = found + p_search_len
 		else:
 			pos = found + 1  # 跳过，继续往后搜

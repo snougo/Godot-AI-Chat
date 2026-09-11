@@ -9,6 +9,7 @@ extends RefCounted
 # --- Static Variables for Debouncing ---
 static var _scan_pending: bool = false
 static var _scan_delay_ms: int = 100  # 延迟 100ms 执行
+static var _control_char_regex: RegEx = null
 
 
 # --- Public Functions ---
@@ -133,16 +134,35 @@ static func refresh_editor_filesystem() -> void:
 ## 安全序列化 JSON：将 JSON.stringify 输出中未被转义的控制字符（0x00-0x1F）
 ## 统一转义为 \uXXXX。Godot 的 JSON.stringify 不会转义这些字符，会生成非法 JSON，
 ## 导致 OpenAI/Anthropic 等严格校验的 API 返回 400 (control character found)。
+##
+## [性能] 旧实现用 `out += json_str[i]` 逐字符拼接，在 GDScript 中每次 += 都会
+## 复制整个已累积字符串（O(n²)）。实测含图片 base64 的 3.65 MB 请求体需 448 秒，
+## 远超网络超时预算，会被误报为 "Connection timeout"。
+## 现改为：
+## 1) C++ 层 RegEx 预检，无控制字符直接返回原串（base64 图片必走此路径）；
+## 2) 慢路径按"连续片段"整块拷贝，仅对控制字符转义，整体 O(n)。
 static func stringify_json_safe(p_value: Variant) -> String:
 	var json_str: String = JSON.stringify(p_value)
-	var out := ""
-	for i in json_str.length():
+	
+	if _control_char_regex == null:
+		_control_char_regex = RegEx.create_from_string("[\\x00-\\x1f]")
+	if _control_char_regex.search(json_str) == null:
+		return json_str
+	
+	var total: int = json_str.length()
+	var parts: PackedStringArray = PackedStringArray()
+	var run_start: int = 0
+	for i in total:
 		var cp: int = json_str.unicode_at(i)
-		if cp < 0x20:
-			out += "\\u%04X" % cp
-		else:
-			out += json_str[i]
-	return out
+		if cp >= 0x20:
+			continue
+		if i > run_start:
+			parts.append(json_str.substr(run_start, i - run_start))
+		parts.append("\\u%04X" % cp)
+		run_start = i + 1
+	if run_start < total:
+		parts.append(json_str.substr(run_start))
+	return "".join(parts)
 
 
 ## 从 AI 响应中移除  thinking... response 标签块

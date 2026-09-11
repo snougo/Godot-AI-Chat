@@ -18,10 +18,13 @@ static func read_scene_content(p_path: String) -> Dictionary:
 	if not scene_resource:
 		return {"success": false, "data": "Error: Failed to load scene: " + p_path}
 	
-	var md: String = "Content for Scene: `%s`\n" % p_path.get_file()
-	md += "- **Type**: %s\n" % scene_resource.get_class()
-	md += "- **Path**: `%s`\n" % scene_resource.resource_path
-	md += "- **Can Instantiate**: %s\n" % str(scene_resource.can_instantiate())
+	# [性能] 节点/连接数量可达数千，旧实现用 md += ... 逐个拼接，
+	# GDScript 的 String += 会复制整个已累积字符串（O(n²)）。改为收集后一次 join。
+	var parts: PackedStringArray = PackedStringArray()
+	parts.append("Content for Scene: `%s`\n" % p_path.get_file())
+	parts.append("- **Type**: %s\n" % scene_resource.get_class())
+	parts.append("- **Path**: `%s`\n" % scene_resource.resource_path)
+	parts.append("- **Can Instantiate**: %s\n" % str(scene_resource.can_instantiate()))
 	
 	var state: SceneState = scene_resource.get_state() as SceneState
 	if not state:
@@ -30,21 +33,21 @@ static func read_scene_content(p_path: String) -> Dictionary:
 	# 继承的基场景
 	var base_state: SceneState = state.get_base_scene_state()
 	if base_state:
-		md += "- **Base Scene**: `%s`\n" % base_state.get_path()
+		parts.append("- **Base Scene**: `%s`\n" % base_state.get_path())
 	
 	# 节点列表
 	var node_count: int = state.get_node_count()
-	md += "\n**Nodes:** (%d)\n" % node_count
+	parts.append("\n**Nodes:** (%d)\n" % node_count)
 	for i in range(node_count):
-		md += _format_scene_state_node(state, i)
+		parts.append(_format_scene_state_node(state, i))
 	
 	# 信号连接
 	var conn_count: int = state.get_connection_count()
-	md += "\n**Connections:** (%d)\n" % conn_count
+	parts.append("\n**Connections:** (%d)\n" % conn_count)
 	for i in range(conn_count):
-		md += _format_scene_state_connection(state, i)
+		parts.append(_format_scene_state_connection(state, i))
 	
-	return {"success": true, "data": md}
+	return {"success": true, "data": "".join(parts)}
 
 
 # 格式化 SceneState 中的单个节点：路径、类型、子场景实例、组、导出/覆写属性

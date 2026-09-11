@@ -17,10 +17,7 @@ extends Resource
 ## 来源: opencode issue #33942 / OmniRoute #2822
 ## 若实测某模型支持图片，请在 .tres 中将对应条目的 supports_image 改为 true 或删除条目
 const TEXT_ONLY_MODELS: Array[String] = [
-	"deepseek-v4-pro",
-	"deepseek-v4-flash",
 	"glm-5.3",
-	"glm-5.2",
 ]
 
 # --- @export Vars ---

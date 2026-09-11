@@ -75,8 +75,9 @@ func execute(p_args: Dictionary) -> ToolResult:
 # 构建目录树文本。
 # p_list_files_depth >= 0: 本层直接文件逐个列名（目标根目录及其前 N 层子目录）
 # p_list_files_depth < 0:  本层直接文件以计数形式汇总，但仍递归展开子目录骨架
+# [性能] 旧实现用 result += ... 在每个条目上拼接，GDScript 的 String += 会复制整个
+# 已累积字符串（O(n²)）。目录树输出可达数百 KB，改为 PackedStringArray 收集后一次 join。
 func _build_folder_tree(p_path: String, p_indent: String, p_list_files_depth: int) -> String:
-	var result: String = ""
 	var dir := DirAccess.open(p_path)
 	if not dir:
 		return ""
@@ -104,6 +105,7 @@ func _build_folder_tree(p_path: String, p_indent: String, p_list_files_depth: in
 	if total_entries == 0:
 		return p_indent + "(empty)\n"
 	
+	var parts: PackedStringArray = PackedStringArray()
 	var entry_index: int = 0
 	
 	# 先输出子目录（递归展开，列名深度随之递减）
@@ -112,8 +114,8 @@ func _build_folder_tree(p_path: String, p_indent: String, p_list_files_depth: in
 		var is_last: bool = (entry_index == total_entries - 1)
 		var prefix: String = "└─ " if is_last else "├─ "
 		var sub_path: String = p_path.path_join(sub)
-		result += p_indent + prefix + sub + "/\n"
-		result += _build_folder_tree(sub_path, p_indent + ("   " if is_last else "│  "), p_list_files_depth - 1)
+		parts.append(p_indent + prefix + sub + "/\n")
+		parts.append(_build_folder_tree(sub_path, p_indent + ("   " if is_last else "│  "), p_list_files_depth - 1))
 		entry_index += 1
 	
 	# 再输出文件：列名层逐行列名，计数层显示汇总
@@ -121,9 +123,9 @@ func _build_folder_tree(p_path: String, p_indent: String, p_list_files_depth: in
 		for i in range(files.size()):
 			var is_last: bool = (entry_index == total_entries - 1)
 			var prefix: String = "└─ " if is_last else "├─ "
-			result += p_indent + prefix + files[i] + "\n"
+			parts.append(p_indent + prefix + files[i] + "\n")
 			entry_index += 1
 	elif not files.is_empty():
-		result += p_indent + "└─ %d files in this folder\n" % files.size()
+		parts.append(p_indent + "└─ %d files in this folder\n" % files.size())
 	
-	return result
+	return "".join(parts)

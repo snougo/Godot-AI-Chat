@@ -37,6 +37,7 @@ const CHAT_API_ENDPOINT: Array[String] = [
 	"deepseek-v4-pro",
 	"deepseek-v4-flash",
 	"deepseek-v4-flash-vision-exp",
+	"deepseek-flash",
 	"mimo-v2.5",
 	"mimo-v2.5-pro",
 	"hy3",

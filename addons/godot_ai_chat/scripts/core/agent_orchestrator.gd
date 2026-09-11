@@ -76,6 +76,11 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 		if chat_ui:
 			chat_ui.update_ui_state(ChatUI.UIState.TOOLCALLING)
 		
+		# 本轮工具返回的图片：先收集，等所有 tool 消息写完后统一注入。
+		# 若在此处直接写入历史，会插进 tool 消息序列中间，破坏
+		# 「tool_calls 之后必须紧跟同数量连续 tool 响应」的协议约束（400 格式错误）。
+		var pending_images: Array[Dictionary] = []
+		
 		for call in last_msg.tool_calls:
 			if is_cancelled: break
 			
@@ -116,6 +121,21 @@ func run_chat_cycle(base_history: ChatMessageHistory, settings: PluginSettingsCo
 				image_data if supports_inline else PackedByteArray(),
 				image_mime if supports_inline else "")
 			
-			# 将图片数据作为独立的 User 消息插入
+			# 不支持 inline 图片的 Provider：仅收集，写入历史推迟到循环之后
 			if not supports_inline and not image_data.is_empty():
-				current_chat_window.append_user_message("Image content from tool: " + tool_name, [{"data": image_data, "mime": image_mime}])
+				pending_images.append({
+					"data": image_data,
+					"mime": image_mime,
+					"tool_name": tool_name,
+				})
+		
+		# 所有 tool 消息已就位，此时注入 User 消息才是合法位置
+		if not pending_images.is_empty():
+			var images: Array = []
+			var tool_names: PackedStringArray = PackedStringArray()
+			for img in pending_images:
+				images.append({"data": img["data"], "mime": img["mime"]})
+				tool_names.append(img["tool_name"])
+			current_chat_window.append_user_message(
+				"Image content from tool(s): " + ", ".join(tool_names),
+				images)
