@@ -12,8 +12,6 @@ extends FoldableContainer
 
 ## 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
-## 预加载代码查看器窗口
-const CODE_VIEWER_WINDOW_RES: PackedScene = preload("res://addons/godot_ai_chat/scene/popup_code_viewer_window.tscn")
 
 ## 角色标题样式资源
 const TITLE_STYLE_ASSISTANT: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/assistant_title.tres")
@@ -40,6 +38,32 @@ const REASONING_VIEW_HEIGHT: float = 200.0
 const REASONING_WRAP_MODE: TextEdit.LineWrappingMode = TextEdit.LINE_WRAPPING_BOUNDARY
 ## [临时探针] 单次写入耗时告警阈值（微秒）：超过则打印，用于确认卡顿是否仍在写入路径
 const REASONING_PROBE_WARN_USEC: int = 30000
+
+## 内联预览显示的工具参数最大字符数
+## [为什么必须有上限] 文档创建类工具的 arguments 常达数十~数百 KB，且多为"一整行"的转义 JSON。
+## 旧实现对每个参数增量都会：解析全量 JSON → 全量序列化 → 清空并整段重排 RichTextLabel
+## →（fit_content + 自动换行测量，对一整行超长文本做断行分析）。
+## 这些成本都与参数总长度成正比，且全部发生在主线程、中间没有任何 await 点，
+## 于是"一大段 chunk 冲进来"表现为编辑器卡死，历史加载表现为"停在某条消息几秒"。
+##
+## 预览取小值是安全的：完整参数由查看窗口提供，预览只承担"一眼看出调用了什么工具"。
+const TOOL_ARGS_RENDER_LIMIT: int = 600
+## 参数长度不超过该值时，内联预览先做一次 JSON 美化（仅影响预览显示）
+const TOOL_ARGS_PARSE_LIMIT: int = 600
+## 查看窗口中尝试"可读化"渲染的长度上限；超过则直接显示原文，避免点开后长时间无响应
+const TOOL_ARGS_VIEWER_PARSE_LIMIT: int = 1048576
+## [临时探针] 单次参数渲染耗时告警阈值（微秒），用于验证封顶是否生效
+const TOOL_ARGS_PROBE_WARN_USEC: int = 5000
+
+## 查看窗口默认尺寸
+const TEXT_VIEWER_WINDOW_SIZE: Vector2i = Vector2i(1000, 800)
+## 查看窗口最小尺寸
+const TEXT_VIEWER_WINDOW_MIN_SIZE: Vector2i = Vector2i(600, 400)
+## 查看窗口四周留白（像素）
+const TEXT_VIEWER_MARGIN: float = 8.0
+## 查看窗口内容区底部预留高度（像素）：给 AcceptDialog 的按钮区留位。
+## 取值与旧版 popup_code_viewer_window.tscn 中的 offset_bottom 一致，避免内容压住 OK 按钮。
+const TEXT_VIEWER_BOTTOM_RESERVED: float = 49.0
 
 
 # --- @onready Vars ---
@@ -85,8 +109,14 @@ var _is_first_text: bool = true
 # 标记上一行是否为空白行（用于压缩连续空白行）
 var _previous_line_was_blank: bool = false
 
-# 当前打开的代码查看窗口引用
-var _current_popup_code_view_window: PopupCodeViewWindow = null
+# 文本查看窗口（懒创建并复用；关闭时清空文本）
+# [为什么复用] 每次点击都实例化/释放窗口会带来反复创建子窗口与文本缓冲的开销，
+# 也容易产生"多窗口互相串扰、关不掉"这类 bug。
+var _text_viewer_window: AcceptDialog = null
+# 工具参数视图：纯 TextEdit —— 无高亮器、无行号槽、无任何逐行装饰
+var _text_viewer_args_edit: TextEdit = null
+# 代码视图：CodeEdit —— 保留语法高亮与行号
+var _text_viewer_code_edit: CodeEdit = null
 
 # 表格渲染状态
 var _in_table: bool = false
@@ -252,20 +282,42 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 	var vbox: VBoxContainer = VBoxContainer.new()
 	panel.add_child(vbox)
 	
-	# 2. 标题
-	var title_label: RichTextLabel = RichTextLabel.new()
-	title_label.bbcode_enabled = true
-	title_label.fit_content = true
-	title_label.selection_enabled = false
-	
-	title_label.append_text("[color=yellow]%s[/color]" % clean_name)
-	vbox.add_child(title_label)
-	
-	# 3. 参数详情
+	# 2. 参数文本框（先建，供标题行的 Popout 按钮引用）
+	# 本控件只负责"预览"：实际渲染长度在 _build_args_display_text() 中受常量上限约束。
+	# mouse_filter 设为 PASS：面板可能较高，滚轮应继续驱动外层聊天列表滚动。
 	var args_label: RichTextLabel = RichTextLabel.new()
 	args_label.name = "ArgsLabel"
 	args_label.bbcode_enabled = true
 	args_label.fit_content = true
+	args_label.selection_enabled = true
+	args_label.mouse_filter = Control.MOUSE_FILTER_PASS
+	# 面板持有引用，供 _update_tool_call_ui() O(1) 取用（替代递归 find_child）
+	panel.set_meta("args_label", args_label)
+	
+	# 3. 标题行：工具名 + 完整参数查看按钮
+	# [为什么需要查看窗口] 预览是截断的；完整参数始终完整保存在 meta["full_args"] 中，
+	# 由查看窗口按需渲染（一次性静态渲染），而不是塞进会被高频刷新的 RichTextLabel。
+	var header: HBoxContainer = HBoxContainer.new()
+	
+	var title_label: RichTextLabel = RichTextLabel.new()
+	title_label.bbcode_enabled = true
+	title_label.fit_content = true
+	title_label.selection_enabled = false
+	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_label.append_text("[color=yellow]%s[/color]" % clean_name)
+	header.add_child(title_label)
+	
+	var popout_args_button: Button = Button.new()
+	popout_args_button.text = "Popout"
+	popout_args_button.flat = true
+	popout_args_button.focus_mode = Control.FOCUS_NONE
+	popout_args_button.tooltip_text = "在独立窗口中查看完整工具参数（内联预览可能被截断）"
+	popout_args_button.pressed.connect(func():
+		_show_text_viewer(_build_args_viewer_text(String(args_label.get_meta("full_args", ""))), false)
+	)
+	header.add_child(popout_args_button)
+	
+	vbox.add_child(header)
 	vbox.add_child(args_label)
 	
 	_update_args_display(args_label, p_tool_call)
@@ -408,35 +460,76 @@ func _set_title(p_role: String, p_model_name: String) -> void:
 # 更新流式工具调用参数 UI
 func _update_tool_call_ui(p_node_name: String, p_tool_call: Dictionary) -> void:
 	var panel: Node = _content_container.get_node_or_null(p_node_name)
-	if panel:
-		var args_label: RichTextLabel = panel.find_child("ArgsLabel", true, false)
-		if args_label:
-			_update_args_display(args_label, p_tool_call)
+	if not panel:
+		return
+	
+	# 用面板 meta 保存的引用替代递归 find_child("ArgsLabel", true, false)：
+	# 本函数在流式期间会随参数增量反复调用，没必要每次都做一次子树搜索
+	if not panel.has_meta("args_label"):
+		return
+	var args_label: RichTextLabel = panel.get_meta("args_label") as RichTextLabel
+	if args_label == null:
+		return
+	
+	_update_args_display(args_label, p_tool_call)
 
 
-# 解析并格式化参数显示
+# 解析并格式化参数预览
+# [性能] 显示长度受 TOOL_ARGS_RENDER_LIMIT 约束，单次刷新的成本与参数总长度解耦：
+# 流式卡死与历史加载停顿都源于旧实现"每次增量都对全量参数解析 + 序列化 + 整段重排"。
 func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> void:
+	var probe_start_usec: int = Time.get_ticks_usec()
+	
 	var args_str: String = ""
 	if p_tool_call.has("function"):
-		args_str = p_tool_call.function.get("arguments", "")
+		args_str = str(p_tool_call.function.get("arguments", ""))
 	else:
 		args_str = str(p_tool_call.get("arguments", ""))
 	
+	# 面板始终保留完整参数（供查看窗口使用）；预览文本另行截断
+	p_label.set_meta("full_args", args_str)
+	
+	var display_text: String = _build_args_display_text(args_str)
+	
 	p_label.clear()
 	p_label.push_color(Color(0.7, 0.7, 0.7))
-	
-	if args_str.strip_edges().begins_with("{"):
-		var json_obj: JSON = JSON.new()
-		var err: Error = json_obj.parse(args_str)
-		
-		if err == OK:
-			p_label.add_text(JSON.stringify(json_obj.data, "  "))
-		else:
-			p_label.add_text(args_str)
-	else:
-		p_label.add_text(args_str)
-	
+	p_label.add_text(display_text)
 	p_label.pop()
+	
+	# [临时探针] 用于验证封顶是否生效（默认日志级别不含 DEBUG，开销可忽略）
+	if AIChatLogger.current_flags & AIChatLogger.FLAG_DEBUG:
+		var elapsed_usec: int = Time.get_ticks_usec() - probe_start_usec
+		if elapsed_usec >= TOOL_ARGS_PROBE_WARN_USEC:
+			AIChatLogger.debug("Tool args render slow: full %d chars -> shown %d chars, %d usec" % [
+				args_str.length(), display_text.length(), elapsed_usec,
+			])
+
+
+# 构造参数预览文本
+func _build_args_display_text(p_args_str: String) -> String:
+	# 超大参数直接跳过解析与序列化，只显示截断后的原文
+	if p_args_str.length() > TOOL_ARGS_PARSE_LIMIT:
+		return _truncate_args_for_display(p_args_str)
+	
+	if not p_args_str.strip_edges().begins_with("{"):
+		return _truncate_args_for_display(p_args_str)
+	
+	var json_obj: JSON = JSON.new()
+	if json_obj.parse(p_args_str) != OK:
+		# 流式接收中参数必然是不完整的 JSON，这不是错误：原样显示即可
+		return _truncate_args_for_display(p_args_str)
+	
+	return _truncate_args_for_display(JSON.stringify(json_obj.data, "  "))
+
+
+# 截断超长参数文本，并附带提示
+# 截断发生在美化之后，因此最终显示长度一定不超过 TOOL_ARGS_RENDER_LIMIT
+func _truncate_args_for_display(p_text: String) -> String:
+	if p_text.length() <= TOOL_ARGS_RENDER_LIMIT:
+		return p_text
+	
+	var suffix: String = "\n… [已截断显示，参数共 %d 字符，完整内容请点 Popout]" % p_text.length()
+	return p_text.substr(0, TOOL_ARGS_RENDER_LIMIT) + suffix
 
 
 # 创建思考内容 UI 结构
@@ -733,10 +826,9 @@ func _create_code_block(p_lang: String) -> void:
 	popup_code_window_button.flat = true
 	popup_code_window_button.focus_mode = Control.FOCUS_NONE
 	popup_code_window_button.pressed.connect(func():
-		DisplayServer.clipboard_set(code_edit.text)
-		var code_content: String = DisplayServer.clipboard_get()
-		AIChatLogger.debug(code_content)
-		_show_code_in_popup_window(code_content)
+		# 直接传文本给查看窗口：旧实现走"写剪贴板 → 读剪贴板 → 打印全文日志"，
+		# 其中的全量日志在 DEBUG 开启时会把整段代码打印进 Output 面板，本身就是一次卡顿。
+		_show_text_viewer(code_edit.text, true)
 	)
 	
 	header.add_child(popup_code_window_button)
@@ -818,28 +910,150 @@ func _typewriter_loop() -> void:
 	get_tree().create_timer(0.016).timeout.connect(_typewriter_loop)
 
 
-# 打开独立代码查看窗口
-func _show_code_in_popup_window(p_code_content: String) -> void:
-	var new_popup_code_viewer_window: PopupCodeViewWindow = CODE_VIEWER_WINDOW_RES.instantiate()
-	_current_popup_code_view_window = new_popup_code_viewer_window
-	add_child(_current_popup_code_view_window)
+# 打开（或复用）文本查看窗口
+# [param p_text]: 待显示文本（完整内容，不做截断）
+# [param p_is_code_view]: true = 代码视图（语法高亮 + 行号）；false = 工具参数视图（纯文本）
+func _show_text_viewer(p_text: String, p_is_code_view: bool) -> void:
+	if not is_instance_valid(_text_viewer_window):
+		_create_text_viewer_window()
 	
-	_current_popup_code_view_window.get_ok_button().pressed.connect(func():
-		remove_child(_current_popup_code_view_window)
-		_current_popup_code_view_window.queue_free()
-		_current_popup_code_view_window = null
-		
-		await get_tree().create_timer(1.0).timeout
-		if is_instance_valid(new_popup_code_viewer_window):
-			AIChatLogger.debug("PopupCodeViewWindow Instance is still in Memory")
-		else:
-			AIChatLogger.debug("PopupCodeViewWindow Instance has been removed from Memory")
-	)
+	if not is_instance_valid(_text_viewer_args_edit) or not is_instance_valid(_text_viewer_code_edit):
+		return
 	
-	_current_popup_code_view_window.visible = true
-	var code_edit: CodeEdit = _current_popup_code_view_window.popup_code_edit
-	code_edit.text = p_code_content
-	_current_popup_code_view_window.popup_centered(Vector2i(800, 600))
+	# 两种用途用两个控件表达，而不是靠开关一堆属性：
+	# 参数视图在结构上就没有高亮器与行号槽，也就不可能被后续改动"顺手打开"而回归性能。
+	_text_viewer_args_edit.visible = not p_is_code_view
+	_text_viewer_code_edit.visible = p_is_code_view
+	
+	if p_is_code_view:
+		_text_viewer_code_edit.text = p_text
+	else:
+		_text_viewer_args_edit.text = p_text
+	
+	_text_viewer_window.popup_centered(TEXT_VIEWER_WINDOW_SIZE)
+
+
+# 创建文本查看窗口（纯代码构建，不新增场景资源）
+# [为什么代码构建] 窗口的关键配置本身就是性能契约，而 .tscn 不支持注释、编辑器还会重写它，
+# 把契约放在场景里等于把理由丢掉；本文件其余 UI（代码块、工具面板、思考框）也一律是代码构建。
+func _create_text_viewer_window() -> void:
+	var window: AcceptDialog = AcceptDialog.new()
+	window.title = "Viewer"
+	window.size = TEXT_VIEWER_WINDOW_SIZE
+	window.min_size = TEXT_VIEWER_WINDOW_MIN_SIZE
+	# 注意：Godot 4 的属性名是 dialog_hide_on_ok（Godot 3 才叫 hide_on_ok）
+	window.dialog_hide_on_ok = true
+	
+	# 复刻旧版场景的布局：四周留白 + 底部给按钮区留位，避免内容压住 OK 按钮
+	var margin: MarginContainer = MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.offset_left = TEXT_VIEWER_MARGIN
+	margin.offset_top = TEXT_VIEWER_MARGIN
+	margin.offset_right = -TEXT_VIEWER_MARGIN
+	margin.offset_bottom = -TEXT_VIEWER_BOTTOM_RESERVED
+	window.add_child(margin)
+	
+	# 1. 工具参数视图：只设必要项，其余全部沿用 TextEdit 默认值 ——
+	#    高亮器默认 null、没有行号槽、draw_tabs / draw_spaces / minimap_draw / scroll_smooth 默认全为 false，
+	#    这正是"一个不做任何渲染的 TextEdit"。
+	#    wrap 固定 NONE：这是 TextEdit 最省的模式（可见行数 == 逻辑行数，无需逐行换行测量）；
+	#    参数文本已按真实换行渲染，本就不需要换行。
+	var args_edit: TextEdit = TextEdit.new()
+	args_edit.editable = false
+	args_edit.wrap_mode = TextEdit.LINE_WRAPPING_NONE
+	args_edit.caret_blink = false
+	args_edit.highlight_current_line = false
+	margin.add_child(args_edit)
+	
+	# 2. 代码视图：保留语法高亮与行号（与旧版代码块弹窗一致）
+	var code_edit: CodeEdit = CodeEdit.new()
+	code_edit.editable = false
+	code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
+	code_edit.gutters_draw_line_numbers = true
+	code_edit.draw_tabs = true
+	code_edit.minimap_draw = false
+	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_NONE
+	# 平滑滚动是"逐帧重绘新露出区域"的持续成本，对查看器不划算（TextEdit 默认即为 false）
+	code_edit.scroll_smooth = false
+	margin.add_child(code_edit)
+	
+	# 关闭路径统一处理：OK 按钮 / 右上角关闭 / Esc
+	window.confirmed.connect(_on_text_viewer_closed)
+	window.canceled.connect(_on_text_viewer_closed)
+	window.close_requested.connect(_on_text_viewer_closed)
+	
+	add_child(window)
+	_text_viewer_window = window
+	_text_viewer_args_edit = args_edit
+	_text_viewer_code_edit = code_edit
+	# 验证窗口是否真的被复用：正常应当每个消息块最多出现一次
+	AIChatLogger.debug("[ChatMessageBlock] Text viewer created")
+
+
+# 查看窗口关闭回调：隐藏并清空文本
+# [为什么清空内容] 文本是内存占用的大头（TextServer 侧的文本缓冲），窗口节点本身很小。
+# 关闭即释放内容，既避免"看起来像泄漏"，也省掉每次点击重建窗口的开销。
+func _on_text_viewer_closed() -> void:
+	if not is_instance_valid(_text_viewer_window):
+		return
+	
+	_text_viewer_window.visible = false
+	if is_instance_valid(_text_viewer_args_edit):
+		_text_viewer_args_edit.text = ""
+	if is_instance_valid(_text_viewer_code_edit):
+		_text_viewer_code_edit.text = ""
+
+
+# 构造查看窗口显示的工具参数文本
+# [性能边界] 只在用户主动点开时执行一次：解析与渲染都是 O(全文)，不在流式热路径上；
+# 超过上限时退化为直接显示原文，避免点开后长时间无响应。
+func _build_args_viewer_text(p_full_args: String) -> String:
+	if p_full_args.is_empty():
+		return p_full_args
+	if p_full_args.length() > TOOL_ARGS_VIEWER_PARSE_LIMIT:
+		return p_full_args
+	if not p_full_args.strip_edges().begins_with("{"):
+		return p_full_args
+	
+	var json_obj: JSON = JSON.new()
+	if json_obj.parse(p_full_args) != OK:
+		return p_full_args
+	
+	# 头部留一行说明：下方不是原始 JSON 文本，而是可读化渲染
+	return "// 参数已按可读形式渲染：字符串值中的换行按真实换行显示\n" + _format_args_readable(json_obj.data)
+
+
+# 把参数数据渲染为人类可读的多行文本
+# [与 JSON.stringify 的差别] 字符串值原样输出（其中已含真实换行与制表符），
+# 因此配合 LINE_WRAPPING_NONE 也能纵向阅读，完全不需要逐行换行测量。
+# [param p_value]: 已解析的参数数据
+# [param p_indent]: 当前缩进
+func _format_args_readable(p_value: Variant, p_indent: String = "") -> String:
+	var child_indent: String = p_indent + "  "
+	
+	if p_value is Dictionary:
+		var dict: Dictionary = p_value
+		if dict.is_empty():
+			return "{}"
+		var entry_lines: PackedStringArray = PackedStringArray()
+		for key: Variant in dict.keys():
+			entry_lines.append("%s%s: %s" % [child_indent, str(key), _format_args_readable(dict[key], child_indent)])
+		return "{\n" + "\n".join(entry_lines) + "\n" + p_indent + "}"
+	
+	if p_value is Array:
+		var arr: Array = p_value
+		if arr.is_empty():
+			return "[]"
+		var item_lines: PackedStringArray = PackedStringArray()
+		for item: Variant in arr:
+			item_lines.append(child_indent + _format_args_readable(item, child_indent))
+		return "[\n" + "\n".join(item_lines) + "\n" + p_indent + "]"
+	
+	if p_value is String:
+		# 原样输出：换行已是真实换行
+		return str(p_value)
+	
+	return JSON.stringify(p_value)
 
 
 func _render_segments(rtl: RichTextLabel, segments: Array[Dictionary]) -> void:
@@ -874,9 +1088,12 @@ func _clear_content() -> void:
 	for c in _content_container.get_children():
 		c.queue_free()
 	
-	if is_instance_valid(_current_popup_code_view_window):
-		_current_popup_code_view_window.queue_free()
-		_current_popup_code_view_window = null
+	# 查看窗口是消息块的直接子节点（不在 _content_container 内），需要单独释放
+	if is_instance_valid(_text_viewer_window):
+		_text_viewer_window.queue_free()
+	_text_viewer_window = null
+	_text_viewer_args_edit = null
+	_text_viewer_code_edit = null
 	
 	if _content_container.has_meta("shown_calls"):
 		_content_container.set_meta("shown_calls", [])

@@ -150,10 +150,15 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 		_streaming_block.append_reasoning(delta.reasoning_delta)
 	
 	# 5. 工具调用视觉反馈
-	var streaming_msg: ChatMessage = _assembler.get_message()
-	if streaming_msg != null and not streaming_msg.tool_calls.is_empty():
-		for tc: Dictionary in streaming_msg.tool_calls:
-			_streaming_block.show_tool_call(tc)
+	# [性能] 只在本次增量真的带来工具调用数据时才刷新。
+	# 旧实现在"当前消息有 tool_calls"时，每个 chunk 都会把所有工具调用面板重刷一遍 ——
+	# 纯文本 chunk 也会触发参数预览的截断/重排版，属于纯浪费。
+	# 新建面板、参数增长、重绘后补渲染三种情况都已覆盖，不会漏更新。
+	if not delta.tool_call_deltas.is_empty():
+		var streaming_msg: ChatMessage = _assembler.get_message()
+		if streaming_msg != null:
+			for tc: Dictionary in streaming_msg.tool_calls:
+				_streaming_block.show_tool_call(tc)
 	
 	# 6. Token 统计
 	if not delta.usage.is_empty():
