@@ -84,24 +84,18 @@ func _exit_tree() -> void:
 
 # 初始化插件需要的文件和文件夹
 func _initialize_plugin_file_environment() -> void:
-	var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
-	var need_scan: bool = false
-	
-	# 确保对话存档目录存在
-	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
-		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
-		need_scan = true
 	
 	# 确保插件配置文件存在
 	# ToolBox.get_plugin_settings() 内部会创建文件并调用 update_file，
-	# 但如果是初次创建，可能因为文件夹未扫描而失败，所以这里标记 scan
 	if not FileAccess.file_exists(PluginPaths.SETTINGS_PATH):
 		AIChatLogger.info("[Godot AI Chat] Settings file not found, creating default...")
 		ToolBox.get_plugin_settings() # 这会创建默认文件
-		need_scan = true
 	
-	# 如果创建了任何新目录或文件，执行一次完整的扫描
-	# 这是唯一一次允许调用 scan() 的地方，因为它在插件加载初期运行
-	if need_scan:
-		AIChatLogger.debug("[Godot AI Chat] Initializing plugin file environment (First Run Scan)...")
+		# 确保对话存档目录存在
+	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
+		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
+		await get_tree().create_timer(1.0).timeout
+		
+		var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
 		editor_file_system.scan()
+		AIChatLogger.info("[Godot AI Chat] Initializing plugin file environment (First Run Scan)...")
