@@ -9,7 +9,7 @@ extends AiTool
 
 func _init() -> void:
 	tool_name = "rollback_files"
-	tool_description = "Roolback files if needed."
+	tool_description = "Rollback files if needed."
 
 
 # --- Public Functions ---

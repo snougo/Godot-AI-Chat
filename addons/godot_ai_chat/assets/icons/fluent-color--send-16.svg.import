@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://brk43jkprsfdw"
-path="res://.godot/imported/streamline-sharp-color--mail-send-email-message-flat.svg-dd2ca6f4e20b9d444d3dcc59514ab991.ctex"
+uid="uid://47fmo36lk5ra"
+path="res://.godot/imported/fluent-color--send-16.svg-a8b718537563e676c1e8eefd3e0a390c.ctex"
 metadata={
 "has_editor_variant": true,
 "vram_texture": false
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://addons/godot_ai_chat/assets/icons/streamline-sharp-color--mail-send-email-message-flat.svg"
-dest_files=["res://.godot/imported/streamline-sharp-color--mail-send-email-message-flat.svg-dd2ca6f4e20b9d444d3dcc59514ab991.ctex"]
+source_file="res://addons/godot_ai_chat/assets/icons/fluent-color--send-16.svg"
+dest_files=["res://.godot/imported/fluent-color--send-16.svg-a8b718537563e676c1e8eefd3e0a390c.ctex"]
 
 [params]
 

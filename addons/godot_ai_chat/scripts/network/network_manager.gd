@@ -1,5 +1,5 @@
 @tool
-class_name NetworkManager
+class_name AIChatNetworkManager
 extends Node
 
 ## 网络管理器
@@ -16,6 +16,11 @@ signal get_model_list_request_failed(error: String)
 # 保留流式数据信号供 UI 实时更新
 signal new_chat_request_sending
 signal new_stream_chunk_received(chunk: Dictionary)
+
+
+# --- Constants ---
+
+const StreamRequest := preload("res://addons/godot_ai_chat/scripts/network/stream_request.gd")
 
 
 # --- @onready Vars ---
@@ -246,6 +251,10 @@ func _update_provider_config() -> bool:
 	temperature = settings.temperature
 	
 	current_provider = ProviderFactory.create_provider(settings.api_provider)
+	if current_provider != null:
+		# 告知 Provider 目标模型：工具 schema 方言 / inline 图片等能力查询发生在
+		# build_request_body() 之前，那时无法通过请求参数传入模型名
+		current_provider.set_active_model_name(current_model_name)
 	return current_provider != null
 
 

@@ -28,13 +28,16 @@ enum Combinator { NONE, DESCENDANT, CHILD, ADJACENT, SIBLING }
 static func query_all(p_root: AIChatHtmlNode, p_selector: String) -> Array[AIChatHtmlNode]:
 	var compiled: Array = _compile(p_selector)
 	var result: Array[AIChatHtmlNode] = []
+	
 	if compiled.is_empty():
 		return result
+	
 	for node in p_root.walk_elements():
 		if node == p_root:
 			continue
 		if _matches_any(node, compiled):
 			result.append(node)
+	
 	return result
 
 
@@ -43,11 +46,13 @@ static func query_first(p_root: AIChatHtmlNode, p_selector: String) -> AIChatHtm
 	var compiled: Array = _compile(p_selector)
 	if compiled.is_empty():
 		return null
+	
 	for node in p_root.walk_elements():
 		if node == p_root:
 			continue
 		if _matches_any(node, compiled):
 			return node
+	
 	return null
 
 
@@ -55,6 +60,7 @@ static func query_first(p_root: AIChatHtmlNode, p_selector: String) -> AIChatHtm
 static func matches(p_node: AIChatHtmlNode, p_selector: String) -> bool:
 	if not p_node.is_element():
 		return false
+	
 	return _matches_any(p_node, _compile(p_selector))
 
 
@@ -67,13 +73,16 @@ static func matches(p_node: AIChatHtmlNode, p_selector: String) -> bool:
 # 编译结果为 Array[Array]（选择器列表 → 复杂选择器列表）。
 static func _compile(p_selector: String) -> Array:
 	var groups: Array = []
+	
 	for part in _split_top_level(p_selector, ","):
 		var trimmed: String = part.strip_edges()
+		
 		if trimmed.is_empty():
 			continue
 		var complex: Array = _compile_complex(trimmed)
 		if not complex.is_empty():
 			groups.append(complex)
+	
 	return groups
 
 
@@ -82,21 +91,26 @@ static func _compile_complex(p_source: String) -> Array:
 	var cursor: int = 0
 	var length: int = p_source.length()
 	var pending_combinator: Combinator = Combinator.NONE
+	
 	while cursor < length:
 		while cursor < length and _is_whitespace(p_source[cursor]):
 			cursor += 1
 			if pending_combinator == Combinator.NONE:
 				pending_combinator = Combinator.DESCENDANT
+		
 		if cursor >= length:
 			break
+		
 		var c: String = p_source[cursor]
 		if c == ">" or c == "+" or c == "~":
 			pending_combinator = _combinator_for(c)
 			cursor += 1
 			continue
+		
 		# 读取一个不含空白与组合器的复合选择器片段
 		var start: int = cursor
 		var depth: int = 0
+		
 		while cursor < length:
 			var ch: String = p_source[cursor]
 			if ch == "[" or ch == "(":
@@ -106,6 +120,7 @@ static func _compile_complex(p_source: String) -> Array:
 			elif depth == 0 and (_is_whitespace(ch) or ch == ">" or ch == "+" or ch == "~" or ch == ","):
 				break
 			cursor += 1
+		
 		var token: String = p_source.substr(start, cursor - start)
 		if token.is_empty():
 			break
@@ -114,6 +129,7 @@ static func _compile_complex(p_source: String) -> Array:
 			out[out.size() - 1]["combinator"] = pending_combinator
 		out.append({"compound": _compile_compound(token), "combinator": Combinator.NONE})
 		pending_combinator = Combinator.NONE
+	
 	return out
 
 
@@ -125,6 +141,7 @@ static func _combinator_for(p_char: String) -> Combinator:
 			return Combinator.ADJACENT
 		"~":
 			return Combinator.SIBLING
+	
 	return Combinator.DESCENDANT
 
 
@@ -136,8 +153,10 @@ static func _compile_compound(p_source: String) -> Dictionary:
 		"attrs": [] as Array,
 		"pseudos": [] as Array,
 	}
+	
 	var cursor: int = 0
 	var length: int = p_source.length()
+	
 	# 开头的标签名或通配符
 	if cursor < length and (p_source[cursor] == "*" or _is_identifier_start(p_source[cursor])):
 		var start: int = cursor
@@ -147,6 +166,7 @@ static func _compile_compound(p_source: String) -> Dictionary:
 			while cursor < length and _is_identifier(p_source[cursor]):
 				cursor += 1
 		compound["tag"] = p_source.substr(start, cursor - start).to_lower()
+	
 	while cursor < length:
 		var c: String = p_source[cursor]
 		if c == "#":
@@ -185,23 +205,29 @@ static func _compile_compound(p_source: String) -> Dictionary:
 			compound["pseudos"].append({"name": pseudo_name, "arg": pseudo_arg})
 		else:
 			cursor += 1
+	
 	return compound
 
 
 static func _compile_attribute(p_body: String) -> Dictionary:
 	var out: Dictionary = {"name": "", "op": "", "value": ""}
 	var trimmed: String = p_body.strip_edges()
+	
 	for op in ["~=", "^=", "$=", "*=", "|=", "="]:
 		var index: int = trimmed.find(op)
 		if index == -1:
 			continue
+		
 		out["name"] = trimmed.substr(0, index).strip_edges().to_lower()
 		out["op"] = op
+		
 		var raw: String = trimmed.substr(index + op.length()).strip_edges()
 		if raw.length() >= 2 and (raw[0] == "\"" or raw[0] == "'") and raw[raw.length() - 1] == raw[0]:
 			raw = raw.substr(1, raw.length() - 2)
+		
 		out["value"] = raw
 		return out
+	
 	out["name"] = trimmed.to_lower()
 	return out
 
@@ -212,6 +238,7 @@ static func _matches_any(p_node: AIChatHtmlNode, p_groups: Array) -> bool:
 	for complex: Array in p_groups:
 		if _matches_complex(p_node, complex):
 			return true
+	
 	return false
 
 
@@ -223,12 +250,14 @@ static func _matches_complex(p_node: AIChatHtmlNode, p_complex: Array) -> bool:
 		return false
 	if last_index == 0:
 		return true
+	
 	return _matches_complex_upwards(p_node, p_complex, last_index - 1, p_complex[last_index - 1]["combinator"])
 
 
 # 由当前节点向上回溯，逐节验证前置复合选择器与组合器
 static func _matches_complex_upwards(p_node: AIChatHtmlNode, p_complex: Array, p_step_index: int, p_combinator: Combinator) -> bool:
 	var compound: Dictionary = p_complex[p_step_index]["compound"]
+	
 	match p_combinator:
 		Combinator.DESCENDANT:
 			var ancestor: AIChatHtmlNode = p_node.parent
@@ -268,27 +297,34 @@ static func _matches_complex_upwards(p_node: AIChatHtmlNode, p_complex: Array, p
 						return true
 				sibling = _previous_element_sibling(sibling)
 			return false
+	
 	return false
 
 
 static func _matches_compound(p_node: AIChatHtmlNode, p_compound: Dictionary) -> bool:
 	if not p_node.is_element():
 		return false
+	
 	var tag: String = p_compound["tag"]
 	if not tag.is_empty() and tag != "*" and p_node.tag_name != tag:
 		return false
+	
 	var wanted_id: String = p_compound["id"]
 	if not wanted_id.is_empty() and p_node.get_id() != wanted_id:
 		return false
+	
 	for css_class: String in p_compound["classes"]:
 		if not p_node.has_class(css_class):
 			return false
+	
 	for attribute: Dictionary in p_compound["attrs"]:
 		if not _matches_attribute(p_node, attribute):
 			return false
+	
 	for pseudo: Dictionary in p_compound["pseudos"]:
 		if not _matches_pseudo(p_node, pseudo):
 			return false
+	
 	return true
 
 
@@ -296,11 +332,14 @@ static func _matches_attribute(p_node: AIChatHtmlNode, p_attribute: Dictionary) 
 	var name: String = p_attribute["name"]
 	if not p_node.has_attribute(name):
 		return false
+	
 	var op: String = p_attribute["op"]
 	if op.is_empty():
 		return true
+	
 	var actual: String = p_node.get_attribute(name)
 	var value: String = p_attribute["value"]
+	
 	match op:
 		"=":
 			return actual == value
@@ -317,6 +356,7 @@ static func _matches_attribute(p_node: AIChatHtmlNode, p_attribute: Dictionary) 
 			return not value.is_empty() and actual.find(value) != -1
 		"|=":
 			return actual == value or actual.begins_with(value + "-")
+	
 	return false
 
 
@@ -355,6 +395,7 @@ static func _matches_pseudo(p_node: AIChatHtmlNode, p_pseudo: Dictionary) -> boo
 			return _matches_nth_expression(p_pseudo["arg"], _element_index(p_node, true, false))
 		"nth-last-of-type":
 			return _matches_nth_expression(p_pseudo["arg"], _element_index(p_node, true, true))
+	
 	return false
 
 
@@ -366,6 +407,7 @@ static func _element_index(p_node: AIChatHtmlNode, p_of_type: bool, p_from_end: 
 	var parent: AIChatHtmlNode = p_node.parent
 	if parent == null:
 		return 1
+	
 	var siblings: Array[AIChatHtmlNode] = []
 	for child in parent.children:
 		if not child.is_element():
@@ -373,6 +415,7 @@ static func _element_index(p_node: AIChatHtmlNode, p_of_type: bool, p_from_end: 
 		if p_of_type and child.tag_name != p_node.tag_name:
 			continue
 		siblings.append(child)
+	
 	if p_from_end:
 		for i in siblings.size():
 			if siblings[siblings.size() - 1 - i] == p_node:
@@ -381,6 +424,7 @@ static func _element_index(p_node: AIChatHtmlNode, p_of_type: bool, p_from_end: 
 		for i in siblings.size():
 			if siblings[i] == p_node:
 				return i + 1
+	
 	return 0
 
 
@@ -388,16 +432,20 @@ static func _element_index(p_node: AIChatHtmlNode, p_of_type: bool, p_from_end: 
 static func _matches_nth_expression(p_arg: String, p_index_one_based: int) -> bool:
 	if p_index_one_based <= 0:
 		return false
+	
 	var parsed: Array = _parse_an_plus_b(p_arg)
 	if parsed.is_empty():
 		return false
+	
 	var coefficient: int = parsed[0]
 	var offset: int = parsed[1]
 	if coefficient == 0:
 		return p_index_one_based == offset
+	
 	var difference: int = p_index_one_based - offset
 	if difference % coefficient != 0:
 		return false
+	
 	@warning_ignore("integer_division")
 	var step: int = difference / coefficient
 	return step >= 0
@@ -414,14 +462,17 @@ static func _parse_an_plus_b(p_arg: String) -> Array:
 	if text == "even":
 		return [2, 0]
 	text = text.replace(" ", "")
+	
 	var n_index: int = text.find("n")
 	if n_index == -1:
 		if _is_signed_integer(text):
 			return [0, text.to_int()]
 		return []
+	
 	var coefficient_text: String = text.substr(0, n_index)
 	var offset_text: String = text.substr(n_index + 1)
 	var coefficient: int = 0
+	
 	if coefficient_text.is_empty() or coefficient_text == "+":
 		coefficient = 1
 	elif coefficient_text == "-":
@@ -430,11 +481,13 @@ static func _parse_an_plus_b(p_arg: String) -> Array:
 		coefficient = coefficient_text.to_int()
 	else:
 		return []
+	
 	var offset: int = 0
 	if not offset_text.is_empty():
 		if not _is_signed_integer(offset_text):
 			return []
 		offset = offset_text.to_int()
+	
 	return [coefficient, offset]
 
 
@@ -443,6 +496,7 @@ static func _is_signed_integer(p_text: String) -> bool:
 		return false
 	if p_text[0] == "+" or p_text[0] == "-":
 		return p_text.substr(1).is_valid_int()
+	
 	return p_text.is_valid_int()
 
 
@@ -452,10 +506,12 @@ static func _previous_element_sibling(p_node: AIChatHtmlNode) -> AIChatHtmlNode:
 	var parent: AIChatHtmlNode = p_node.parent
 	if parent == null:
 		return null
+	
 	var index: int = parent.children.find(p_node)
 	for i in range(index - 1, -1, -1):
 		if parent.children[i].is_element():
 			return parent.children[i]
+	
 	return null
 
 
@@ -463,10 +519,12 @@ static func _next_element_sibling(p_node: AIChatHtmlNode) -> AIChatHtmlNode:
 	var parent: AIChatHtmlNode = p_node.parent
 	if parent == null:
 		return null
+	
 	var index: int = parent.children.find(p_node)
 	for i in range(index + 1, parent.children.size()):
 		if parent.children[i].is_element():
 			return parent.children[i]
+	
 	return null
 
 
@@ -479,6 +537,7 @@ static func _is_whitespace(p_char: String) -> bool:
 static func _is_identifier_start(p_char: String) -> bool:
 	if p_char.length() == 0:
 		return false
+	
 	var code: int = p_char.unicode_at(0)
 	return (code >= 0x41 and code <= 0x5A) or (code >= 0x61 and code <= 0x7A) or p_char == "_" or p_char == "-"
 
@@ -488,6 +547,7 @@ static func _is_identifier(p_char: String) -> bool:
 		return false
 	if _is_identifier_start(p_char):
 		return true
+	
 	var code: int = p_char.unicode_at(0)
 	return code >= 0x30 and code <= 0x39
 
@@ -499,6 +559,7 @@ static func _split_top_level(p_source: String, p_separator: String) -> Array:
 	var start: int = 0
 	var cursor: int = 0
 	var length: int = p_source.length()
+	
 	while cursor < length:
 		var c: String = p_source[cursor]
 		if c == "[" or c == "(":
@@ -509,6 +570,7 @@ static func _split_top_level(p_source: String, p_separator: String) -> Array:
 			out.append(p_source.substr(start, cursor - start))
 			start = cursor + 1
 		cursor += 1
+	
 	out.append(p_source.substr(start, length - start))
 	return out
 
@@ -518,6 +580,7 @@ static func _find_matching(p_source: String, p_start: int, p_open: String, p_clo
 	var depth: int = 0
 	var cursor: int = p_start
 	var length: int = p_source.length()
+	
 	while cursor < length:
 		var c: String = p_source[cursor]
 		if c == p_open:
@@ -527,4 +590,5 @@ static func _find_matching(p_source: String, p_start: int, p_open: String, p_clo
 			if depth == 0:
 				return cursor
 		cursor += 1
+	
 	return -1

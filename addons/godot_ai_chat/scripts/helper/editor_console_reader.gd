@@ -1,4 +1,3 @@
-class_name EditorConsoleReader
 extends RefCounted
 
 ## 编辑器控制台读取器

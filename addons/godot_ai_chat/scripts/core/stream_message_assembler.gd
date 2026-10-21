@@ -1,5 +1,4 @@
 @tool
-class_name StreamMessageAssembler
 extends RefCounted
 
 ## 流式消息装配器

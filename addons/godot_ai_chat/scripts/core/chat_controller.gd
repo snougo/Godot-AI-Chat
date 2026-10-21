@@ -1,18 +1,22 @@
 @tool
-class_name ChatController
+class_name AIChatController
 extends RefCounted
 
 ## 聊天域控制器
 ##
 ## 负责会话管理、工作区持久化与轮数更新。
-## 从 ChatHub 中抽取，使 ChatHub 只负责组合与聊天循环。
+## 从 AIChatHub 中抽取，使 AIChatHub 只负责组合与聊天循环。
+
+# --- Constants ---
+
+const SessionStorage := preload("res://addons/godot_ai_chat/scripts/helper/session_storage.gd")
 
 
 # --- Private Vars ---
 
-var _session_manager: SessionManager
-var _chat_ui: ChatUI
-var _current_chat_window: CurrentChatWindow
+var _session_manager: AIChatSessionManager
+var _chat_ui: AIChatUI
+var _current_chat_window: AIChatCurrentChatWindow
 
 
 # --- Public Functions ---
@@ -21,7 +25,7 @@ var _current_chat_window: CurrentChatWindow
 ## [param p_session_manager]: 会话管理器
 ## [param p_chat_ui]: 主 UI 控制器
 ## [param p_current_chat_window]: 当前聊天窗口（视图层）
-func setup(p_session_manager: SessionManager, p_chat_ui: ChatUI, p_current_chat_window: CurrentChatWindow) -> void:
+func setup(p_session_manager: AIChatSessionManager, p_chat_ui: AIChatUI, p_current_chat_window: AIChatCurrentChatWindow) -> void:
 	_session_manager = p_session_manager
 	_chat_ui = p_chat_ui
 	_current_chat_window = p_current_chat_window
@@ -38,7 +42,7 @@ func create_new_chat() -> void:
 	
 	if history:
 		_load_history_to_ui(history, _session_manager.current_session_path.get_file())
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "New Chat Created: " + _session_manager.current_session_path.get_file())
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "New Chat Created: " + _session_manager.current_session_path.get_file())
 	else:
 		_chat_ui.show_confirmation("Error: Failed to create chat session.")
 
@@ -58,7 +62,7 @@ func fork_current_chat() -> void:
 	var saved_history: ChatMessageHistory = _session_manager.fork_session(forked_history)
 	if saved_history:
 		_load_history_to_ui(saved_history, _session_manager.current_session_path.get_file())
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Forked: " + _session_manager.current_session_path.get_file())
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Forked: " + _session_manager.current_session_path.get_file())
 	else:
 		_chat_ui.show_confirmation("Error: Failed to fork chat session.")
 
@@ -70,7 +74,7 @@ func load_chat(p_session_name: String) -> void:
 	
 	if history:
 		_load_history_to_ui(history, p_session_name)
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: " + p_session_name)
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Loaded: " + p_session_name)
 	else:
 		_chat_ui.show_confirmation("Error: Failed to load session: " + p_session_name)
 
@@ -89,13 +93,13 @@ func delete_chat(p_session_name: String) -> void:
 		if loaded_history:
 			var loaded_name: String = _session_manager.current_session_path.get_file()
 			_load_history_to_ui(loaded_history, loaded_name)
-			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted %s, loaded: %s" % [p_session_name, loaded_name])
+			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Deleted %s, loaded: %s" % [p_session_name, loaded_name])
 		else:
 			_current_chat_window.clear_session()
-			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted %s. No chats remaining." % p_session_name)
+			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Deleted %s. No chats remaining." % p_session_name)
 			update_turn_info()
 	else:
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Deleted archive: " + p_session_name)
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Deleted archive: " + p_session_name)
 	
 	_chat_ui.update_session_selector()
 
@@ -155,7 +159,7 @@ func load_latest_on_init() -> void:
 		var history: ChatMessageHistory = _session_manager.load_latest_session()
 		if history:
 			_load_history_to_ui(history, _session_manager.current_session_path.get_file())
-			_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Loaded: " + _session_manager.current_session_path.get_file())
+			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Loaded: " + _session_manager.current_session_path.get_file())
 		else:
 			create_new_chat()
 

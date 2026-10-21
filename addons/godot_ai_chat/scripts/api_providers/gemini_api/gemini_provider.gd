@@ -4,12 +4,14 @@ extends BaseLLMProvider
 
 ## Google Gemini API 的服务提供商实现
 
+# --- Constants ---
+
+const StreamMessageAssembler := preload("res://addons/godot_ai_chat/scripts/core/stream_message_assembler.gd")
 
 # --- Private Vars ---
 
 ## 流内工具调用序号：Gemini 的 functionCall 不携带 ID，需自行生成稳定槽位键
 var _function_call_seq: int = 0
-
 
 # --- Public Functions ---
 
@@ -17,27 +19,22 @@ var _function_call_seq: int = 0
 func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.JSON_LIST
 
-
 ## Gemini 原生支持将工具返回的图片直接嵌入 Tool 消息（通过 inline_data）
 func supports_inline_tool_images() -> bool:
 	return true
-
 
 ## Gemini 的 functionDeclarations 需要顶展 schema，且 type 需大写
 func requires_gemini_tool_schema() -> bool:
 	return true
 
-
 ## 重置流内状态
 func reset_stream_state() -> void:
 	_function_call_seq = 0
-
 
 ## 获取 HTTP 请求头
 func get_request_headers(p_api_key: String, _p_stream: bool) -> PackedStringArray:
 	# Gemini 推荐将 key 放在 header 中
 	return ["Content-Type: application/json", "x-goog-api-key: %s" % p_api_key]
-
 
 ## 获取请求的 URL
 func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: String, p_stream: bool) -> String:
@@ -48,7 +45,6 @@ func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: Strin
 	var clean_model_name: String = p_model_name.trim_prefix("models/")
 	var url: String = p_base_url.path_join("v1beta/models").path_join(clean_model_name)
 	return "%s:%s" % [url, action]
-
 
 ## [子类覆写] 构建请求体 (Body)
 func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, _p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
@@ -71,6 +67,14 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 				parts.append({"text": msg.content})
 			
 			if not msg.tool_calls.is_empty():
+				# 签名读取提到循环外：只回传给「首个 functionCall part」
+				# 官方规则（Gemini 3 function calling）：
+				# 1) 并行调用时只有首个 functionCall part 带签名；
+				# 2) 签名必须放回它原本所在的 part —— 不要搬到其它 part，也不要复制到多个 part。
+				# [备注] 以上为规则陈述，非逐条实测结论。签名缺失/错位在网关侧的表征可能是空 body 的 400（无法据此反推原因），故此处严格按规则拼装，不要凭现象改回。
+				var thought_signature: String = String(msg.metadata.get(ChatMessage.META_GEMINI_THOUGHT_SIGNATURE, ""))
+				var is_first_call: bool = true
+				
 				for raw_call: Variant in msg.tool_calls:
 					if not raw_call is Dictionary:
 						continue
@@ -86,18 +90,24 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 						}
 					}
 					
-					# 签名附着
-					var thought_signature: String = String(msg.metadata.get(ChatMessage.META_GEMINI_THOUGHT_SIGNATURE, ""))
-					if not thought_signature.is_empty():
+					# 签名附着（仅首个 functionCall part）
+					if is_first_call and not thought_signature.is_empty():
 						part["thoughtSignature"] = thought_signature
 					
 					parts.append(part)
+					is_first_call = false
 			
 			if parts.is_empty():
 				parts.append({"text": ""})
 		
 		elif msg.role == ChatMessage.ROLE_TOOL:
-			role = "function"
+			# functionResponse 必须放在 role 为 "user" 的 content 中：
+			# Gemini 规范里 Content.role 只允许 "user" / "model"，官方规则也把带
+			# functionResponse 的消息描述为 "the most recent user message that is not
+			# a functionResponse"，即回执容器本身就该是 user 角色。
+			# 旧实现用 "function"：真实 Google API 可能容忍，但 opencode 网关的请求
+			# 校验层会直接 400（且不返回错误体，客户端只见 "HTTP Error 400: "）。
+			role = "user"
 			parts.append({
 				"functionResponse": {
 					"name": msg.name,
@@ -106,6 +116,7 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 					}
 				}
 			})
+		
 		else:
 			# User 消息
 			parts.append({"text": msg.content})
@@ -143,7 +154,6 @@ func build_request_body_impl(_p_model_name: String, p_messages: Array[ChatMessag
 	
 	return body
 
-
 ## 解析模型列表响应
 func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 	var json: Variant = JSON.parse_string(p_body_bytes.get_string_from_utf8())
@@ -155,7 +165,6 @@ func parse_model_list_response(p_body_bytes: PackedByteArray) -> Array[String]:
 				list.append(String(item.name).replace("models/", ""))
 	
 	return list
-
 
 ## 解析非流式响应 (完整 Body)
 ## Gemini 的非流式与流式响应共用同一份 JSON 结构，故复用新契约后统一装配
@@ -180,7 +189,6 @@ func parse_non_stream_response(p_body_bytes: PackedByteArray) -> Dictionary:
 		"role": "assistant",
 		"reasoning_content": msg.reasoning_content,
 	}
-
 
 ## 解析单个流式数据块为协议无关增量
 func parse_stream_chunk(p_raw_chunk: Dictionary) -> LLMStreamDelta:

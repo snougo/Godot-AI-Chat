@@ -1,4 +1,3 @@
-class_name ContextCompressor
 extends RefCounted
 
 ## 上下文压缩器
@@ -14,7 +13,7 @@ extends RefCounted
 ## [param p_network_manager]: 网络管理器（用于发送非流式摘要请求）
 ## [param p_config]: 压缩配置
 ## [return]: {"success": bool, "error": String, "new_history": ChatMessageHistory}
-func compress_context(p_history: ChatMessageHistory, p_network_manager: NetworkManager, p_config: ContextCompressionConfig) -> Dictionary:
+func compress_context(p_history: ChatMessageHistory, p_network_manager: AIChatNetworkManager, p_config: ContextCompressionConfig) -> Dictionary:
 	if not p_history or not p_network_manager or not p_config:
 		return {"success": false, "error": "Invalid parameters."}
 	
@@ -74,7 +73,7 @@ func compress_context(p_history: ChatMessageHistory, p_network_manager: NetworkM
 # --- Private Functions ---
 
 # 将轮次数组格式化为可读文本（用于摘要请求的输入）
-static func _format_turns_for_summary(p_turns: Array) -> String:
+func _format_turns_for_summary(p_turns: Array) -> String:
 	var lines: Array[String] = []
 	
 	for i in range(p_turns.size()):

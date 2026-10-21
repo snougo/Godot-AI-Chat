@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://csp5ftvyxqlra"
-path="res://.godot/imported/document.svg-970ebb8c91a900e7c6042243a5993442.ctex"
+uid="uid://ctcgbe366u6oa"
+path="res://.godot/imported/fluent-color--arrow-sync-16.svg-7affce2cc47b05e4e52a9e3a202ec130.ctex"
 metadata={
 "has_editor_variant": true,
 "vram_texture": false
@@ -11,8 +11,8 @@ metadata={
 
 [deps]
 
-source_file="res://addons/godot_ai_chat/assets/icons/document.svg"
-dest_files=["res://.godot/imported/document.svg-970ebb8c91a900e7c6042243a5993442.ctex"]
+source_file="res://addons/godot_ai_chat/assets/icons/fluent-color--arrow-sync-16.svg"
+dest_files=["res://.godot/imported/fluent-color--arrow-sync-16.svg-7affce2cc47b05e4e52a9e3a202ec130.ctex"]
 
 [params]
 

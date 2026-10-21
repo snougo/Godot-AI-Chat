@@ -1,4 +1,3 @@
-class_name JSONRepairHelper
 extends RefCounted
 
 ## JSON 修复工具

@@ -1,5 +1,4 @@
 @tool
-class_name ChatUserInput
 extends TextEdit
 
 ## 用户输入框扩展

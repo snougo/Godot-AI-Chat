@@ -4,6 +4,7 @@ extends AiTool
 ## 读取 Debugger Errors 标签页——游戏运行时的错误与警告历史（含引擎错误、源码行、堆栈）。
 
 
+const EditorConsoleReader := preload("res://addons/godot_ai_chat/scripts/helper/editor_console_reader.gd")
 func _init() -> void:
 	tool_name = "read_errors"
 	tool_description = "Read the debugger's Errors tab — the error and warning history of game runs, stack traces included."

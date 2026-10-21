@@ -71,7 +71,27 @@ script = ExtResource("1_3ymue")
 model_name = "deepseek-v4.1-flash"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
+[sub_resource type="Resource" id="Resource_4h3nd"]
+script = ExtResource("1_3ymue")
+model_name = "grok-4.7"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_h6y6f"]
+script = ExtResource("1_3ymue")
+model_name = "gpt-6-luna"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_eqaw8"]
+script = ExtResource("1_3ymue")
+model_name = "claude-haiku-5-5"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
+[sub_resource type="Resource" id="Resource_tr745"]
+script = ExtResource("1_3ymue")
+model_name = "gemini-4-argon-contributor"
+metadata/_custom_type_script = "uid://bhoku2teaugtk"
+
 [resource]
 script = ExtResource("1_q1pwk")
-entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_e0s22"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y"), SubResource("Resource_nb5fw"), SubResource("Resource_wuow4")])
+entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_e0s22"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y"), SubResource("Resource_nb5fw"), SubResource("Resource_wuow4"), SubResource("Resource_4h3nd"), SubResource("Resource_h6y6f"), SubResource("Resource_eqaw8"), SubResource("Resource_tr745")])
 metadata/_custom_type_script = "uid://dtmqixbcgp0g2"

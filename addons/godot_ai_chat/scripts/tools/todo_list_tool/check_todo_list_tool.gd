@@ -74,7 +74,7 @@ func _list_pending_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> T
 	var items: Array[AiTodoItem] = p_todo_list.get_items(p_workspace_path)
 	var md_lines: PackedStringArray = []
 	
-	md_lines.append("##📋 TODO List")
+	md_lines.append("## TODO List")
 	md_lines.append("**Workspace**: `%s`\n" % p_workspace_path)
 	
 	var pending_tasks: Array[AiTodoItem] = []
@@ -88,7 +88,7 @@ func _list_pending_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> T
 	
 	# 显示未完成任务
 	if pending_tasks.is_empty():
-		md_lines.append("✅ **No pending TODO items in current workspace**")
+		md_lines.append("**No pending TODO items in current workspace**")
 	else:
 		md_lines.append("**Pending (%d)**:\n" % pending_tasks.size())
 		for i in range(pending_tasks.size()):
@@ -97,7 +97,7 @@ func _list_pending_tasks(p_todo_list: AiTodoList, p_workspace_path: String) -> T
 	
 	# 显示统计信息
 	md_lines.append("\n---")
-	md_lines.append("📊 **Stats**: Pending %d | Completed %d | Total %d" % [pending_tasks.size(), completed_count, items.size()])
+	md_lines.append("**Stats**: Pending %d | Completed %d | Total %d" % [pending_tasks.size(), completed_count, items.size()])
 	
 	return ToolResult.ok("\n".join(md_lines))
 

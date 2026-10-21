@@ -137,10 +137,12 @@ func get_classes() -> PackedStringArray:
 	if raw.is_empty():
 		return PackedStringArray()
 	var result := PackedStringArray()
+	
 	for piece in raw.split(" ", false):
 		var trimmed: String = piece.strip_edges()
 		if not trimmed.is_empty():
 			result.append(trimmed)
+	
 	return result
 
 
@@ -148,11 +150,14 @@ func get_classes() -> PackedStringArray:
 func has_class(p_class: String) -> bool:
 	if p_class.is_empty():
 		return false
+	
 	var raw: String = get_attribute("class")
 	if raw.is_empty():
 		return false
+	
 	var name_length: int = p_class.length()
 	var index: int = raw.find(p_class)
+	
 	while index != -1:
 		var end_index: int = index + name_length
 		var left_ok: bool = index == 0 or _is_space_char(raw[index - 1])
@@ -160,6 +165,7 @@ func has_class(p_class: String) -> bool:
 		if left_ok and right_ok:
 			return true
 		index = raw.find(p_class, index + 1)
+	
 	return false
 
 
@@ -169,6 +175,7 @@ func get_text_content() -> String:
 		return text
 	if node_type == NodeType.COMMENT:
 		return ""
+	
 	var parts: Array[String] = []
 	_collect_text(parts)
 	return "".join(parts)
@@ -179,6 +186,7 @@ func get_inner_html() -> String:
 	var parts: Array[String] = []
 	for child in children:
 		child._collect_outer_html(parts)
+	
 	return "".join(parts)
 
 
@@ -216,6 +224,7 @@ func get_element_by_id(p_id: String) -> AIChatHtmlNode:
 	for node in walk_elements():
 		if node.get_id() == p_id:
 			return node
+	
 	return null
 
 
@@ -226,6 +235,7 @@ func get_elements_by_tag_name(p_tag: String) -> Array[AIChatHtmlNode]:
 	for node in walk_elements():
 		if lower == "*" or node.tag_name == lower:
 			result.append(node)
+	
 	return result
 
 
@@ -235,6 +245,7 @@ func get_elements_by_class_name(p_class: String) -> Array[AIChatHtmlNode]:
 	for node in walk_elements():
 		if node.has_class(p_class):
 			result.append(node)
+	
 	return result
 
 

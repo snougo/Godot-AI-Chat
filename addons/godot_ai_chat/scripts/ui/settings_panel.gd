@@ -1,5 +1,4 @@
 @tool
-class_name SettingsPanel
 extends Control
 
 ## 设置面板
@@ -63,7 +62,7 @@ var settings_resource: PluginSettingsConfig
 func _ready() -> void:
 	_api_provider_label.text = "API Provider:"
 	_base_url_label.text = "Base Url:"
-	_base_url_label.tooltip_text = "openRouter: https://openrouter.ai/api\nOpenCode Go: https://opencode.ai/zen/go/v1"
+	_base_url_label.tooltip_text = "openRouter: https://openrouter.ai/api\nOpenCode Go: https://opencode.ai/inference/go"
 	_base_url_input.placeholder_text = "LM Studio: http://127.0.0.1:1234"
 	_api_key_label.text = "API Key(optional):"
 	_api_key_label.tooltip_text = "When using LM Studio or Ollama, You don't need to provide an API Key."

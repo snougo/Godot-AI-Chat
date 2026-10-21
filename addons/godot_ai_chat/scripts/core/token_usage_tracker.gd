@@ -1,5 +1,4 @@
 @tool
-class_name TokenUsageTracker
 extends RefCounted
 
 ## Token 用量累计器

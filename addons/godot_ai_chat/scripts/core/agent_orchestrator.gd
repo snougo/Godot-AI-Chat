@@ -1,5 +1,5 @@
 @tool
-class_name AgentOrchestrator
+class_name AIChatAgentOrchestrator
 extends Node
 
 ## Agent 编排器
@@ -8,12 +8,17 @@ extends Node
 ## 本类不解析任何协议、不直接改写消息数据：
 ## 协议解析由 Provider 负责，数据落地由 StreamMessageAssembler 负责。
 
+# --- Constants ---
+
+const JSONRepairHelper := preload("res://addons/godot_ai_chat/scripts/helper/json_repair_helper.gd")
+const ContextBuilder := preload("res://addons/godot_ai_chat/scripts/core/context_builder.gd")
+
 
 # --- Public Vars ---
 
-var network_manager: NetworkManager
-var current_chat_window: CurrentChatWindow
-var chat_ui: ChatUI
+var network_manager: AIChatNetworkManager
+var current_chat_window: AIChatCurrentChatWindow
+var chat_ui: AIChatUI
 
 ## 当前工作流是否已被用户取消
 var is_cancelled: bool = false
@@ -40,7 +45,7 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 		
 		# 新一轮网络请求开始，确保状态切回等待响应
 		if chat_ui:
-			chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE)
+			chat_ui.update_ui_state(AIChatUI.UIState.WAITING_RESPONSE)
 		
 		# 使用 ContextBuilder 组装上下文
 		var context: Array[ChatMessage] = ContextBuilder.build_context(p_base_history, p_settings)
@@ -78,7 +83,7 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 		
 		# 存在有效工具调用，正式进入执行阶段，切换状态为 Executing Tools...
 		if chat_ui:
-			chat_ui.update_ui_state(ChatUI.UIState.TOOLCALLING)
+			chat_ui.update_ui_state(AIChatUI.UIState.TOOLCALLING)
 		
 		# 本轮工具返回的图片：先收集，等所有 tool 消息写完后统一注入。
 		# 若在此处直接写入历史，会插进 tool 消息序列中间，破坏

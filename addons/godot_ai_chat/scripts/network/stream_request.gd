@@ -1,5 +1,4 @@
 @tool
-class_name StreamRequest
 extends RefCounted
 
 ## HTTP 流式请求处理类
@@ -25,6 +24,9 @@ signal failed(error_message: String)
 
 
 # --- Constants ---
+
+const URLHelper := preload("res://addons/godot_ai_chat/scripts/helper/url_helper.gd")
+const Utf8Helper := preload("res://addons/godot_ai_chat/scripts/helper/utf8_helper.gd")
 
 ## 任务结束后的回收等待告警阈值（毫秒）
 ## 超过该时长仍未结束只打印一次告警，不做阻塞等待，也不放弃对该任务的回收

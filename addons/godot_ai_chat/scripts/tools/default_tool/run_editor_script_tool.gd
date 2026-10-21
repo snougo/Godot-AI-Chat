@@ -1,9 +1,13 @@
 @tool
 extends AiTool
 
-## Generates and executes a custom EditorScript for complex editor operations.
-## Safety model: AI declares intended file paths → tool validates paths →
-## verifies code-only-uses-declared-paths → executes → audits.
+## Runs an existing EditorScript file inside the editor.
+## Safety model: caller declares `script_path` (the script to run) and `file_paths`
+## (the only paths the script may touch) → script path is validated → source is read
+## from disk → static analysis runs on that exact source (danger APIs + path
+## consistency) → executed → file system audited.
+## The script already exists on disk, so the analysed text and the executed text
+## are byte-identical — no wrapping, no rewriting.
 
 # ============================================================================
 # Constants — Danger Rules
@@ -11,12 +15,12 @@ extends AiTool
 
 ## Network-related classes — block all usage (data exfiltration risk).
 const DANGEROUS_NETWORK_CLASSES: Array[String] = [
-	"HTTPRequest", 
-	"HTTPClient", 
-	"WebSocketPeer", 
+	"HTTPRequest",
+	"HTTPClient",
+	"WebSocketPeer",
 	"StreamPeerTCP",
-	"StreamPeerTLS", 
-	"TCPServer", 
+	"StreamPeerTLS",
+	"TCPServer",
 	"PacketPeerUDP",
 ]
 
@@ -60,6 +64,12 @@ const ALLOWED_EXTENSIONS: Array[String] = [
 	"svg"
 ]
 
+## Executable scripts must be GDScript (EditorScript is GDScript-only).
+const SCRIPT_EXTENSION: String = "gd"
+
+## Expected script skeleton, echoed back when a structure check fails.
+const EXPECTED_SCRIPT_TEMPLATE: String = "@tool\nextends EditorScript\n\n\nfunc _run() -> void:\n\tpass\n"
+
 ## Restricted zones — files inside these directories are off-limits regardless of format.
 const RESTRICTED_PATH_PATTERNS: Array[String] = [
 	"res://addons/",
@@ -73,12 +83,18 @@ const RESTRICTED_PATH_PATTERNS: Array[String] = [
 ## Max file size (bytes) for content backup — skip files larger than this.
 const MAX_BACKUP_SIZE: int = 5 * 1024 * 1024  # 5MB
 
+# --- Constants ---
+
+const EditorConsoleReader := preload("res://addons/godot_ai_chat/scripts/helper/editor_console_reader.gd")
 
 # --- Private Vars ---
 
+# Source read from `script_path` — shared by the structure checks, the Layer 1
+# static analysis and the Layer 3 compilation.
+var _script_source: String = ""
+
 # Stores the exact compiler error text captured from EditorLog.
 var _last_compile_error: String = ""
-
 
 # ============================================================================
 # Built-in Functions
@@ -86,26 +102,24 @@ var _last_compile_error: String = ""
 
 func _init() -> void:
 	tool_name = "run_editor_script"
-	tool_description = "Executes a custom Editor script. This tool is disabled by default."
-
+	tool_description = "Runs an existing `EditorScript` file inside the Godot editor, This tool is disabled by default."
 
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
+			"script_path": {
+				"type": "string",
+				"description": "Path of an existing script file to run. Create the file first, then run it here."
+			},
 			"file_paths": {
 				"type": "array",
 				"items": {"type": "string"},
-				"description": "List of file paths this script will operate on. All \"res://\" paths in the code must appear in this list."
-			},
-			"code": {
-				"type": "string",
-				"description": "The GDScript code to execute. Must extend `EditorScript` and override `_run()`. Do NOT include class_name."
+				"description": "List of file paths this script will operate on. All \"res://\" paths in the script must appear in this list."
 			}
 		},
-		"required": ["file_paths", "code"]
+		"required": ["script_path", "file_paths"]
 	}
-
 
 # ============================================================================
 # Main Execution
@@ -120,11 +134,11 @@ func execute(p_args: Dictionary) -> ToolResult:
 			+ "Please describe to the user what you intend to do, and ask user to enable the **PandoraBox** CheckButton in the Chat UI."
 		)
 	
-	var code: String = p_args.get("code", "")
+	var script_path: String = p_args.get("script_path", "")
 	var file_paths: Array = p_args.get("file_paths", [])
 	
-	if code.is_empty():
-		return ToolResult.fail("'code' parameter is required.")
+	if script_path.is_empty():
+		return ToolResult.fail("'script_path' parameter is required.")
 	if file_paths.is_empty():
 		return ToolResult.fail("'file_paths' parameter is required — declare at least one file path.")
 	
@@ -133,17 +147,23 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if path_validation.is_fail():
 		return path_validation
 	
-	# === Layer 1B: Static analysis (danger APIs) ===
-	var static_result: ToolResult = _static_analysis_l2(code)
+	# === Layer 1B: Validate script path & load its source from disk ===
+	var script_load: ToolResult = _load_script(script_path)
+	if script_load.is_fail():
+		return script_load
+	var code: String = _script_source
+	
+	# === Layer 1C: Static analysis (danger APIs) ===
+	var static_result: ToolResult = _static_analysis(code)
 	if static_result.is_fail():
 		return static_result
 	
-	# === Layer 1C: Verify code paths match declared set ===
+	# === Layer 1D: Verify code paths match declared set ===
 	var verify_result: ToolResult = _verify_code_paths(code, file_paths)
 	if verify_result.is_fail():
 		return verify_result
 	
-	# === Layer 1D: Check for non-literal API calls (dynamic paths) ===
+	# === Layer 1E: Check for non-literal API calls (dynamic paths) ===
 	var dynamic_result: ToolResult = _check_dynamic_api_calls(code, file_paths)
 	if dynamic_result.is_fail():
 		return dynamic_result
@@ -161,8 +181,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var snapshot_before: Dictionary = _collect_file_snapshot(file_paths)
 	
 	# === Layer 3: Compile and execute ===
-	var wrapped_code: String = _wrap_code(code)
-	var script: GDScript = _compile_script(wrapped_code)
+	var script: GDScript = _compile_script(code)
 	if not script:
 		return ToolResult.fail("**Script compilation failed.** " + (_last_compile_error if not _last_compile_error.is_empty() else "Check syntax and Godot API usage."))
 	
@@ -185,6 +204,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	if not violations.is_empty():
 		var fail_msg: String = "**Security violations detected after execution.**\n\n"
+		fail_msg += "Executed script: `%s`\n\n" % script_path
 		fail_msg += "The following file operations affect paths that were not declared:\n"
 		fail_msg += "\n".join(violations) + "\n\n"
 		fail_msg += "**Declared paths:**\n"
@@ -199,6 +219,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	# Build normal result
 	var result_text: String = "**Editor Script executed successfully.**\n\n"
+	result_text += "Script: `%s`\n\n" % script_path
 	
 	if not audit.created.is_empty():
 		result_text += "**Files Created:**\n"
@@ -234,7 +255,6 @@ func execute(p_args: Dictionary) -> ToolResult:
 			result_text += "- %s\n" % w
 	
 	return ToolResult.ok(result_text)
-
 
 # ============================================================================
 # Layer 1A — Validate Declared Paths
@@ -277,9 +297,121 @@ func _validate_declared_paths(p_paths: Array) -> ToolResult:
 	
 	return ToolResult.ok("")
 
+# ============================================================================
+# Layer 1B — Script Path Validation & Source Loading
+# ============================================================================
+
+# 校验 script_path 形态并从磁盘读入源码（源码写入 _script_source）。
+# 脚本必须先落盘，工具不接受内联代码，也不对脚本做任何改写。
+func _load_script(p_script_path: String) -> ToolResult:
+	_script_source = ""
+	
+	var shape_err: String = _validate_script_path(p_script_path)
+	if not shape_err.is_empty():
+		return ToolResult.fail(shape_err)
+	
+	if not FileAccess.file_exists(p_script_path):
+		return ToolResult.fail(
+			"**Script not found:** `%s`\n\n"
+			% p_script_path
+			+ "Write the script file first (e.g. with the `create_script` tool), then run it here."
+		)
+	
+	var file: FileAccess = FileAccess.open(p_script_path, FileAccess.READ)
+	if not file:
+		return ToolResult.fail(
+			"**Cannot read script** `%s`: %s" % [p_script_path, error_string(FileAccess.get_open_error())]
+		)
+	_script_source = file.get_as_text()
+	file.close()
+	
+	if _script_source.strip_edges().is_empty():
+		return ToolResult.fail("**Script is empty:** `%s`" % p_script_path)
+	
+	var structure_err: String = _validate_script_structure(p_script_path, _script_source)
+	if not structure_err.is_empty():
+		return ToolResult.fail(structure_err)
+	
+	return ToolResult.ok("")
+
+# 校验脚本路径形态：res:// 前缀、.gd 扩展名、不在受限区。
+func _validate_script_path(p_path: String) -> String:
+	if not p_path.begins_with("res://"):
+		return "**Invalid `script_path`:** `%s` must start with \"res://\"." % p_path
+	
+	if p_path.get_extension().to_lower() != SCRIPT_EXTENSION:
+		return "**Invalid `script_path`:** `%s` must be a GDScript file (.gd)." % p_path
+	
+	for prefix in RESTRICTED_PATH_PATTERNS:
+		if p_path.to_lower().begins_with(prefix):
+			return "**Invalid `script_path`:** `%s` is inside restricted zone `%s` — scripts located there cannot be executed." % [p_path, prefix]
+	
+	return ""
+
+# 校验脚本结构：必须 @tool + extends EditorScript + func _run()，且不得声明 class_name。
+# 判定基于分词器 token 流，字符串/注释中的同名文本不会误判。
+# 返回空字符串表示合法，否则返回逐项列出缺失/违规部分的说明。
+func _validate_script_structure(p_script_path: String, p_code: String) -> String:
+	var tokens := GDScriptTokenizer.tokenize(p_code)
+	
+	var has_tool_annotation: bool = false
+	var has_class_name: bool = false
+	var extends_editor_script: bool = false
+	var has_run_method: bool = false
+	
+	for i in tokens.size():
+		var t: GDScriptTokenizer.Token = tokens[i]
+		
+		if t.type == GDScriptTokenizer.TokenType.IDENTIFIER and t.value == "@tool":
+			has_tool_annotation = true
+		elif t.type == GDScriptTokenizer.TokenType.KEYWORD and t.value == "class_name":
+			has_class_name = true
+		elif t.type == GDScriptTokenizer.TokenType.KEYWORD and t.value == "extends":
+			var base_token: GDScriptTokenizer.Token = _next_meaningful_token(tokens, i)
+			if base_token != null and base_token.value == "EditorScript":
+				extends_editor_script = true
+		elif t.type == GDScriptTokenizer.TokenType.KEYWORD and t.value == "func":
+			var func_token: GDScriptTokenizer.Token = _next_meaningful_token(tokens, i)
+			if func_token != null and func_token.value == "_run":
+				has_run_method = true
+	
+	var problems: Array[String] = []
+	
+	if not extends_editor_script:
+		problems.append("Missing `extends EditorScript` — the base script must be EditorScript.")
+	if not has_tool_annotation:
+		problems.append("Missing the `@tool` annotation — EditorScript must be in tool mode.")
+	if not has_run_method:
+		problems.append("Missing `func _run()` — this is the entry point the editor executes.")
+	if has_class_name:
+		problems.append("`class_name` is not allowed — the script is compiled as an anonymous GDScript, and a global class name would collide with the project's class registry.")
+	
+	if problems.is_empty():
+		return ""
+	
+	var msg: String = "**Invalid editor script:** `%s` cannot be executed.\n\n" % p_script_path
+	msg += "**Problems found:**\n"
+	for p in problems:
+		msg += "- %s\n" % p
+	msg += "\n**Expected script skeleton:**\n```gdscript\n"
+	msg += EXPECTED_SCRIPT_TEMPLATE
+	msg += "```\n"
+	msg += "\nFix the script file with the script tools, then run this tool again."
+	return msg
+
+# 返回 p_index 之后第一个非空白/非换行/非注释 token，没有则返回 null。
+func _next_meaningful_token(p_tokens: Array, p_index: int) -> GDScriptTokenizer.Token:
+	for i in range(p_index + 1, p_tokens.size()):
+		var t: GDScriptTokenizer.Token = p_tokens[i]
+		if t.type == GDScriptTokenizer.TokenType.WHITESPACE \
+		or t.type == GDScriptTokenizer.TokenType.NEWLINE \
+		or t.type == GDScriptTokenizer.TokenType.COMMENT:
+			continue
+		return t
+	return null
 
 # ============================================================================
-# Layer 1C — Verify Code Paths vs Declared Set
+# Layer 1D — Verify Code Paths vs Declared Set
 # ============================================================================
 
 func _verify_code_paths(p_code: String, p_declared: Array) -> ToolResult:
@@ -310,9 +442,8 @@ func _verify_code_paths(p_code: String, p_declared: Array) -> ToolResult:
 	
 	return ToolResult.ok("")
 
-
 # ============================================================================
-# Layer 1D — Dynamic Path Detection (with symbol tracking)
+# Layer 1E — Dynamic Path Detection (with symbol tracking)
 # ============================================================================
 
 # 检查 API 调用的路径参数是否合法。
@@ -339,9 +470,8 @@ func _check_path_argument(p_arg: String, p_path_vars: Dictionary, p_declared: Ar
 	# 3. 其他表达式（拼接、函数调用等）
 	return "%s uses expression `%s` — only string literals or variables assigned to declared paths are allowed." % [p_call_name, p_arg]
 
-
 # 检测 FileAccess / ResourceSaver 调用中的动态或未声明路径。
-# 与 L1C 互补：L1C 只检查 res:// 字面量，本函数检查变量参数和表达式参数。
+# 与 L1D 互补：L1D 只检查 res:// 字面量，本函数检查变量参数和表达式参数。
 func _check_dynamic_api_calls(p_code: String, p_declared: Array) -> ToolResult:
 	# 变量 → 字符串字面量值 映射（由分词器构建，支持引用链解析）
 	var path_vars: Dictionary = GDScriptTokenizer.build_path_var_table(p_code)
@@ -391,12 +521,11 @@ func _check_dynamic_api_calls(p_code: String, p_declared: Array) -> ToolResult:
 	
 	return ToolResult.ok("")
 
-
 # ============================================================================
-# L2 Static Analysis — Danger API Checks
+# Layer 1C Static Analysis — Danger API Checks
 # ============================================================================
 
-func _static_analysis_l2(p_code: String) -> ToolResult:
+func _static_analysis(p_code: String) -> ToolResult:
 	var blocks: Array[String] = []
 	var warns: Array[String] = []
 	
@@ -458,24 +587,13 @@ func _static_analysis_l2(p_code: String) -> ToolResult:
 	
 	return ToolResult.ok("")
 
-
 # ============================================================================
-# Code Wrapping & Compilation
+# Code Compilation
 # ============================================================================
 
-func _wrap_code(p_code: String) -> String:
-	var clean_code: String = p_code.strip_edges()
-	if "extends EditorScript" not in clean_code:
-		clean_code = "extends EditorScript\n\n" + clean_code
-	
-	var class_name_regex: RegEx = RegEx.create_from_string("(?m)^class_name\\s+\\w+(?:\\s*#.*)?$")
-	clean_code = class_name_regex.sub(clean_code, "", true)
-	if not clean_code.begins_with("@tool"):
-		clean_code = "@tool\n" + clean_code
-	
-	return clean_code
-
-
+# 逐字编译磁盘上的脚本源码——不注入 @tool、不剥 class_name、不做任何改写，
+# 保证"被静态分析的文本"与"被执行的文本"是同一份。
+# 编译错误通过 EditorLog 的 before/after 增量捕获，交由调用方回传给 AI。
 func _compile_script(p_code: String) -> GDScript:
 	_last_compile_error = ""
 	var editor_log: RichTextLabel = EditorConsoleReader.output_label()
@@ -495,7 +613,6 @@ func _compile_script(p_code: String) -> GDScript:
 	
 	return script
 
-
 # ============================================================================
 # File System Snapshot & Audit (Layer 4)
 # ============================================================================
@@ -505,7 +622,6 @@ func _collect_file_snapshot(p_declared: Array = []) -> Dictionary:
 	_collect_files_recursive("res://", snapshot, p_declared)
 	return snapshot
 
-
 # 受限区目录剪枝：这些目录编辑器脚本永远无法声明/写入（Layer 1A 拒绝），
 # 审计快照无需覆盖，避免全项目扫描时计入（addons 等往往很大）。
 func _is_restricted_dir(p_path: String) -> bool:
@@ -514,7 +630,6 @@ func _is_restricted_dir(p_path: String) -> bool:
 		if normalized.begins_with(prefix):
 			return true
 	return false
-
 
 func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary, p_declared: Array) -> void:
 	var dir: DirAccess = DirAccess.open(p_dir)
@@ -570,7 +685,6 @@ func _collect_files_recursive(p_dir: String, p_snapshot: Dictionary, p_declared:
 	
 	dir.list_dir_end()
 
-
 func _diff_snapshots(p_before: Dictionary, p_after: Dictionary) -> Dictionary:
 	var created: Array[String] = []
 	var modified: Array[String] = []
@@ -588,7 +702,6 @@ func _diff_snapshots(p_before: Dictionary, p_after: Dictionary) -> Dictionary:
 	
 	return {"created": created, "modified": modified, "deleted": deleted}
 
-
 # ============================================================================
 # Backup & Disk Persistence
 # ============================================================================
@@ -603,7 +716,6 @@ func _generate_backup_id() -> String:
 		id = "%s_%02d" % [base, counter]
 		counter += 1
 	return id
-
 
 func _save_backup_to_disk(p_backup_id: String, p_code: String, p_file_paths: Array, p_files: Dictionary) -> void:
 	var backup := EditorScriptAutoBackup.new()
@@ -631,7 +743,6 @@ func _save_backup_to_disk(p_backup_id: String, p_code: String, p_file_paths: Arr
 	if err != OK:
 		AIChatLogger.error("[run_editor_script] Failed to save backup: " + str(err))
 
-
 func _update_backup_audit(p_backup_id: String, p_audit: Dictionary) -> void:
 	var backup_path: String = PluginPaths.BACKUP_DIR + p_backup_id + ".tres"
 	if not ResourceLoader.exists(backup_path):
@@ -645,7 +756,6 @@ func _update_backup_audit(p_backup_id: String, p_audit: Dictionary) -> void:
 	backup.audit_modified = p_audit.get("modified", [])
 	backup.audit_deleted = p_audit.get("deleted", [])
 	ResourceSaver.save(backup, backup_path)
-
 
 func _backup_target_files(p_targets: Dictionary) -> Dictionary:
 	var backup: Dictionary = {}

@@ -1,4 +1,3 @@
-class_name Utf8Helper
 extends RefCounted
 
 ## UTF-8 辅助工具

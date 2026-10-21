@@ -35,7 +35,7 @@ func execute(args: Dictionary) -> ToolResult:
 		var available = ", ".join(ToolRegistry.available_skills.keys())
 		return ToolResult.fail("Error: Skill '%s' not found. Available skills are: [%s]" % [skill_name, available])
 	
-	var sub_agent_orchestrator: SubAgentOrchestrator = SubAgentOrchestrator.new()
+	var sub_agent_orchestrator: AIChatSubAgentOrchestrator = AIChatSubAgentOrchestrator.new()
 	sub_agent_orchestrator.name = "SubAgentOrchestrator"
 	sub_agent_orchestrator.skill_name = skill_name
 	sub_agent_orchestrator.task_description = task_desc

@@ -122,7 +122,7 @@ func _execute_move_node(root: Node, p_args: Dictionary) -> ToolResult:
 	var target_parent_path: String = p_args.get("parent_path", "")
 	
 	if node_path.is_empty() or target_parent_path.is_empty():
-		return ToolResult.fail("Erroe: both node_path and parent_path are required for move_node.")
+		return ToolResult.fail("Error: both node_path and parent_path are required for move_node.")
 	
 	var node: Node = get_node_from_root(root, node_path)
 	if not node:

@@ -30,9 +30,17 @@ static func get_plugin_settings() -> PluginSettingsConfig:
 	var plugin_settings: PluginSettingsConfig
 	
 	if ResourceLoader.exists(PluginPaths.SETTINGS_PATH):
-		# 使用 CACHE_MODE_IGNORE 确保读取最新设置
-		plugin_settings = ResourceLoader.load(PluginPaths.SETTINGS_PATH, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
+		# 使用默认缓存模式（CACHE_MODE_REUSE），让插件与编辑器共用同一实例。
+		# 不可用 CACHE_MODE_IGNORE：那会每次返回一份独立于编辑器的实例（且不进入 ResourceCache），
+		# 对它修改并写盘后，编辑器 Inspector 中已绑定的实例不会同步更新，
+		# 表现为「保存设置后必须重启编辑器才能看到最新值」。
+		plugin_settings = ResourceLoader.load(PluginPaths.SETTINGS_PATH)
 	else:
+		# 在创建配置文件前，需要检查存放配置文件的文件夹是否存在
+		# 如果不存在则先创建文件夹，否则会报错
+		if not DirAccess.dir_exists_absolute(PluginPaths.CONFIGS_DIR):
+			DirAccess.make_dir_recursive_absolute(PluginPaths.CONFIGS_DIR)
+		
 		plugin_settings = PluginSettingsConfig.new()
 		var err: Error = ResourceSaver.save(plugin_settings, PluginPaths.SETTINGS_PATH)
 		if err == OK:

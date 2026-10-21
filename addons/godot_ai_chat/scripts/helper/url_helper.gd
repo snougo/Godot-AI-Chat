@@ -1,4 +1,3 @@
-class_name URLHelper
 extends RefCounted
 
 ## URL 辅助工具

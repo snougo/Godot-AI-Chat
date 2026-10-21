@@ -1,24 +1,29 @@
 @tool
-class_name ChatHub
+class_name AIChatHub
 extends Control
 
 ## 聊天中心控制器
 ##
 ## 插件的主入口，作为组合根负责依赖注入，并协调聊天循环。
-## 会话管理逻辑已抽取至 ChatController。
+## 会话管理逻辑已抽取至 AIChatController。
+
+# --- Constants ---
+
+const AttachmentProcessor := preload("res://addons/godot_ai_chat/scripts/helper/attachment_processor.gd")
+const ContextCompressor := preload("res://addons/godot_ai_chat/scripts/core/context_compressor.gd")
 
 
 # --- @onready Vars ---
 
-@onready var _chat_ui: ChatUI = $ChatUI
-@onready var _network_manager: NetworkManager = $NetworkManager
-@onready var _current_chat_window: CurrentChatWindow = $CurrentChatWindow
-@onready var _agent_orchestrator: AgentOrchestrator = $AgentOrchestrator
+@onready var _chat_ui: AIChatUI = $ChatUI
+@onready var _network_manager: AIChatNetworkManager = $NetworkManager
+@onready var _current_chat_window: AIChatCurrentChatWindow = $CurrentChatWindow
+@onready var _agent_orchestrator: AIChatAgentOrchestrator = $AgentOrchestrator
 
 
 # --- Private Vars ---
 
-var _chat_controller: ChatController
+var _chat_controller: AIChatController
 var _is_performing_cleanup: bool = false
 var _is_plugin_init: bool = false
 var _compression_config: ContextCompressionConfig = null
@@ -29,8 +34,8 @@ var _compression_config: ContextCompressionConfig = null
 func _ready() -> void:
 	ToolRegistry.load_default_tools()
 	
-	var session_manager: SessionManager = SessionManager.new()
-	_chat_controller = ChatController.new()
+	var session_manager: AIChatSessionManager = AIChatSessionManager.new()
+	_chat_controller = AIChatController.new()
 	_chat_controller.setup(session_manager, _chat_ui, _current_chat_window)
 	
 	_agent_orchestrator.network_manager = _network_manager
@@ -46,7 +51,7 @@ func _ready() -> void:
 
 # --- Public Functions ---
 
-func get_chat_ui() -> ChatUI:
+func get_chat_ui() -> AIChatUI:
 	return _chat_ui
 
 
@@ -70,7 +75,7 @@ func _bind_ui_signals() -> void:
 	_chat_ui.settings_save_button_pressed.connect(_on_settings_save_requested)
 	_chat_ui.model_selection_changed.connect(_on_model_selection_changed)
 	
-	_network_manager.get_model_list_request_started.connect(_chat_ui.update_ui_state.bind(ChatUI.UIState.CONNECTING))
+	_network_manager.get_model_list_request_started.connect(_chat_ui.update_ui_state.bind(AIChatUI.UIState.CONNECTING))
 	_network_manager.get_model_list_request_succeeded.connect(_chat_ui.update_model_list)
 	_network_manager.get_model_list_request_failed.connect(_chat_ui.get_model_list_request_failed)
 	
@@ -79,7 +84,7 @@ func _bind_ui_signals() -> void:
 
 
 func _run_chat_loop() -> void:
-	_chat_ui.update_ui_state(ChatUI.UIState.WAITING_RESPONSE)
+	_chat_ui.update_ui_state(AIChatUI.UIState.WAITING_RESPONSE)
 	
 	# 每次聊天循环开始前仅重载核心工具（不重扫技能），确保修改 main_agent_tool_config.tres 后立即生效
 	ToolRegistry.reload_core_tools_only()
@@ -95,10 +100,10 @@ func _run_chat_loop() -> void:
 		_network_manager.new_stream_chunk_received.disconnect(_on_stream_chunk)
 	
 	if _agent_orchestrator.is_cancelled:
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Stopped")
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Stopped")
 		_rollback_incomplete_turn()
 	else:
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
 	
 	# 回合结束：把累计用量落库。
 	# 中间各轮已在「每轮请求发起前」落库，此处补齐最后一个请求的用量，
@@ -144,7 +149,7 @@ func _get_compression_config() -> ContextCompressionConfig:
 
 
 func _try_compress_context() -> Dictionary:
-	_chat_ui.update_ui_state(ChatUI.UIState.COMPRESSING)
+	_chat_ui.update_ui_state(AIChatUI.UIState.COMPRESSING)
 	
 	var history: ChatMessageHistory = _current_chat_window.chat_history
 	var config: ContextCompressionConfig = _get_compression_config()
@@ -153,17 +158,17 @@ func _try_compress_context() -> Dictionary:
 	var result: Dictionary = await compressor.compress_context(history, _network_manager, config)
 	
 	if not result.success:
-		AIChatLogger.error("[ChatHub] Context compression failed: " + String(result.error))
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+		AIChatLogger.error("[AIChatHub] Context compression failed: " + String(result.error))
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
 		return {"success": false, "error": String(result.error)}
 	
 	var ok: bool = _chat_controller.create_session_from_history(result.new_history)
 	
 	if ok:
-		AIChatLogger.info("[ChatHub] Context compressed. New session loaded.")
+		AIChatLogger.info("[AIChatHub] Context compressed. New session loaded.")
 		return {"success": true}
 	
-	_chat_ui.update_ui_state(ChatUI.UIState.IDLE)
+	_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
 	return {"success": false, "error": "Failed to save compressed session."}
 
 
@@ -189,7 +194,7 @@ func _on_user_send_message(p_text: String) -> void:
 			var compress_result: Dictionary = await _try_compress_context()
 			if compress_result.success:
 				# 压缩成功，新对话已加载完毕，等待用户重新输入
-				_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Context compressed. Ready for new input.")
+				_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Context compressed. Ready for new input.")
 				return
 			else:
 				_chat_ui.show_confirmation("Context compression failed, using truncated context.\nError: " + String(compress_result.get("error", "Unknown")))
@@ -200,8 +205,8 @@ func _on_user_send_message(p_text: String) -> void:
 
 
 func _on_stream_chunk(p_chunk: Dictionary) -> void:
-	if _chat_ui.current_state != ChatUI.UIState.RESPONSE_GENERATING:
-		_chat_ui.update_ui_state(ChatUI.UIState.RESPONSE_GENERATING)
+	if _chat_ui.current_state != AIChatUI.UIState.RESPONSE_GENERATING:
+		_chat_ui.update_ui_state(AIChatUI.UIState.RESPONSE_GENERATING)
 	
 	# 必须使用发起本轮流式请求的那个 Provider 实例，而非可能已被重建的 current_provider
 	var provider: BaseLLMProvider = _network_manager.streaming_provider
@@ -241,7 +246,7 @@ func _on_compress_requested() -> void:
 	var compress_result: Dictionary = await _try_compress_context()
 	if compress_result.success:
 		# 压缩成功：已创建新会话并加载，恢复空闲状态
-		_chat_ui.update_ui_state(ChatUI.UIState.IDLE, "Context compressed. New session loaded.")
+		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Context compressed. New session loaded.")
 	else:
 		_chat_ui.show_confirmation("Context compression failed.\nError: " + String(compress_result.get("error", "Unknown")))
 

@@ -1,4 +1,3 @@
-class_name ContextBuilder
 extends RefCounted
 
 ## 上下文构建器
@@ -19,6 +18,9 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	# 1. 基础 System Prompt
 	var final_system_prompt: String = p_settings.system_prompt
 	
+	# 1.5 动态注入区域提示
+	final_system_prompt += "\n\n-----以下信息由插件动态生成-----\n\n"
+	
 	# 2. 注入工作区信息
 	if not p_settings.workspace_path.is_empty():
 		if p_settings.workspace_path != "res://":
@@ -34,7 +36,19 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	final_system_prompt += "Current Time: %04d-%02d-%02d\n\n" % [datetime_dict.year, datetime_dict.month, datetime_dict.day]
 	final_system_prompt += "========================\n\n"
 	
-	# 4. 注入记忆
+	# 4 注入引擎版本（动态获取）
+	var engine_info: Dictionary = Engine.get_version_info()
+	var engine_version: String = "%d.%d" % [engine_info.major, engine_info.minor]
+	if engine_info.patch > 0:
+		engine_version += ".%d" % engine_info.patch
+	if engine_info.status != "stable":
+		engine_version += " %s" % engine_info.status
+	
+	final_system_prompt += "\n===== ENGINE INFO =====\n\n"
+	final_system_prompt += "Godot Version: %s\n\n" % engine_version
+	final_system_prompt += "=======================\n\n"
+	
+	# 5. 注入记忆
 	# [已停用] 记忆子系统当前整体处于关闭状态：
 	#   - memory_tool 下的三个工具未注册进 main_agent_tool_config.tres；
 	#   - 以下注入逻辑被整段注释。
@@ -111,7 +125,7 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 			#final_system_prompt += "\n"
 			#final_system_prompt += "\n > **Tip**: Use `search_memories` with a specific topic to retrieve the full content of memories under that topic.\n"
 	
-	# 5. 截断历史记录并组合
+	# 6. 截断历史记录并组合
 	var context_messages: Array[ChatMessage] = p_history.get_truncated_messages(
 		p_settings.max_chat_turns,
 		final_system_prompt

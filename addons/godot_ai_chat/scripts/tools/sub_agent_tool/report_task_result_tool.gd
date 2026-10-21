@@ -2,7 +2,7 @@
 extends AiTool
 
 ## Sub Agent 专用的任务汇报工具
-## 注意：这个工具不需要在 ToolRegistry 中注册，它是由 SubAgentOrchestrator 动态加载的。
+## 注意：这个工具不需要在 ToolRegistry 中注册，它是由 AIChatSubAgentOrchestrator 动态加载的。
 
 func _init() -> void:
 	tool_name = "report_task_result"
@@ -28,5 +28,5 @@ func get_parameters_schema() -> Dictionary:
 
 
 func execute(_args: Dictionary) -> ToolResult:
-	# 这个工具的执行逻辑实际上会被 SubAgentOrchestrator 拦截，这里只是占位
+	# 这个工具的执行逻辑实际上会被 AIChatSubAgentOrchestrator 拦截，这里只是占位
 	return ToolResult.ok("Report Sent.")

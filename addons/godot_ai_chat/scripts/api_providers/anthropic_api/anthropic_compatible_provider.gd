@@ -19,7 +19,7 @@ const ANTHROPIC_API_VERSION := "2023-06-01"
 
 # --- Private Vars ---
 
-# 记录最近一次请求的 Base URL（NetworkManager 总是先调 get_request_url 再调 get_request_headers）
+# 记录最近一次请求的 Base URL（AIChatNetworkManager 总是先调 get_request_url 再调 get_request_headers）
 var _last_base_url: String = ""
 
 
@@ -47,7 +47,7 @@ func get_request_headers(p_api_key: String, _p_stream: bool) -> PackedStringArra
 ## 获取请求的 URL
 func get_request_url(p_base_url: String, p_model: String, _p_key: String, _p_stream: bool) -> String:
 	_last_base_url = p_base_url
-	# 如果 model 为空，通常意味着这是在请求模型列表 (NetworkManager.get_model_list)
+	# 如果 model 为空，通常意味着这是在请求模型列表 (AIChatNetworkManager.get_model_list)
 	# 或者是某些特殊的检查。
 	# 大多数兼容网关使用 /v1/models 来获取列表
 	if p_model.is_empty():

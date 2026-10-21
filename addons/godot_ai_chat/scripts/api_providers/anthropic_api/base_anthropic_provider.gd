@@ -35,8 +35,8 @@ func get_stream_parser_type() -> StreamParserType:
 
 ## [子类覆写] 构建请求体 (Body)
 func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
-	# kimi-k2.6 模型只接受固定温度值 1，强制覆盖用户设置
-	var final_temperature: float = 1.0 if p_model_name == "kimi-k2.6" else p_temperature
+	# 从 kimi-k2.6 模型开始只接受固定温度值 1，强制覆盖用户设置
+	var final_temperature: float = 1.0 if p_model_name == "kimi-k2.6" or "kimi-k2.7-code" or "kimi-k3" else p_temperature
 	
 	var system_prompt: String = ""
 	var api_messages: Array[Dictionary] = []
@@ -79,10 +79,20 @@ func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage
 		for raw_tool: Variant in p_tool_definitions:
 			if not raw_tool is Dictionary:
 				continue
-			var tool: Dictionary = _convert_tool_definition(raw_tool)
+			
+			# 深拷贝，避免改动调用方传入的工具定义。
+			var tool: Dictionary = _convert_tool_definition(raw_tool).duplicate(true)
 			if USE_TOOLS_CACHE_CONTROL:
-				tool["cache_control"] = {"type": "ephemeral"}
+				# 只在最后一个工具上设置缓存断点；Anthropic 会缓存此前的工具定义。
+				# 清掉已有的顶层标记，避免多个断点叠加。
+				tool.erase("cache_control")
 			anthropic_tools.append(tool)
+		
+		if USE_TOOLS_CACHE_CONTROL and not anthropic_tools.is_empty():
+			var last_tool: Dictionary = anthropic_tools.back()
+			last_tool["cache_control"] = {"type": "ephemeral"}
+			anthropic_tools[anthropic_tools.size() - 1] = last_tool
+		
 		body["tools"] = anthropic_tools
 	
 	return body

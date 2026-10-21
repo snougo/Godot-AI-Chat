@@ -10,33 +10,57 @@ extends RefCounted
 ## 插件根目录
 const PLUGIN_DIR: String = "res://addons/godot_ai_chat/"
 
+
 # --- Configuration ---
 
+## 插件配置文件夹
+const CONFIGS_DIR: String = PLUGIN_DIR + "configs/"
+
 ## 插件设置资源文件路径
-const SETTINGS_PATH: String = PLUGIN_DIR + "plugin_settings_config.tres"
+const SETTINGS_PATH: String = CONFIGS_DIR + "plugin_settings_config.tres"
+
+## SubAgent 全局配置资源文件路径
+const SUB_AGENT_CONFIG_PATH: String = CONFIGS_DIR + "sub_agent_config.tres"
+
+## 上下文压缩配置资源文件路径
+const COMPRESSION_CONFIG_PATH: String = CONFIGS_DIR + "context_compression_config.tres"
+
+
+# --- Model Capability ---
+
+## 模型能力表资源文件路径
+const MODEL_CAPABILITY_TABLE_PATH: String = PLUGIN_DIR + "model_capability_table.tres"
+
+
+# --- Workspace ---
+
+## 默认工作区路径
+const DEFAULT_WORKSPACE: String = PLUGIN_DIR
+
+
+# --- Tools ---
+
+## 工具脚本根目录
+const TOOL_DIR: String = PLUGIN_DIR + "scripts/tools/"
 
 ## Main-Agent 工具配置资源文件路径
 const MAIN_AGENT_TOOL_CONFIG_PATH: String = PLUGIN_DIR + "main_agent_tool_config.tres"
 
-## 上下文压缩配置资源文件路径
-const COMPRESSION_CONFIG_PATH: String = PLUGIN_DIR + "context_compression_config.tres"
-
-## SubAgent 全局配置资源文件路径
-const SUB_AGENT_CONFIG_PATH: String = PLUGIN_DIR + "sub_agent_config.tres"
-
-## 默认工作区路径
-const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 
 # --- Data Storage ---
 
 ## 聊天会话存档目录
 const SESSION_DIR: String = PLUGIN_DIR + "chat_sessions/"
 
+## 编辑器脚本回滚备份目录（位于项目根目录，持久保存）
+const BACKUP_DIR: String = "res://rollback_files/"
+
+
+# --- Memory ---
+
 ## 记忆仓库资源文件路径
 const MEMORY_STORE_PATH: String = PLUGIN_DIR + "memory_store.tres"
 
-## 编辑器脚本回滚备份目录（位于项目根目录，持久保存）
-const BACKUP_DIR: String = "res://rollback_files/"
 
 # --- Skills ---
 
@@ -44,7 +68,8 @@ const BACKUP_DIR: String = "res://rollback_files/"
 const SKILLS_DIR: String = PLUGIN_DIR + "skills/"
 
 ## 技能文件夹内的 SubAgent 配置文件固定文件名（每技能一个）
-const SKILL_CONFIG_FILE_NAME: String = "sub_agent_config.tres"
+const SKILL_CONFIG_FILE_NAME: String = "skill_sub_agent_config.tres"
+
 
 # --- Assets ---
 
@@ -54,21 +79,17 @@ const ASSETS_DIR: String = PLUGIN_DIR + "assets/"
 ## 代码高亮主题资源路径
 const CODE_HIGHLIGHT_THEME: String = ASSETS_DIR + "code_hightlight.tres"
 
+
 # --- Scenes ---
 
 ## 场景目录
 const SCENE_DIR: String = PLUGIN_DIR + "scene/"
 
-## ChatHub场景路径
+## AIChatHub场景路径
 const CHAT_HUB_SCENE: String = SCENE_DIR + "chat_hub.tscn"
 
 ## 聊天消息块场景路径
 const CHAT_MESSAGE_BLOCK_SCENE: String = SCENE_DIR + "chat_message_block.tscn"
-
-# --- Model Capability ---
-
-## 模型能力表资源文件路径
-const MODEL_CAPABILITY_TABLE_PATH: String = PLUGIN_DIR + "model_capability_table.tres"
 
 
 # --- Public Functions ---

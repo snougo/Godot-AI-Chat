@@ -38,13 +38,6 @@ static func get_config() -> MainAgentToolConfig:
 # 默认工具列表（仅在配置文件缺失时作为兜底模板）
 static func _get_default_tool_scripts() -> Array[String]:
 	return [
-		"res://addons/godot_ai_chat/scripts/tools/file_tool/read_file_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/default_tool/list_folder_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/search_tool/fetch_web_content_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/search_tool/search_web_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/search_tool/search_godot_api_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/search_tool/find_code_references_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/memory_tool/add_memory_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/memory_tool/delete_memory_tool.gd",
-		"res://addons/godot_ai_chat/scripts/tools/memory_tool/search_memories_tool.gd",
+		PluginPaths.TOOL_DIR + "file_tool/read_file_tool.gd",
+		PluginPaths.TOOL_DIR + "default_tool/list_folder_tool.gd",
 	]

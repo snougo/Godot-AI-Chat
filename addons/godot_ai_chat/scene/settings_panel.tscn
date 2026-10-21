@@ -78,7 +78,7 @@ theme_override_constants/separation = 10
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "openRouter: https://openrouter.ai/api
-OpenCode Go: https://opencode.ai/zen/go/v1"
+OpenCode Go: https://opencode.ai/inference/go"
 mouse_filter = 1
 text = "Base Url:"
 vertical_alignment = 1

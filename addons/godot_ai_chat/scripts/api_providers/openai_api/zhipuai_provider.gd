@@ -6,8 +6,9 @@ extends OpenAIChatCompletionsProvider
 ##
 ## 请求体/流式解析完全复用 Chat Completions 实现，仅覆盖 URL 与模型列表来源。
 
-
 # --- Constants ---
+
+const URLHelper := preload("res://addons/godot_ai_chat/scripts/helper/url_helper.gd")
 
 ## 智谱AI支持的模型列表
 const ZHIPUAI_MODELS: Array[String] = ["glm-4.5-air"]

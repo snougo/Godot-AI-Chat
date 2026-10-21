@@ -1,4 +1,3 @@
-class_name SessionStorage
 extends RefCounted
 
 ## 聊天存档助手

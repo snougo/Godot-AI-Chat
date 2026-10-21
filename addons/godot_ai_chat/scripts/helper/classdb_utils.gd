@@ -1,4 +1,3 @@
-class_name ClassDBUtils
 extends RefCounted
 
 ## ClassDB 查询 + API 格式化 + 自定义类文档解析 工具集

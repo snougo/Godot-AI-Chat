@@ -6,7 +6,7 @@ extends RefCounted
 ##
 ## 定义了 AI 工具必须实现的接口以及通用的安全检查逻辑。
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 ## 统一的安全路径黑名单
 ## 这些目录包含 Godot 内部文件、插件源码或版本控制文件，禁止 AI 修改以免破坏项目结构
@@ -18,6 +18,7 @@ const PATH_BLACKLIST: Array[String] = [
 	"/addons/" 
 ]
 
+
 # --- Public Vars ---
 
 ## 工具的唯一标识符
@@ -25,6 +26,7 @@ var tool_name: String = ""
 
 ## 工具的描述，提供给 AI 阅读
 var tool_description: String = ""
+
 
 # --- Public Functions ---
 

@@ -10,6 +10,9 @@ extends FoldableContainer
 
 # --- Constants ---
 
+const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown_to_bbcode.gd")
+const MarkdownStreamParser := preload("res://addons/godot_ai_chat/scripts/helper/markdown_stream_parser.gd")
+
 ## 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
 
@@ -22,9 +25,6 @@ const BG_STYLE: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/messag
 
 ## 行内代码颜色
 const INLINE_CODE_COLOR: Color = Color("#d2cf95")
-## 段落实体类型（与 MarkdownToBBCode 保持一致）
-const SEGMENT_PLAIN: int = 0
-const SEGMENT_CODE: int = 1
 
 ## 思考内容单帧渲染上限（字符）
 const REASONING_RENDER_CHUNK_CHARS: int = 8192
@@ -120,6 +120,15 @@ var _text_viewer_code_edit: CodeEdit = null
 
 # 表格渲染状态
 var _in_table: bool = false
+# 当前表格的列数（数据行按它补齐/截断）
+var _table_columns: int = 0
+# 当前表格各列对齐方式（"left" / "center" / "right"）
+var _table_aligns: Array[String] = []
+# 当前表格已渲染的数据行数（用于隔行底色）
+var _table_row_index: int = 0
+
+# Markdown 渲染配色（想跟随编辑器主题时改成 MarkdownPalette.from_base(bg, text)）
+var _palette: MarkdownPalette = MarkdownPalette.new()
 
 # 工具角色专用：单一 TextEdit，不走 Markdown 解析器
 var _tool_text_edit: TextEdit = null
@@ -134,7 +143,18 @@ func _notification(what: int) -> void:
 
 
 func _ready() -> void:
-	_parser.segment_parsed.connect(_on_parser_segment_parsed)
+	_parser.text_line.connect(_on_parser_text_line)
+	_parser.blank.connect(_on_parser_blank)
+	_parser.code_start.connect(_on_parser_code_start)
+	_parser.code_line.connect(_on_parser_code_line)
+	_parser.code_end.connect(_on_parser_code_end)
+	_parser.table_start.connect(_on_parser_table_start)
+	_parser.table_row.connect(_on_parser_table_row)
+	_parser.table_end.connect(_on_parser_table_end)
+	_parser.list_item.connect(_on_parser_list_item)
+	_parser.quote.connect(_on_parser_quote)
+	_parser.rule.connect(_on_parser_rule)
+	
 	if not _content_container:
 		# 等待一帧以确保节点就绪 (主要用于 Tool 模式下的实例化)
 		await get_tree().process_frame
@@ -159,7 +179,6 @@ func set_content(p_role: String, p_content: String, p_model_name: String = "", p
 	_streaming = false
 	_parser.feed(p_content)
 	_parser.flush()
-	_close_table_if_open()
 	
 	for tc in p_tool_calls:
 		show_tool_call(tc)
@@ -223,7 +242,6 @@ func finish_stream() -> void:
 		_start_reasoning_fill()
 	
 	_parser.flush()
-	_close_table_if_open()
 	_finish_typing()
 
 
@@ -389,33 +407,6 @@ func is_suspended() -> bool:
 
 # --- Private Functions ---
 
-# 闭合未关闭的表格（流结束或静态加载结束时调用）
-func _close_table_if_open() -> void:
-	if _in_table:
-		_in_table = false
-		if is_instance_valid(_last_ui_node) and _last_ui_node is RichTextLabel:
-			_last_ui_node.append_text("[/table]\n\n")
-
-
-# 解析器信号回调：将解析段落路由到对应的 UI 渲染方法
-func _on_parser_segment_parsed(p_type: int, p_content: String, p_meta: String) -> void:
-	var instant: bool = not _streaming
-	
-	match p_type:
-		MarkdownStreamParser.SegmentType.TEXT:
-			_append_to_text(p_content, instant)
-		
-		MarkdownStreamParser.SegmentType.CODE_BLOCK_START:
-			_finish_typing()
-			_create_code_block(p_meta)
-		
-		MarkdownStreamParser.SegmentType.CODE_BLOCK_CONTENT:
-			_append_to_code(p_content)
-		
-		MarkdownStreamParser.SegmentType.CODE_BLOCK_END:
-			_last_ui_node = null
-
-
 # 设置标题和角色元数据
 func _set_title(p_role: String, p_model_name: String) -> void:
 	set_meta("role", p_role)
@@ -500,9 +491,7 @@ func _update_args_display(p_label: RichTextLabel, p_tool_call: Dictionary) -> vo
 	if AIChatLogger.current_flags & AIChatLogger.FLAG_DEBUG:
 		var elapsed_usec: int = Time.get_ticks_usec() - probe_start_usec
 		if elapsed_usec >= TOOL_ARGS_PROBE_WARN_USEC:
-			AIChatLogger.debug("Tool args render slow: full %d chars -> shown %d chars, %d usec" % [
-				args_str.length(), display_text.length(), elapsed_usec,
-			])
+			AIChatLogger.debug("Tool args render slow: full %d chars -> shown %d chars, %d usec" % [args_str.length(), display_text.length(), elapsed_usec,])
 
 
 # 构造参数预览文本
@@ -685,13 +674,14 @@ func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabe
 				OS.shell_open(url)
 	)
 	
-	var segments: Array[Dictionary] = MarkdownToBBCode.convert_line_to_segments(p_initial_text)
+	var segments: Array[MarkdownSegment] = MarkdownToBBCode.convert_line_to_segments(p_initial_text, _palette)
 	rtl.clear()
 	_render_segments(rtl, segments)
 	
 	if not p_initial_text.is_empty():
 		_is_first_text = false
-	_previous_line_was_blank = rtl.text.is_empty() or rtl.text == "\n"
+	# [P0] 原先这里还有一行用 rtl.text 判空白的 _previous_line_was_blank 初始化：
+	# rtl.text 是 BBCode 源串而非可见文本，判断不可靠；该状态由 _append_plain_line() 统一维护。
 	
 	if not p_instant:
 		rtl.visible_characters = 0
@@ -699,46 +689,71 @@ func _create_text_block(p_initial_text: String, p_instant: bool) -> RichTextLabe
 	return rtl
 
 
-# 追加内容到文本块
-func _append_to_text(p_text: String, p_instant: bool) -> void:
-	if not _last_ui_node is RichTextLabel:
-		_finish_typing()
-		_last_ui_node = _create_text_block("", p_instant)
-	
-	# --- 表格行检测（优先处理） ---
-	var line: String = p_text.trim_suffix("\n").strip_edges()
-	var is_table_row: bool = line.begins_with("|")
-	
-	if is_table_row:
-		var check: String = line.replace("|", "").replace("-", "").replace(" ", "").replace(":", "")
-		if check.is_empty():
-			return
-		
-		var cells: Array = MarkdownToBBCode.make_table_row_segments(line)
-		var is_header: bool = not _in_table
-		
-		if is_header:
-			_in_table = true
-			_last_ui_node.append_text("[table=%d]" % cells.size())
-			for cell_segs: Array in cells:
-				_last_ui_node.append_text("[cell bg=#2d2d5e][b]")
-				_render_segments(_last_ui_node, cell_segs)
-				_last_ui_node.append_text("[/b][/cell]")
-		else:
-			for cell_segs: Array in cells:
-				_last_ui_node.append_text("[cell]")
-				_render_segments(_last_ui_node, cell_segs)
-				_last_ui_node.append_text("[/cell]")
-		_last_ui_node.append_text("\n")
+# 渲染单个单元格（边框、底色、内边距、对齐、表头加粗）
+# [为什么必须规整类型] 本函数一旦中途抛错，[cell] 就没有闭合标签，
+# 整个 RichTextLabel 的表格结构会直接崩掉（报 ITEM_TABLE 断言）。
+# 渲染单个单元格（边框、底色、内边距、对齐、表头加粗）
+func _render_table_cell(p_segments: Array[MarkdownSegment], p_column: int, p_is_header: bool) -> void:
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl == null:
 		return
 	
-	# 非表格行：先闭合未关闭的表格
-	if _in_table:
-		_in_table = false
-		_last_ui_node.append_text("[/table]\n\n")
+	var align: String = _get_table_align(p_column)
 	
-	var segments: Array[Dictionary] = MarkdownToBBCode.convert_line_to_segments(p_text)
-	var is_blank: bool = (segments.is_empty() or _is_blank_segments(segments)) and p_text.strip_edges().is_empty()
+	# 开标签合并成一次 append（cell 属性 + 对齐 + 加粗）
+	var open_tag: String = _table_cell_open_tag(p_column, p_is_header)
+	if align != "left":
+		open_tag += "[p align=%s]" % align
+	if p_is_header:
+		open_tag += "[b]"
+	rtl.append_text(open_tag)
+	
+	_render_segments(rtl, p_segments)
+	
+	var close_tag: String = ""
+	if p_is_header:
+		close_tag += "[/b]"
+	if align != "left":
+		close_tag += "[/p]"
+	close_tag += "[/cell]"
+	rtl.append_text(close_tag)
+
+
+# 构造单元格开标签。边框与内边距必须逐格声明：RichTextLabel 没有表格级样式。
+func _table_cell_open_tag(p_column: int, p_is_header: bool) -> String:
+	var bg: String = ""
+	if p_is_header:
+		bg = " bg=#%s" % _palette.table_header_bg.to_html(false)
+	elif _table_row_index % 2 == 1:
+		# 隔行底色自行按行号奇偶计算，不依赖 cell 的 bg=奇,偶 语法
+		bg = " bg=#%s" % _palette.table_row_alt_bg.to_html(false)
+	
+	return "[cell padding=%d,%d,%d,%d border=#%s%s]" % [
+			_palette.cell_pad_h, _palette.cell_pad_v, _palette.cell_pad_h, _palette.cell_pad_v,
+			_palette.table_border.to_html(false), bg]
+
+
+# 取某列的对齐方式，未声明或越界一律按左对齐
+func _get_table_align(p_column: int) -> String:
+	if p_column >= _table_aligns.size():
+		return "left"
+	
+	var align: String = _table_aligns[p_column]
+	return align if not align.is_empty() else "left"
+
+
+# 普通文本行渲染（含空行压缩）
+func _append_plain_line(p_text: String, p_instant: bool) -> void:
+	# 原先这一步在 _append_to_text() 开头
+	# 现在每个块事件自行进入渲染层，统一放这里
+	_ensure_text_block(p_instant)
+	
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl == null:
+		return
+	
+	var segments: Array[MarkdownSegment] = MarkdownToBBCode.convert_line_to_segments(p_text, _palette)
+	var is_blank: bool = p_text.strip_edges().is_empty()
 	
 	# 开头空行 → 跳过（不渲染）
 	if _is_first_text and is_blank:
@@ -750,27 +765,26 @@ func _append_to_text(p_text: String, p_instant: bool) -> void:
 	
 	# 需要保留的单个空行（非开头、上一行不是空行）→ 渲染一个换行符
 	if is_blank:
-		_last_ui_node.append_text("\n")
+		rtl.append_text("\n")
 		_previous_line_was_blank = true
 		_is_first_text = false
 		return
 	
-	_previous_line_was_blank = is_blank
+	_previous_line_was_blank = false
 	_is_first_text = false
 	
 	if p_instant:
-		_render_segments(_last_ui_node, segments)
+		_render_segments(rtl, segments)
 	else:
-		var old_total: int = _last_ui_node.get_total_character_count()
-		if _last_ui_node.visible_characters == -1:
-			_last_ui_node.visible_characters = old_total
-		_render_segments(_last_ui_node, segments)
-		_trigger_typewriter(_last_ui_node)
+		var old_total: int = rtl.get_total_character_count()
+		if rtl.visible_characters == -1:
+			rtl.visible_characters = old_total
+		_render_segments(rtl, segments)
+		_trigger_typewriter(rtl)
 
 
 # 创建代码块 UI
 func _create_code_block(p_lang: String) -> void:
-	_close_table_if_open()
 	_finish_typing()
 	
 	var code_edit: CodeEdit = CodeEdit.new()
@@ -990,20 +1004,6 @@ func _create_text_viewer_window() -> void:
 	AIChatLogger.debug("[ChatMessageBlock] Text viewer created")
 
 
-# 查看窗口关闭回调：隐藏并清空文本
-# [为什么清空内容] 文本是内存占用的大头（TextServer 侧的文本缓冲），窗口节点本身很小。
-# 关闭即释放内容，既避免"看起来像泄漏"，也省掉每次点击重建窗口的开销。
-func _on_text_viewer_closed() -> void:
-	if not is_instance_valid(_text_viewer_window):
-		return
-	
-	_text_viewer_window.visible = false
-	if is_instance_valid(_text_viewer_args_edit):
-		_text_viewer_args_edit.text = ""
-	if is_instance_valid(_text_viewer_code_edit):
-		_text_viewer_code_edit.text = ""
-
-
 # 构造查看窗口显示的工具参数文本
 # [性能边界] 只在用户主动点开时执行一次：解析与渲染都是 O(全文)，不在流式热路径上；
 # 超过上限时退化为直接显示原文，避免点开后长时间无响应。
@@ -1056,28 +1056,34 @@ func _format_args_readable(p_value: Variant, p_indent: String = "") -> String:
 	return JSON.stringify(p_value)
 
 
-func _render_segments(rtl: RichTextLabel, segments: Array[Dictionary]) -> void:
-	for seg in segments:
-		match seg.type:
-			SEGMENT_PLAIN:
-				# 字面方括号改用 add_text 渲染，规避流式打字机下 [lb]/[rb] 被字面显示的问题
-				if seg.content == "[lb]":
-					rtl.add_text("[")
-				elif seg.content == "[rb]":
-					rtl.add_text("]")
-				else:
-					rtl.append_text(seg.content)
-			SEGMENT_CODE:
-				rtl.push_color(INLINE_CODE_COLOR)
-				rtl.add_text(seg.content)
-				rtl.pop()
-
-
-static func _is_blank_segments(segments: Array[Dictionary]) -> bool:
-	if segments.size() != 1:
-		return false
-	var seg: Dictionary = segments[0]
-	return seg.type == SEGMENT_PLAIN and seg.content.strip_edges().is_empty()
+# 渲染一段 segments 到 RichTextLabel
+# [P3 合并] 连续的 PLAIN 片段先拼成字符串再一次性 append_text：一行文本通常被切成
+# 5~10 个片段，合并后 append_text 调用次数降到 1~3 次。
+# [特例] "[lb]"/"[rb]" 必须走 add_text：流式打字机下它们会被字面显示（既有踩坑记录）。
+func _render_segments(p_rtl: RichTextLabel, p_segments: Array[MarkdownSegment]) -> void:
+	var buffer: String = ""
+	
+	for segment in p_segments:
+		if segment.kind == MarkdownToBBCode.SEGMENT_CODE:
+			if not buffer.is_empty():
+				p_rtl.append_text(buffer)
+				buffer = ""
+			p_rtl.push_color(_palette.inline_code)
+			p_rtl.add_text(segment.text)
+			p_rtl.pop()
+			continue
+		
+		# PLAIN
+		if segment.text == "[lb]" or segment.text == "[rb]":
+			if not buffer.is_empty():
+				p_rtl.append_text(buffer)
+				buffer = ""
+			p_rtl.add_text("[" if segment.text == "[lb]" else "]")
+		else:
+			buffer += segment.text
+	
+	if not buffer.is_empty():
+		p_rtl.append_text(buffer)
 
 
 # 清空所有内容
@@ -1114,3 +1120,199 @@ func _clear_content() -> void:
 	_previous_line_was_blank = false
 	# 重置表格状态
 	_in_table = false
+	_table_columns = 0
+	_table_aligns.clear()
+	_table_row_index = 0
+
+
+# 确保当前文本块是 RichTextLabel（代码块结束后 _last_ui_node 是 CodeEdit）
+# [param p_instant]: true = 整块渲染，不做打字机
+func _ensure_text_block(p_instant: bool) -> void:
+	if not _last_ui_node is RichTextLabel:
+		_finish_typing()
+		_last_ui_node = _create_text_block("", p_instant)
+
+
+# --- Signal Callbacks ---
+
+# 查看窗口关闭回调：隐藏并清空文本
+# [为什么清空内容] 文本是内存占用的大头（TextServer 侧的文本缓冲），窗口节点本身很小。
+# 关闭即释放内容，既避免"看起来像泄漏"，也省掉每次点击重建窗口的开销。
+func _on_text_viewer_closed() -> void:
+	if not is_instance_valid(_text_viewer_window):
+		return
+	
+	_text_viewer_window.visible = false
+	if is_instance_valid(_text_viewer_args_edit):
+		_text_viewer_args_edit.text = ""
+	if is_instance_valid(_text_viewer_code_edit):
+		_text_viewer_code_edit.text = ""
+
+
+# 普通段落行
+func _on_parser_text_line(p_line: String) -> void:
+	_append_plain_line(p_line, not _streaming)
+
+
+# 空行（交给 _append_plain_line 做压缩，与原先行为一致）
+func _on_parser_blank() -> void:
+	_append_plain_line("\n", not _streaming)
+
+
+# 代码块开始
+func _on_parser_code_start(p_lang: String) -> void:
+	_finish_typing()
+	_create_code_block(p_lang)
+
+
+# 代码块内容行
+func _on_parser_code_line(p_line: String) -> void:
+	_append_to_code(p_line)
+
+
+# 代码块结束
+func _on_parser_code_end() -> void:
+	_last_ui_node = null
+
+
+# 表格开始：列数与对齐由解析器给出，这里只做渲染准备
+func _on_parser_table_start(p_columns: int, p_aligns: Array[String]) -> void:
+	# 表格是整块 append 的，先结束打字机：
+	# 否则 visible_characters 停在旧值，表格会"藏"在打字机后面（整块延迟出现）
+	_finish_typing()
+	
+	if not _last_ui_node is RichTextLabel:
+		_last_ui_node = _create_text_block("", true)
+	
+	_in_table = true
+	_table_columns = p_columns
+	_table_aligns = p_aligns
+	# 第 0 行就是表头
+	_table_row_index = 0
+	_is_first_text = false
+	_previous_line_was_blank = false
+	
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	rtl.append_text("[table=%d]" % _table_columns)
+
+
+# 表格行：第 0 行是表头，其后是数据行
+func _on_parser_table_row(p_cells: Array) -> void:
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl == null or not _in_table:
+		return
+	
+	var is_header: bool = (_table_row_index == 0)
+	# 单元格数量按表头列数补齐/截断；元素是原始文本，行内转换在这里做
+	for column in _table_columns:
+		var cell_text: String = p_cells[column] if column < p_cells.size() else ""
+		var segments: Array[MarkdownSegment] = MarkdownToBBCode.convert_inline_to_segments(cell_text, _palette)
+		_render_table_cell(segments, column, is_header)
+	rtl.append_text("\n")
+	_table_row_index += 1
+
+
+# 表格结束
+func _on_parser_table_end() -> void:
+	if not _in_table:
+		return
+	
+	_in_table = false
+	_table_columns = 0
+	_table_aligns.clear()
+	_table_row_index = 0
+	
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl != null:
+		rtl.append_text("[/table]\n\n")
+		# 表格自身已输出两个换行，紧随的空行不必再补一个
+		_previous_line_was_blank = true
+		_is_first_text = false
+
+
+# 列表项
+# [标记由渲染层决定] 解析器只给原始标记，符号/编号的表达属于表现层。
+func _on_parser_list_item(p_depth: int, p_marker: String, p_text: String) -> void:
+	_ensure_text_block(not _streaming)
+	
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl == null:
+		return
+	
+	# 无序标记按层级换符号；有序标记（1. / 2) …）原样显示
+	var marker: String = p_marker
+	if not marker.substr(0, 1).is_valid_int():
+		marker = _palette.list_bullets[mini(p_depth, _palette.list_bullets.size() - 1)]
+	
+	var segments: Array[MarkdownSegment] = MarkdownToBBCode.convert_line_to_segments(p_text, _palette)
+	# convert_line_to_segments() 会追加行尾换行；要把它挪到 [/indent] 之后
+	if not segments.is_empty() and segments[segments.size() - 1].text == "\n":
+		segments.remove_at(segments.size() - 1)
+	
+	var opens: String = "[indent]".repeat(p_depth + 1)
+	var closes: String = "[/indent]".repeat(p_depth + 1)
+	
+	var instant: bool = not _streaming
+	if not instant and rtl.visible_characters == -1:
+		rtl.visible_characters = rtl.get_total_character_count()
+	
+	rtl.append_text("%s%s " % [opens, marker])
+	_render_segments(rtl, segments)
+	rtl.append_text("%s\n" % closes)
+	
+	if not instant:
+		_trigger_typewriter(rtl)
+	
+	_is_first_text = false
+	_previous_line_was_blank = false
+
+
+# 引用块（整块交付）：用 2 列表格模拟"左侧竖条 + 底色卡片"
+func _on_parser_quote(p_lines: PackedStringArray) -> void:
+	if p_lines.is_empty():
+		return
+	
+	_finish_typing()
+	_ensure_text_block(true)
+	
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl == null:
+		return
+	
+	rtl.append_text("[table=2]")
+	# 竖条：不参与宽度分配（expand=0），只有 2px 左右的内边距
+	rtl.append_text("[cell expand=0 padding=2,0,2,0 bg=#%s] [/cell]" % _palette.quote_bar.to_html(false))
+	rtl.append_text("[cell expand=1 padding=%d,%d,%d,%d bg=#%s]" % [
+			_palette.quote_pad, _palette.quote_pad, _palette.quote_pad, _palette.quote_pad,
+			_palette.quote_bg.to_html(false),
+	])
+	
+	for line in p_lines:
+		if line.strip_edges().is_empty():
+			rtl.append_text("\n")
+			continue
+		var segments: Array[MarkdownSegment] = MarkdownToBBCode.convert_line_to_segments(line, _palette)
+		if segments.is_empty():
+			rtl.append_text("\n")
+		else:
+			_render_segments(rtl, segments)
+	
+	rtl.append_text("[/cell][/table]\n\n")
+	
+	_is_first_text = false
+	_previous_line_was_blank = true
+
+
+# 分隔线
+func _on_parser_rule() -> void:
+	_finish_typing()
+	_ensure_text_block(true)
+	
+	var rtl: RichTextLabel = _last_ui_node as RichTextLabel
+	if rtl == null:
+		return
+	
+	rtl.append_text("[hr color=#%s height=1 width=100%%]\n" % _palette.table_border.to_html(false))
+	
+	_is_first_text = false
+	_previous_line_was_blank = false

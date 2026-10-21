@@ -1,4 +1,3 @@
-class_name AttachmentProcessor
 extends RefCounted
 
 ## 附件处理器

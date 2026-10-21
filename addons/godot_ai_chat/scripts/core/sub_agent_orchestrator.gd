@@ -1,5 +1,5 @@
 @tool
-class_name SubAgentOrchestrator
+class_name AIChatSubAgentOrchestrator
 extends Node
 
 ## Sub-Agent 编排器
@@ -7,8 +7,13 @@ extends Node
 ## 使用技能（Skill）声明的工具集独立完成一个任务，并回报结果。
 ## 与主 Agent 完全隔离：独立历史、独立工具集、独立 Provider 实例。
 
-
 # --- Constants ---
+
+const ContextBuilder := preload("res://addons/godot_ai_chat/scripts/core/context_builder.gd")
+const StreamMessageAssembler := preload("res://addons/godot_ai_chat/scripts/core/stream_message_assembler.gd")
+const JSONRepairHelper := preload("res://addons/godot_ai_chat/scripts/helper/json_repair_helper.gd")
+const URLHelper := preload("res://addons/godot_ai_chat/scripts/helper/url_helper.gd")
+const Utf8Helper := preload("res://addons/godot_ai_chat/scripts/helper/utf8_helper.gd")
 
 const REPORT_TASK_TOOL_SCRIPT: Resource = preload("res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/report_task_result_tool.gd")
 
@@ -76,6 +81,9 @@ func run_task() -> String:
 	if not provider:
 		_remove_sub_agent()
 		return "Error: failed to initialize Sub Agent API Provider."
+	
+	# 告知 Provider 目标模型：下方能力查询发生在 build_request_body() 之前
+	provider.set_active_model_name(_config.model_name)
 	
 	# 工具定义方言与图片交付方式均由 Provider 以能力查询自行声明
 	var requires_gemini_schema: bool = provider.requires_gemini_tool_schema()
@@ -433,7 +441,7 @@ func _get_tool_definitions(p_requires_gemini_schema: bool) -> Array[Dictionary]:
 func _remove_sub_agent() -> void:
 	var root: Window = Engine.get_main_loop().root
 	for child: Node in root.get_children(false):
-		if "SubAgentOrchestrator" in child.name and child is SubAgentOrchestrator:
+		if "SubAgentOrchestrator" in child.name and child is AIChatSubAgentOrchestrator:
 			root.remove_child(child)
 			queue_free()
 

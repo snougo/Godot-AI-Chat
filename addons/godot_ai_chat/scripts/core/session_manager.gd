@@ -1,9 +1,14 @@
-class_name SessionManager
+class_name AIChatSessionManager
 extends RefCounted
 
 ## 会话管理器
 ##
 ## 负责聊天会话的创建、加载、删除和自动保存。
+
+
+# --- Constants ---
+
+const SessionStorage := preload("res://addons/godot_ai_chat/scripts/helper/session_storage.gd")
 
 
 # --- Public Vars ---
@@ -70,6 +75,8 @@ func delete_session(p_session_name: String) -> bool:
 			_disconnect_auto_save()
 			current_session_path = ""
 			_current_history = null
+			# 当前会话已删除，清空 opencode 路由 ID，避免后续请求继续携带失效会话标识
+			OpenCodeGoProvider.set_conversation_session_id("")
 		ToolBox.update_editor_filesystem(archive_path)
 		return true
 	
@@ -126,7 +133,7 @@ func _save_as_new_session(p_history: ChatMessageHistory, p_name_suffix: String) 
 		_bind_opencode_session()
 		return p_history
 	
-	AIChatLogger.error("[SessionManager] Failed to save session: %s" % path)
+	AIChatLogger.error("[AIChatSessionManager] Failed to save session: %s" % path)
 	return null
 
 
