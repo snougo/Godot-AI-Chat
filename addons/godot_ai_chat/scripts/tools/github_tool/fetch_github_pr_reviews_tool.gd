@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub Pull Request 审查摘要工具
@@ -95,12 +94,17 @@ func _format_pr_reviews(p_json: Variant) -> String:
 	var reviews: Array = p_json
 	var output := "Reviews (%d):\n\n" % reviews.size()
 	for item in reviews:
+		if not (item is Dictionary):
+			continue
 		var review: Dictionary = item
-		var user: Dictionary = review.get("user", {})
+		var user: Dictionary = get_dict_field(review, "user")
+		var body_value: Variant = review.get("body")
+		var body_text: String = body_value if body_value is String else "(no body)"
 		output += "--- @%s (%s) — %s ---\n%s\n\n" % [
 			str(user.get("login", "?")),
 			str(review.get("submitted_at", "")),
 			str(review.get("state", "?")),
-			str(review.get("body", "(no body)"))
+			body_text
 		]
+	
 	return output

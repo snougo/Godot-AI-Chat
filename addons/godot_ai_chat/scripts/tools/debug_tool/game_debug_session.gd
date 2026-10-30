@@ -32,10 +32,12 @@ func get_active_session() -> EditorDebuggerSession:
 	if _active_session and _active_session.is_active():
 		return _active_session
 	_active_session = null
+	
 	for s in get_sessions():
 		if s.is_active():
 			_active_session = s
 			break
+	
 	return _active_session
 
 
@@ -43,6 +45,7 @@ func _setup_session(p_session_id: int) -> void:
 	var session: EditorDebuggerSession = get_session(p_session_id)
 	if session == null:
 		return
+	
 	session.connect("started", _on_session_started.bind(session))
 	session.connect("stopped", _on_session_stopped.bind(session))
 

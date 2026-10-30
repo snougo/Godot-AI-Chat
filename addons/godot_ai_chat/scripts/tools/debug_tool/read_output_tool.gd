@@ -5,6 +5,8 @@ extends AiTool
 
 
 const EditorConsoleReader := preload("res://addons/godot_ai_chat/scripts/helper/editor_console_reader.gd")
+
+
 func _init() -> void:
 	tool_name = "read_output"
 	tool_description = "Read the editor's Output console — the log panel the user sees, including a running game's prints and errors; returns the newest lines, optionally filtered."

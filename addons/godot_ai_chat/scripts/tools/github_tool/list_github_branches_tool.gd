@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub 仓库分支列表工具
@@ -7,7 +6,7 @@ extends BaseGithubTool
 ## 解决 LLM 不确定主分支是 'main' 还是 'master'（或其它名称）的问题。
 ## 自动分页抓取所有分支（每页 100，循环取页直到取完）。
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 const DEFAULT_REPO: String = "godotengine/godot"
 const BRANCHES_PER_PAGE: int = 100
@@ -62,10 +61,12 @@ func _fetch_default_branch(p_repo: String) -> String:
 	var resp: Dictionary = await http_get(API_HOST, "/repos/%s" % p_repo)
 	if resp.has("error") or resp.code != 200:
 		return ""
+	
 	var json: Variant = JSON.parse_string(resp.body.get_string_from_utf8())
 	if json is Dictionary:
 		var data: Dictionary = json
 		return str(data.get("default_branch", ""))
+	
 	return ""
 
 
@@ -73,22 +74,28 @@ func _fetch_default_branch(p_repo: String) -> String:
 func _fetch_all_branches(p_repo: String) -> Array[String]:
 	var branches: Array[String] = []
 	var page := 1
+	
 	while true:
 		var api_path := "/repos/%s/branches?per_page=%d&page=%d" % [p_repo, BRANCHES_PER_PAGE, page]
 		var resp: Dictionary = await http_get(API_HOST, api_path)
 		if resp.has("error") or resp.code != 200:
 			break
+		
 		var json: Variant = JSON.parse_string(resp.body.get_string_from_utf8())
 		if json == null or not (json is Array):
 			break
+		
 		var items: Array = json
 		if items.is_empty():
 			break
+		
 		for item in items:
 			var branch: Dictionary = item
 			branches.append(str(branch.get("name", "")))
+		
 		if items.size() < BRANCHES_PER_PAGE:
 			break
 		page += 1
+	
 	branches.sort()
 	return branches

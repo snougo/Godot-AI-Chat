@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 资源文件属性获取工具。
@@ -6,7 +5,7 @@ extends AiTool
 ## 与 edit_resource_tool 配合使用：先查属性列表，再修改属性。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 

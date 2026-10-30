@@ -1,4 +1,3 @@
-@tool
 class_name AIChatHtmlNode
 extends RefCounted
 
@@ -11,7 +10,16 @@ extends RefCounted
 ## - 新增 append_walk_into()，允许复用遍历结果数组，避免反复整树遍历。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
+
+## HTML 空元素（无结束标签、无子节点）
+const VOID_ELEMENTS: Array[String] = [
+	"area", "base", "br", "col", "embed", "hr", "img", "input",
+	"link", "meta", "param", "source", "track", "wbr",
+]
+
+
+# --- Enums ---
 
 ## 节点类型
 enum NodeType {
@@ -20,12 +28,6 @@ enum NodeType {
 	COMMENT,   ## 注释
 	DOCUMENT,  ## 文档根
 }
-
-## HTML 空元素（无结束标签、无子节点）
-const VOID_ELEMENTS: Array[String] = [
-	"area", "base", "br", "col", "embed", "hr", "img", "input",
-	"link", "meta", "param", "source", "track", "wbr",
-]
 
 
 # --- Public Vars ---

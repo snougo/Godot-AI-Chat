@@ -1,4 +1,3 @@
-@tool
 class_name BaseAnthropicProvider
 extends BaseLLMProvider
 
@@ -36,7 +35,8 @@ func get_stream_parser_type() -> StreamParserType:
 ## [子类覆写] 构建请求体 (Body)
 func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	# 从 kimi-k2.6 模型开始只接受固定温度值 1，强制覆盖用户设置
-	var final_temperature: float = 1.0 if p_model_name == "kimi-k2.6" or "kimi-k2.7-code" or "kimi-k3" else p_temperature
+	var is_fixed_temperature_model: bool = p_model_name in ["kimi-k2.6", "kimi-k2.7-code", "kimi-k3", "kimi-k3.1"]
+	var final_temperature: float = 1.0 if is_fixed_temperature_model else p_temperature
 	
 	var system_prompt: String = ""
 	var api_messages: Array[Dictionary] = []

@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub 仓库目录结构查看工具
@@ -7,17 +6,18 @@ extends BaseGithubTool
 ## 让 LLM 逐层调查仓库结构。
 ## 路径参数经过健壮性规范化，支持 'core/'、'/core/'、'./core'、'a//b' 等任意写法。
 
-# --- Enums / Constants ---
+
+# --- Constants ---
 
 const DEFAULT_REPO: String = "godotengine/godot"
-const DEFAULT_VERSION: String = "4.7.1-stable"
+const DEFAULT_VERSION: String = "4.7"
 
 
 # --- Public Functions ---
 
 func _init() -> void:
 	tool_name = "list_github_repo_dir"
-	tool_description = "Lists subdirectories and files in a directory of a public GitHub repository. Tips: Using `list_github_branches` to get branches first."
+	tool_description = "Lists subdirectories and files in a directory of a public GitHub repository. Using `list_github_branches` to get branches first."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -66,6 +66,7 @@ func _list_directory(p_repo: String, p_path: String, p_version: String) -> ToolR
 	var api_path := "/repos/%s/contents" % p_repo
 	if not p_path.is_empty():
 		api_path += "/" + p_path
+	
 	api_path += "?ref=%s" % p_version
 	var resp: Dictionary = await http_get(API_HOST, api_path)
 	
@@ -88,6 +89,7 @@ func _list_directory(p_repo: String, p_path: String, p_version: String) -> ToolR
 		var entry: Dictionary = item
 		var entry_name: String = str(entry.get("name", ""))
 		var entry_type: String = str(entry.get("type", ""))
+		
 		if entry_type == "dir":
 			dir_names.append(entry_name + "/")
 		elif entry_type == "file":
@@ -101,9 +103,11 @@ func _list_directory(p_repo: String, p_path: String, p_version: String) -> ToolR
 	
 	var display_path: String = p_path if not p_path.is_empty() else "(root)"
 	var output := "Directory: %s/ (repo: %s, version: %s)\n\n" % [display_path, p_repo, p_version]
+	
 	output += "Subdirectories (%d):\n" % dir_names.size()
 	for dir_name in dir_names:
 		output += "  %s\n" % dir_name
+	
 	output += "\nFiles (%d):\n" % file_entries.size()
 	for file_entry in file_entries:
 		output += "  %s (%d KB)\n" % [file_entry.name, file_entry.size_kb]

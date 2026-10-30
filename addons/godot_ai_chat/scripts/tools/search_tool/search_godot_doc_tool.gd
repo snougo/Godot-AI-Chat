@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 本地 Godot 离线文档标题搜索工具。
@@ -27,7 +26,7 @@ const MAX_RESULTS_PER_KEYWORD: int = 20
 
 func _init() -> void:
 	tool_name = "search_godot_doc"
-	tool_description = "Searches the local Godot offline documentation (`res://godot_doc`) by fuzzy document title."
+	tool_description = "Searches the local Godot offline documentation in `res://godot_doc` by fuzzy document title."
 
 
 # --- Public Functions ---
@@ -38,7 +37,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"keyword": {
 				"type": "string",
-				"description": "Search keyword(s), matched fuzzily against document titles (file names), case-insensitive. E.g. `Node2D`, `animationplayer`. Separated by spaces or commas, each keyword is searched separately. `ClassName.member` tries the full string first, then falls back to the `ClassName` part."
+				"description": "Search keyword(s), case-insensitive. Separated by spaces or commas, each keyword is searched separately."
 			}
 		},
 		"required": ["keyword"]

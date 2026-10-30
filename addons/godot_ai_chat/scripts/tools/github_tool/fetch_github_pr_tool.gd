@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub Pull Request 概览工具
@@ -6,7 +5,8 @@ extends BaseGithubTool
 ## 通过 GitHub API 获取单个 Pull Request 的核心信息：标题、状态、作者、分支关系、创建/更新时间、正文描述。
 ## 如需更详细内容，配合使用 fetch_github_pr_files / fetch_github_pr_commits / fetch_github_pr_comments / fetch_github_pr_reviews。
 
-# --- Enums / Constants ---
+
+# --- Constants ---
 
 const DEFAULT_REPO: String = "godotengine/godot"
 
@@ -15,7 +15,7 @@ const DEFAULT_REPO: String = "godotengine/godot"
 
 func _init() -> void:
 	tool_name = "fetch_github_pr"
-	tool_description = "Fetches the overview of a Pull Request (title, state, author, head/base branches, description) from a GitHub repository via GitHub API."
+	tool_description = "Fetches the overview of a Pull Request from a GitHub repository via GitHub API."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -29,7 +29,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"pr": {
 				"type": "integer",
-				"description": "GitHub Pull Request number (e.g. 110933)."
+				"description": "GitHub Pull Request number."
 			},
 			"max_length": {
 				"type": "integer",
@@ -82,9 +82,13 @@ func _fetch_pr_overview(p_repo: String, p_pr_number: int, p_max_length: int) -> 
 # 格式化 PR 概览信息
 func _format_pr_overview(p_json: Variant) -> String:
 	var data: Dictionary = p_json
-	var user: Dictionary = data.get("user", {})
-	var head: Dictionary = data.get("head", {})
-	var base: Dictionary = data.get("base", {})
+	# user / head / base 在 GitHub 响应中可能显式为 null（已注销账号、异常仓库状态）
+	var user: Dictionary = get_dict_field(data, "user")
+	var head: Dictionary = get_dict_field(data, "head")
+	var base: Dictionary = get_dict_field(data, "base")
+	# body 无描述时是 null，避免输出 "<null>"
+	var body_value: Variant = data.get("body")
+	var body_text: String = body_value if body_value is String else "(no description)"
 	var output := "PR #%d: %s\n" % [int(data.get("number", 0)), str(data.get("title", ""))]
 	output += "State: %s | Merged: %s\n" % [str(data.get("state", "?")), "yes" if data.get("merged", false) else "no"]
 	output += "Author: %s\n" % str(user.get("login", "?"))
@@ -92,5 +96,5 @@ func _format_pr_overview(p_json: Variant) -> String:
 	output += "Created: %s | Updated: %s\n" % [str(data.get("created_at", "")), str(data.get("updated_at", ""))]
 	output += "URL: %s\n\n" % str(data.get("html_url", ""))
 	output += "--- Description ---\n"
-	output += str(data.get("body", "(no description)"))
+	output += body_text
 	return output

@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 网页内容抓取与提取工具
@@ -8,7 +7,7 @@ extends AiTool
 ## 分阶段超时与短期缓存。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 const CONNECT_TIMEOUT: float = 10.0
 const HEADER_TIMEOUT: float = 15.0
@@ -129,12 +128,14 @@ func get_parameters_schema() -> Dictionary:
 
 func execute(p_args: Dictionary) -> ToolResult:
 	var url: String = str(p_args.get("url", "")).strip_edges()
+	
 	if url.is_empty():
 		return ToolResult.fail("Error: URL cannot be empty.")
 	if not url.begins_with("http://") and not url.begins_with("https://"):
 		url = "https://" + url
 	
 	var selector: String = str(p_args.get("content_selector", "")).strip_edges()
+	
 	var max_length: int = int(p_args.get("max_length", 5000))
 	if max_length <= 0:
 		max_length = 5000
@@ -160,6 +161,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		return ToolResult.fail("Error: The URL points to a PDF document, which this tool cannot extract. Try a documentation page that hosts the content as HTML.")
 	if kind == "image":
 		return ToolResult.fail("Error: The URL points to an image, which this tool cannot extract.")
+	
 	var stripped: String = body.strip_edges()
 	if kind == "text" or stripped.begins_with("{") or stripped.begins_with("["):
 		return ToolResult.ok(_truncate(body, max_length))
@@ -199,6 +201,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	if head_parts.is_empty():
 		return ToolResult.ok(raw_text)
+	
 	return ToolResult.ok("\n".join(head_parts) + "\n\n" + raw_text)
 
 
@@ -209,6 +212,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 func _fetch_with_redirects(p_url: String) -> Dictionary:
 	var current_url: String = p_url
 	var visited: Array[String] = []
+	
 	for _hop in range(MAX_REDIRECTS + 1):
 		if current_url in visited:
 			return {"success": false, "error": "Redirect loop detected at %s" % current_url}
@@ -223,9 +227,11 @@ func _fetch_with_redirects(p_url: String) -> Dictionary:
 			var location: String = str(response.get("location", "")).strip_edges()
 			if location.is_empty():
 				return {"success": false, "error": "HTTP %d redirect without Location header." % code}
+			
 			var next_url: String = _resolve_url(current_url, location)
 			if next_url.is_empty():
 				return {"success": false, "error": "Invalid redirect Location: %s" % location}
+			
 			current_url = next_url
 			continue
 		
@@ -242,14 +248,17 @@ func _request_with_retry(p_url: String) -> Dictionary:
 		return cached
 	
 	var last_error: String = "Unknown network error."
+	
 	for attempt in range(MAX_RETRIES + 1):
 		var response: Dictionary = await _http_get(p_url)
 		if response.get("success", false):
 			_write_cache(p_url, response)
 			return response
+		
 		last_error = str(response.get("error", "Unknown network error."))
 		if not response.get("retryable", false):
 			return response
+		
 		if attempt < MAX_RETRIES:
 			await _sleep(0.4 * float(attempt + 1))
 	
@@ -344,10 +353,12 @@ func _http_get(p_url: String) -> Dictionary:
 					"error": "Response body exceeds the %d bytes limit for %s" % [MAX_BODY_BYTES, p_url],
 					"retryable": false
 				}
+			
 			raw_bytes.append_array(chunk)
 		
 		if client.get_status() == HTTPClient.STATUS_BODY:
 			await _sleep(POLL_DELAY)
+			
 			elapsed += POLL_DELAY
 			if elapsed >= BODY_TIMEOUT:
 				client.close()
@@ -397,6 +408,7 @@ func _resolve_url(p_base: String, p_reference: String) -> String:
 		if scheme.is_empty():
 			scheme = "https"
 		return scheme + ":" + reference
+	
 	if p_base.is_empty():
 		return reference
 	
@@ -417,6 +429,7 @@ func _resolve_url(p_base: String, p_reference: String) -> String:
 	
 	var last_slash: int = base_path.rfind("/")
 	var directory: String = base_path.substr(0, last_slash + 1) if last_slash != -1 else "/"
+	
 	return "%s://%s%s%s" % [base_scheme, authority, directory, reference]
 
 
@@ -611,12 +624,18 @@ func _multibyte_names(p_charset: String) -> Array[String]:
 
 # --- Private Functions: Content Location ---
 
-# 定位正文节点：优先用户选择器，否则候选打分选优
+# 定位正文节点：优先用户选择器，其次语义容器，最后候选打分选优
 func _locate_content(p_document: AIChatHtmlDocument, p_selector: String) -> AIChatHtmlNode:
 	if not p_selector.is_empty():
 		var matched: AIChatHtmlNode = p_document.query_selector(p_selector)
 		if matched != null:
 			return matched
+	
+	# 语义容器（role=main / main / article）优先级高于打分：只要文本量足够就直接采用，
+	# 否则 <body> 会凭"文本量更大"胜出，把侧栏导航一起带进正文
+	var preferred: AIChatHtmlNode = _find_preferred_content(p_document)
+	if preferred != null:
+		return preferred
 	
 	var best: AIChatHtmlNode = null
 	var best_score: float = -1.0
@@ -629,6 +648,34 @@ func _locate_content(p_document: AIChatHtmlDocument, p_selector: String) -> AICh
 			best = node
 	
 	return best
+
+
+# 查找语义正文容器：按 role=main → main → article 的优先级，返回首个文本量达标的节点
+# 单次遍历完成（walk_elements 只分配一次整树数组），避免三次 query_selector 各自的
+# 选择器编译与整树遍历。判定语义与 query_selector("[role=main]") / ("main") / ("article") 等价。
+func _find_preferred_content(p_document: AIChatHtmlDocument) -> AIChatHtmlNode:
+	var candidates: Array[AIChatHtmlNode] = [null, null, null]
+	
+	for node in p_document.walk_elements():
+		if candidates[0] == null and node.get_attribute("role") == "main":
+			candidates[0] = node
+		elif candidates[1] == null and node.tag_name == "main":
+			candidates[1] = node
+		elif candidates[2] == null and node.tag_name == "article":
+			candidates[2] = node
+		
+		# 三类候选都已取到文档序首个节点，无需继续遍历
+		if candidates[0] != null and candidates[1] != null and candidates[2] != null:
+			break
+	
+	for candidate in candidates:
+		if candidate == null:
+			continue
+		var stats: Dictionary = _measure_text(candidate)
+		if int(stats["text_length"]) >= MIN_CANDIDATE_CHARS * 4:
+			return candidate
+	
+	return null
 
 
 # 是否为正文候选节点
@@ -698,6 +745,7 @@ func _measure_text_into(p_node: AIChatHtmlNode, p_in_link: bool, p_stats: Dictio
 func _prune_link_blocks(p_content_node: AIChatHtmlNode) -> void:
 	var stats: Dictionary = {}
 	_collect_text_stats(p_content_node, false, stats)
+	
 	# 正文本身就是链接列表（目录页 / 列表页）时不过滤，避免把正文清空
 	if _link_density_of(stats.get(p_content_node, {})) >= MAX_CONTENT_LINK_DENSITY:
 		return
@@ -721,6 +769,7 @@ func _collect_text_stats(p_node: AIChatHtmlNode, p_in_link: bool, p_stats: Dicti
 			var is_link: bool = child.tag_name == "a"
 			if is_link and not child.get_attribute("href").is_empty():
 				link_count += 1
+			
 			var child_stats: Dictionary = _collect_text_stats(child, p_in_link or is_link, p_stats)
 			text_length += int(child_stats["text_length"])
 			link_length += int(child_stats["link_length"])
@@ -731,6 +780,7 @@ func _collect_text_stats(p_node: AIChatHtmlNode, p_in_link: bool, p_stats: Dicti
 		"link_length": link_length,
 		"link_count": link_count,
 	}
+	
 	p_stats[p_node] = entry
 	return entry
 
@@ -896,6 +946,7 @@ func _shrink_whitespace(p_text: String) -> String:
 func _truncate(p_text: String, p_max_length: int) -> String:
 	if p_text.length() > p_max_length:
 		return p_text.left(p_max_length) + "\n\n[...truncated at %d characters]" % p_max_length
+	
 	return p_text
 
 

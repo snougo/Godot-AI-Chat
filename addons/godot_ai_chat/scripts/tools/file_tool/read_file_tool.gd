@@ -1,11 +1,11 @@
-@tool
 extends AiTool
 
 ## 读取指定文件的内容（支持场景、脚本、资源、文本、图片元数据等）。
 ## 文件类型根据扩展名自动推断，无需手动指定。
 ## 不包含文件夹结构读取功能（该功能已移至 manage_folder_tool）。
 
-# --- Enums / Constants ---
+
+# --- Constants ---
 
 const FileContentReader := preload("res://addons/godot_ai_chat/scripts/helper/file_content_reader.gd")
 
@@ -18,11 +18,13 @@ const EXTENSION_MAP: Dictionary = {
 	"image_meta": ["png", "jpg", "jpeg"]
 }
 
+
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "read_file"
-	tool_description = "Reads a file. Supported: scene (tscn/scn), script (gd/gdshader/glsl), text (md/json/cfg/txt/godot/uid/import), resource (tres/res), image_meta (jpg/jpeg/png)"
+	tool_description = "Reads a file. Support: tscn, scn, gd, gdshader, glsl, md, json, cfg, txt, godot, uid, import, tres, res, and image_meta(jpg/jpeg/png)."
+
 
 # --- Public Functions ---
 
@@ -38,6 +40,7 @@ func get_parameters_schema() -> Dictionary:
 		},
 		"required": ["path"]
 	}
+
 
 ## 执行文件读取
 ## [param p_args]: 包含 path 的参数字典
@@ -70,6 +73,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	return _read_file_content(file_type, path)
 
+
 # --- Private Functions ---
 
 # 验证路径安全性
@@ -82,6 +86,7 @@ func _validate_path(p_path: String) -> String:
 		return "Error: Path traversal ('..') is not allowed."
 	return ""
 
+
 # 根据文件扩展名自动推断文件类型
 # [param p_path]: 文件路径
 # [return]: 推断出的文件类型字符串，如果无法识别则返回空字符串
@@ -91,6 +96,7 @@ static func _auto_detect_file_type(p_path: String) -> String:
 		if ext in EXTENSION_MAP[file_type]:
 			return file_type
 	return ""
+
 
 # 执行文件内容读取
 # [param p_file_type]: 上下文类型
@@ -113,6 +119,7 @@ func _read_file_content(p_file_type: String, p_path: String) -> ToolResult:
 			return _wrap_reader_result(FileContentReader.read_image_metadata(p_path))
 		_:
 			return ToolResult.fail("File Type Error: Unsupport file type.")
+
 
 func _wrap_reader_result(p_dict: Dictionary) -> ToolResult:
 	var img_data: PackedByteArray = p_dict.get("image_data", PackedByteArray())

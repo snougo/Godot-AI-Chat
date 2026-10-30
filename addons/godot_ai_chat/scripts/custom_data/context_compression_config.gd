@@ -9,16 +9,16 @@ extends Resource
 ## 保留第一轮原始对话，将其余轮次送 LLM 进行摘要，
 ## 然后在新会话中拼接 [第一轮] + [摘要] 继续对话。
 
-## 是否启用上下文压缩（关闭时回退为旧的截断逻辑）
-@export var enabled: bool = true
+## 是否启用上下文压缩（关闭时自动触发路径回退为截断逻辑，手动压缩按钮也会被禁用）
+@export var enabled: bool = false
 
 ## 摘要请求使用的 API 服务提供商类型
 @export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "Anthropic-Compatible", "OpenCode Go") var api_provider: String = "OpenAI-ChatCompletions"
 
-## API 服务的基地址。留空则使用主对话的配置。
+## API 服务的基地址。（必填，需以 http:// 或 https:// 开头；不再回退到主对话配置）
 @export var api_base_url: String = ""
 
-## API 密钥。留空则使用主对话的配置。
+## API 密钥。（远程服务必填；本地/内网推理服务可留空）
 @export var api_key: String = ""
 
 ## 摘要模型名称（建议使用快速、廉价的模型）
@@ -73,3 +73,95 @@ AI：xxx
 
 > **注意**：不得丢弃或忽略旧总结中的任何信息。
 """
+
+
+# --- Validation ---
+
+## 校验配置是否完整、格式是否合法
+## [return] 空字符串表示有效；否则返回问题描述
+func validate() -> String:
+	var problems: PackedStringArray = []
+	
+	if api_provider.strip_edges().is_empty():
+		problems.append("api_provider is empty")
+	
+	var url: String = api_base_url.strip_edges()
+	if url.is_empty():
+		problems.append("api_base_url is empty")
+	elif not (url.begins_with("http://") or url.begins_with("https://")):
+		problems.append("api_base_url is invalid (must start with http:// or https://)")
+	elif _extract_host(url).is_empty():
+		problems.append("api_base_url has no parsable host")
+	
+	if model_name.strip_edges().is_empty():
+		problems.append("model_name is empty")
+	
+	# 本地/内网推理服务通常不做鉴权，仅远程服务才强制要求 api_key
+	if not url.is_empty() and not is_local_service(url) and api_key.strip_edges().is_empty():
+		problems.append("api_key is empty (required for remote services)")
+	
+	if problems.is_empty():
+		return ""
+	return "Configuration problems: " + "; ".join(problems)
+
+
+## 判断 API 基地址是否指向本地/内网推理服务
+## [desc] Ollama / LM Studio / llama.cpp / vLLM 等本地部署服务一般无效验，无需 api_key
+static func is_local_service(p_base_url: String) -> bool:
+	var host: String = _extract_host(p_base_url)
+	if host.is_empty():
+		return false
+	
+	# 回环地址
+	if host == "localhost" or host == "::1" or host == "0.0.0.0":
+		return true
+	if host.begins_with("127."):
+		return true
+	
+	# 私有网段（局域网内的自建推理服务）
+	if host.begins_with("10.") or host.begins_with("192.168."):
+		return true
+	if host.begins_with("172."):
+		var parts: PackedStringArray = host.split(".")
+		if parts.size() >= 2 and parts[1].is_valid_int():
+			var second: int = int(parts[1])
+			if second >= 16 and second <= 31:
+				return true
+	
+	return false
+
+
+# --- Private Functions ---
+
+# 从 URL 中提取主机名（剥离协议、路径、认证段、端口）
+static func _extract_host(p_base_url: String) -> String:
+	var s: String = p_base_url.strip_edges().to_lower()
+	
+	var scheme_idx: int = s.find("://")
+	if scheme_idx != -1:
+		s = s.substr(scheme_idx + 3)
+	
+	var path_idx: int = s.find("/")
+	if path_idx != -1:
+		s = s.substr(0, path_idx)
+	
+	var at_idx: int = s.rfind("@")
+	if at_idx != -1:
+		s = s.substr(at_idx + 1)
+	
+	# 带方括号的 IPv6（如 [::1]:11434）
+	if s.begins_with("["):
+		var close_idx: int = s.find("]")
+		if close_idx != -1:
+			return s.substr(1, close_idx - 1)
+		return s
+	
+	# 裸 IPv6 无法区分端口，原样返回
+	if s.count(":") > 1:
+		return s
+	
+	var port_idx: int = s.rfind(":")
+	if port_idx != -1:
+		s = s.substr(0, port_idx)
+	
+	return s

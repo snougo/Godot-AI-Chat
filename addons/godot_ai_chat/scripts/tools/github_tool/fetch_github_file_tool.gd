@@ -1,22 +1,27 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub 仓库文件内容抓取工具
 ##
-## 从任意公开 GitHub 仓库抓取指定路径的单个文件原始内容，完整保留排版，全量返回（不截断）。
+## 从任意公开 GitHub 仓库抓取指定路径的单个文件原始内容，完整保留排版。
+## 支持按行区间抓取（start_line / line_count）：便于从超大文件（例如 Blender 的
+## bmesh_bevel.cc，约 275 KB）里定点取出若干函数，而不是整份灌进上下文。
 ## 路径参数经过健壮性规范化，支持 'core/object.cpp'、'./core/object.cpp' 等写法。
 
-# --- Enums / Constants ---
+
+# --- Constants ---
 
 const DEFAULT_REPO: String = "godotengine/godot"
-const DEFAULT_VERSION: String = "4.7.1-stable"
+const DEFAULT_VERSION: String = "4.7"
+
+## 单次返回的字符上限：超过即截断（防止一次抓取撑爆上下文）。
+const MAX_RESPONSE_CHARS: int = 120000
 
 
 # --- Public Functions ---
 
 func _init() -> void:
 	tool_name = "fetch_github_file"
-	tool_description = "Fetches the full raw content of a single file from a public GitHub repository."
+	tool_description = "Fetches raw content of a single file from a public GitHub repository."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -36,6 +41,16 @@ func get_parameters_schema() -> Dictionary:
 				"type": "string",
 				"description": "Git tag, branch or commit hash.",
 				"default": DEFAULT_VERSION
+			},
+			"start_line": {
+				"type": "integer",
+				"description": "1-based first line to return. Default 1.",
+				"default": 1
+			},
+			"line_count": {
+				"type": "integer",
+				"description": "How many lines to return starting at 'start_line'. 0 = to end of file. Default 0",
+				"default": 0
 			}
 		},
 		"required": ["repo", "path", "version"]
@@ -62,13 +77,16 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if version.is_empty():
 		return ToolResult.fail("Error: version contains invalid characters. Allowed: letters, digits, '.', '_', '-'.")
 	
-	return await _fetch_file(repo, path, version)
+	var start_line: int = maxi(int(p_args.get("start_line", 1)), 1)
+	var line_count: int = maxi(int(p_args.get("line_count", 0)), 0)
+	
+	return await _fetch_file(repo, path, version, start_line, line_count)
 
 
 # --- Private Functions ---
 
-# 从 raw.githubusercontent.com 抓取单文件原始内容（全量返回，不截断）
-func _fetch_file(p_repo: String, p_path: String, p_version: String) -> ToolResult:
+# 从 raw.githubusercontent.com 抓取单文件原始内容；按行区间切片后返回（带长度上限）
+func _fetch_file(p_repo: String, p_path: String, p_version: String, p_start_line: int, p_line_count: int) -> ToolResult:
 	var url_path := "/%s/%s/%s" % [p_repo, p_version, p_path]
 	var resp: Dictionary = await http_get(RAW_HOST, url_path)
 	
@@ -86,6 +104,18 @@ func _fetch_file(p_repo: String, p_path: String, p_version: String) -> ToolResul
 	if text.is_empty():
 		return ToolResult.fail("Error: Response body is empty (file may be binary).")
 	
-	var meta := "Source: https://github.com/%s/blob/%s/%s\n\n" % [p_repo, p_version, p_path]
+	var lines: PackedStringArray = text.split("\n")
+	var total: int = lines.size()
 	
-	return ToolResult.ok(meta + text)
+	var first: int = clampi(p_start_line, 1, maxi(total, 1))
+	var last: int = total if p_line_count <= 0 else mini(first + p_line_count - 1, total)
+	var sliced: String = "\n".join(lines.slice(first - 1, last))
+	
+	var meta := "Source: https://github.com/%s/blob/%s/%s\n" % [p_repo, p_version, p_path]
+	
+	if first > 1 or last < total:
+		meta += "Lines: %d-%d of %d\n" % [first, last, total]
+	
+	meta += "\n"
+	
+	return ToolResult.ok(meta + truncate_text(sliced, MAX_RESPONSE_CHARS))

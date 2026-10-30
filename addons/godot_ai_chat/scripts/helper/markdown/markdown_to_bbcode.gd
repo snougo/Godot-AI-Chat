@@ -9,7 +9,9 @@ extends RefCounted
 
 # --- Constants ---
 
-## 合法的 BBCode 标签白名单（RichTextLabel 支持的核心标签）
+const MarkdownSegment := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_segment.gd")
+
+# 合法的 BBCode 标签白名单（RichTextLabel 支持的核心标签）
 const BBCODE_TAGS: Array[String] = [
 	"b", "i", "u", "s", "color", "font", "font_size",
 	"url", "lb", "rb", "img",
@@ -17,10 +19,10 @@ const BBCODE_TAGS: Array[String] = [
 	"code", "highlight", "br", "p"
 ]
 
-## 可被反斜杠转义的字符（对齐 CommonMark，附加表格用的 |）
+# 可被反斜杠转义的字符（对齐 CommonMark，附加表格用的 |）
 const ESCAPABLE_CHARS: String = "\\`*_~[]()<>#-+.!|"
 
-## 段落实体类型（MarkdownSegment.Kind 的短名，供本文件与渲染层引用）
+# 段落实体类型（MarkdownSegment.Kind 的短名，供本文件与渲染层引用）
 const SEGMENT_PLAIN: MarkdownSegment.Kind = MarkdownSegment.Kind.PLAIN
 const SEGMENT_CODE: MarkdownSegment.Kind = MarkdownSegment.Kind.CODE
 

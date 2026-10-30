@@ -1,4 +1,3 @@
-@tool
 class_name ToolBox
 extends RefCounted
 
@@ -17,8 +16,16 @@ const SCAN_DELAY_MSEC: int = 100
 
 ## 是否有待执行的定时扫描
 static var _scan_pending: bool = false
+
+## 待重新导入的单个文件路径（用于 .glsl 这类导入型资源）
+static var _pending_reimport_paths: Array[String] = []
+
+## 是否已调度重导 flush
+static var _reimport_flush_scheduled: bool = false
+
 ## 控制字符检测正则（懒加载缓存）
 static var _control_char_regex: RegEx = null
+
 ## 工具名合法性校验正则（懒加载缓存）
 static var _tool_name_regex: RegEx = null
 
@@ -99,6 +106,28 @@ static func refresh_editor_filesystem() -> void:
 	
 	_scan_pending = true
 	_schedule_deferred_scan()
+
+
+## 对单个「导入型资源」（如 .glsl → RDShaderFile）触发重新导入。
+## update_file() 只登记文件信息、不导入；源文件被外部修改后必须 reimport_files()
+## 才会重新生成 .godot/imported/ 下的产物，否则运行时会一直用旧产物。
+## reimport_files() 会阻塞到导入完成，故延迟到当前帧末执行，并合并多次请求。
+## 注意：新建文件此时尚未登记进文件系统树，必须先用 update_file() 做一次增量登记，
+## 否则 reimport_files() 会报 "Can't find file ... during file reimport." 并静默跳过。
+## [param p_path]: 要重新导入的源文件路径（如 res://xxx.glsl）
+static func reimport_editor_file(p_path: String) -> void:
+	if not Engine.is_editor_hint():
+		return
+	
+	# 先登记（新建文件必需；已存在文件只是刷新 modified_time，无副作用）
+	update_editor_filesystem(p_path)
+	
+	if not _pending_reimport_paths.has(p_path):
+		_pending_reimport_paths.append(p_path)
+	if _reimport_flush_scheduled:
+		return
+	_reimport_flush_scheduled = true
+	Engine.get_main_loop().process_frame.connect(_flush_deferred_reimports, ConnectFlags.CONNECT_ONE_SHOT)
 
 
 ## 安全序列化 JSON：将 JSON.stringify 输出中未被转义的控制字符（0x00-0x1F）
@@ -289,6 +318,30 @@ static func _perform_scan() -> void:
 	AIChatLogger.debug("[ToolBox] Performing deferred filesystem scan...")
 	editor_filesystem.scan()
 	_scan_pending = false
+
+
+# 内部：执行待处理的重导请求（文件系统繁忙时回退到节流全量扫描）
+static func _flush_deferred_reimports() -> void:
+	_reimport_flush_scheduled = false
+	if _pending_reimport_paths.is_empty():
+		return
+	
+	var paths: PackedStringArray = PackedStringArray(_pending_reimport_paths)
+	_pending_reimport_paths.clear()
+	
+	if not Engine.is_editor_hint():
+		return
+	
+	var editor_filesystem: EditorFileSystem = EditorInterface.get_resource_filesystem()
+	if editor_filesystem == null:
+		return
+	
+	if editor_filesystem.is_scanning() or editor_filesystem.is_importing():
+		# 繁忙时不做单文件重导，交给带重试的节流扫描兜底
+		refresh_editor_filesystem()
+		return
+	
+	editor_filesystem.reimport_files(paths)
 
 
 # 获取Shader编辑器的标签节点

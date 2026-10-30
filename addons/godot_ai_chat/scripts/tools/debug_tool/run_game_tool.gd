@@ -1,6 +1,7 @@
 @tool
 extends AiTool
 
+
 func _init() -> void:
 	tool_name = "run_game"
 	tool_description = "Runs a specific scene in the editor."
@@ -40,6 +41,8 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	# 启动是异步子进程，稍候回读真实状态
 	await (Engine.get_main_loop() as SceneTree).create_timer(0.4).timeout
+	
 	if EditorInterface.is_playing_scene():
 		return ToolResult.ok("Game is now running: `%s`" % scene_path)
+	
 	return ToolResult.fail("Run dispatched, but game did not enter playing state: %s" % scene_path)

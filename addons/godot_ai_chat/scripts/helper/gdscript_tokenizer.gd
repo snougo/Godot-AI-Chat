@@ -1,4 +1,3 @@
-class_name GDScriptTokenizer
 extends RefCounted
 
 ## 字符级 GDScript 分词器，为安全静态分析提供可靠的词法基础。
@@ -10,19 +9,7 @@ extends RefCounted
 ## - 与安全策略解耦：本类只输出词法事实，是否拦截由消费方决定。
 
 
-# --- Enums / Constants ---
-
-enum TokenType {
-	KEYWORD,      ## 关键字（if/for/var/self...）
-	IDENTIFIER,   ## 标识符（含 @annotation、$Node 的 Node 部分）
-	OPERATOR,     ## 运算符（含 :=、==、->、$、% 等）
-	NUMBER,       ## 数字字面量
-	STRING,       ## 字符串（含引号/前缀/转义原文，如 r"..."、&"..."）
-	COMMENT,      ## 注释（# 到行尾）
-	WHITESPACE,   ## 空格/制表符/回车
-	NEWLINE,      ## 换行
-	UNKNOWN,      ## 无法识别的字符（宽容跳过）
-}
+# --- Constants ---
 
 ## GDScript 4 关键字表。
 const KEYWORDS: Array[String] = [
@@ -57,6 +44,21 @@ const IGNORED_RHS_KEYWORDS: Array[String] = [
 	"true", "false", "null", "func", "if", "for", "while", "match",
 	"return", "self", "super", "await", "pass", "break", "continue",
 ]
+
+
+# --- Enums ---
+
+enum TokenType {
+	KEYWORD,      ## 关键字（if/for/var/self...）
+	IDENTIFIER,   ## 标识符（含 @annotation、$Node 的 Node 部分）
+	OPERATOR,     ## 运算符（含 :=、==、->、$、% 等）
+	NUMBER,       ## 数字字面量
+	STRING,       ## 字符串（含引号/前缀/转义原文，如 r"..."、&"..."）
+	COMMENT,      ## 注释（# 到行尾）
+	WHITESPACE,   ## 空格/制表符/回车
+	NEWLINE,      ## 换行
+	UNKNOWN,      ## 无法识别的字符（宽容跳过）
+}
 
 
 # --- Public Functions ---

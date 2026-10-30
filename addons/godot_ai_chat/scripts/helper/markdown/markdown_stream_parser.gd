@@ -43,6 +43,11 @@ signal quote(p_lines: PackedStringArray)
 signal rule()
 
 
+# --- Constants ---
+
+const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_to_bbcode.gd")
+
+
 # --- Enums ---
 
 ## 内部解析状态（不暴露给外部）
@@ -52,11 +57,6 @@ enum _ParseState {
 	TABLE,  ## 表格模式
 	QUOTE,  ## 引用块模式（整块缓冲）
 }
-
-
-# --- Constants ---
-
-const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown_to_bbcode.gd")
 
 
 # --- Private Vars ---

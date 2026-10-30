@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## Markdown 文档创建工具。

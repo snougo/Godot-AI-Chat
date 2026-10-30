@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 文本文件编辑工具（精确替换 / 整体重写）。
@@ -22,7 +21,7 @@ extends AiTool
 
 ## 允许编辑的文本类扩展名（二进制资源如 .scn/.res/.png 不在列）
 const EDITABLE_EXTENSIONS: Array[String] = [
-	"md", "txt", "json", "cfg", "csv", "glsl", "gdshader"
+	"md", "txt", "json", "cfg", "csv", "glsl", "gdshader", "gd"
 ]
 
 ## 额外允许写入的路径前缀（默认空 = 完全遵循黑名单）。
@@ -35,8 +34,8 @@ const EXTRA_WRITE_ALLOWLIST: Array[String] = []
 # --- Built-in Functions ---
 
 func _init() -> void:
-	tool_name = "edit_text_file"
-	tool_description = "Edits an existing text file on disk. Support md/txt/json/cfg/csv/glsl/gdshader"
+	tool_name = "edit_file"
+	tool_description = "Edits an existing text file on disk. Support md, txt, json, cfg, csv, glsl, gdshader, gd"
 
 
 # --- Public Functions ---
@@ -82,6 +81,7 @@ func get_parameters_schema() -> Dictionary:
 
 func execute(p_args: Dictionary) -> ToolResult:
 	var path: String = String(p_args.get("path", "")).strip_edges()
+	
 	if path.is_empty():
 		return ToolResult.fail("Error: 'path' is required.")
 	if not path.begins_with("res://"):
@@ -90,36 +90,36 @@ func execute(p_args: Dictionary) -> ToolResult:
 		return ToolResult.fail("Error: Path traversal ('..') is not allowed.")
 	if not FileAccess.file_exists(path):
 		return ToolResult.fail("Error: file not found: %s (this tool only edits existing files)." % path)
-
+	
 	var blacklist_error: String = _validate_path_safety_with_allowlist(path)
 	if not blacklist_error.is_empty():
 		return ToolResult.fail(blacklist_error)
-
+	
 	var extension: String = path.get_extension().to_lower()
 	if not EDITABLE_EXTENSIONS.has(extension):
 		return ToolResult.fail(
 			"Error: '.%s' is not an editable text extension. Supported: %s"
 			% [extension, ", ".join(EDITABLE_EXTENSIONS)]
 		)
-
+	
 	# --- 读取原始内容 ---
 	var read_file: FileAccess = FileAccess.open(path, FileAccess.READ)
 	if read_file == null:
 		return ToolResult.fail("Error: failed to open file: %d" % FileAccess.get_open_error())
 	var raw_text: String = read_file.get_as_text()
 	read_file.close()
-
+	
 	# --- 规范化（BOM + 行尾）---
 	var has_bom: bool = raw_text.begins_with("\uFEFF")
 	var working_text: String = raw_text.trim_prefix("\uFEFF")
 	var uses_crlf: bool = working_text.contains("\r\n")
 	working_text = working_text.replace("\r\n", "\n")
-
+	
 	# --- 生成新内容 ---
 	var new_text: String = working_text
 	var applied: Array[String] = []
 	var rewrite_value: Variant = p_args.get("rewrite", null)
-
+	
 	if rewrite_value is String:
 		var rewrite_text: String = String(rewrite_value).replace("\r\n", "\n")
 		if rewrite_text.is_empty():
@@ -130,18 +130,23 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var edits_value: Variant = p_args.get("edits", [])
 		if not (edits_value is Array) or (edits_value as Array).is_empty():
 			return ToolResult.fail("Error: provide either a non-empty 'edits' array or a non-empty 'rewrite' string.")
+		
 		var edit_list: Array = edits_value
 		var edit_index: int = 0
+		
 		for raw_edit: Variant in edit_list:
 			edit_index += 1
 			if not (raw_edit is Dictionary):
 				return ToolResult.fail("Error: edit #%d is not an object." % edit_index)
+			
 			var edit: Dictionary = raw_edit
 			var old_string: String = String(edit.get("old_string", "")).replace("\r\n", "\n")
 			var new_string: String = String(edit.get("new_string", "")).replace("\r\n", "\n")
 			var replace_all: bool = bool(edit.get("replace_all", false))
+			
 			if old_string.is_empty():
 				return ToolResult.fail("Error: edit #%d has an empty 'old_string'." % edit_index)
+			
 			var occurrences: int = new_text.count(old_string)
 			if occurrences == 0:
 				return ToolResult.fail(
@@ -149,35 +154,40 @@ func execute(p_args: Dictionary) -> ToolResult:
 					% edit_index
 					+ "Re-read the file and copy the exact text, including indentation."
 				)
+			
 			if occurrences > 1 and not replace_all:
 				return ToolResult.fail(
 					"Error: edit #%d: 'old_string' occurs %d times. " % [edit_index, occurrences]
 					+ "Add more surrounding context to make it unique, or pass replace_all = true. "
 					+ "No changes were written."
 				)
+			
 			new_text = new_text.replace(old_string, new_string)
 			applied.append(
 				"edit #%d: replaced %d occurrence(s) (%d -> %d chars)"
 				% [edit_index, occurrences, old_string.length(), new_string.length()]
 			)
-
+	
 	if new_text == working_text:
 		return ToolResult.ok("No change: content is identical. %s" % path)
-
+	
 	# --- 写回（恢复行尾风格与 BOM）---
 	if uses_crlf:
 		new_text = new_text.replace("\n", "\r\n")
 	if has_bom:
 		new_text = "\uFEFF" + new_text
-
+	
 	var write_file: FileAccess = FileAccess.open(path, FileAccess.WRITE)
 	if write_file == null:
 		return ToolResult.fail("Error: failed to open file for writing: %d" % FileAccess.get_open_error())
 	write_file.store_string(new_text)
 	write_file.close()
-
-	ToolBox.update_editor_filesystem(path)
-
+	
+	if extension == "glsl":
+		ToolBox.reimport_editor_file(path)
+	else:
+		ToolBox.update_editor_filesystem(path)
+	
 	return ToolResult.ok(
 		"Edited %s\n%s\nLine count: %d -> %d"
 		% [path, "\n".join(applied), working_text.count("\n") + 1, new_text.count("\n") + 1]

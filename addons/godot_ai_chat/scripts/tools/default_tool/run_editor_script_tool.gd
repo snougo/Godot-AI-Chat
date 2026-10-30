@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## Runs an existing EditorScript file inside the editor.
@@ -9,9 +8,11 @@ extends AiTool
 ## The script already exists on disk, so the analysed text and the executed text
 ## are byte-identical — no wrapping, no rewriting.
 
-# ============================================================================
-# Constants — Danger Rules
-# ============================================================================
+
+# --- Constants ---
+
+const GDScriptTokenizer := preload("res://addons/godot_ai_chat/scripts/helper/gdscript_tokenizer.gd")
+const EditorConsoleReader := preload("res://addons/godot_ai_chat/scripts/helper/editor_console_reader.gd")
 
 ## Network-related classes — block all usage (data exfiltration risk).
 const DANGEROUS_NETWORK_CLASSES: Array[String] = [
@@ -83,9 +84,6 @@ const RESTRICTED_PATH_PATTERNS: Array[String] = [
 ## Max file size (bytes) for content backup — skip files larger than this.
 const MAX_BACKUP_SIZE: int = 5 * 1024 * 1024  # 5MB
 
-# --- Constants ---
-
-const EditorConsoleReader := preload("res://addons/godot_ai_chat/scripts/helper/editor_console_reader.gd")
 
 # --- Private Vars ---
 
@@ -96,9 +94,8 @@ var _script_source: String = ""
 # Stores the exact compiler error text captured from EditorLog.
 var _last_compile_error: String = ""
 
-# ============================================================================
-# Built-in Functions
-# ============================================================================
+
+# --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "run_editor_script"
@@ -121,9 +118,6 @@ func get_parameters_schema() -> Dictionary:
 		"required": ["script_path", "file_paths"]
 	}
 
-# ============================================================================
-# Main Execution
-# ============================================================================
 
 func execute(p_args: Dictionary) -> ToolResult:
 	# === Layer 0: Master switch ===

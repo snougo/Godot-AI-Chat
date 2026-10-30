@@ -1,11 +1,11 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub Pull Request 变更文件工具
 ##
 ## 通过 GitHub API 获取单个 Pull Request 的变更文件列表及 diff 补丁，含新增/删除行数统计。
 
-# --- Enums / Constants ---
+
+# --- Constants ---
 
 const DEFAULT_REPO: String = "godotengine/godot"
 const DEFAULT_LIMIT: int = 30
@@ -30,7 +30,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"pr": {
 				"type": "integer",
-				"description": "GitHub Pull Request number (e.g. 110933)."
+				"description": "GitHub Pull Request number."
 			},
 			"limit": {
 				"type": "integer",

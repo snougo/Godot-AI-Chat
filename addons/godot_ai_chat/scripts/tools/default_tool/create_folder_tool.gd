@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 创建文件夹工具。
@@ -58,4 +57,5 @@ func _normalize_path(p_path: String) -> String:
 	var normalized: String = p_path.replace("\\", "/")
 	if normalized.ends_with("/"):
 		normalized = normalized.left(-1)
+	
 	return normalized

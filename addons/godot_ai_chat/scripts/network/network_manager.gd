@@ -1,5 +1,4 @@
 @tool
-class_name AIChatNetworkManager
 extends Node
 
 ## 网络管理器
@@ -151,39 +150,31 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 
 ## 非流式异步请求（用于上下文压缩等场景）
 ## [param p_messages]: 消息列表
-## [param p_config]: 压缩配置（为 null 时使用主对话配置）
-## [return]: {"success": bool, "error": String, "content": String}
-func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextCompressionConfig = null) -> Dictionary:
-	var provider: BaseLLMProvider
-	var base_url: String
-	var key: String
-	var temp: float
-	var model_name: String
+## [param p_config]: 压缩配置（必须完整有效，调用方需先 validate）
+## [return]: {"success": bool, "error": String, "error_kind": String, "content": String}
+##           error_kind: "config" | "runtime"
+func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextCompressionConfig) -> Dictionary:
+	if p_config == null:
+		return {"success": false, "error": "Compression config is missing.", "error_kind": "config"}
 	
-	# 解析配置：优先使用独立压缩配置，否则回退到主对话配置
-	if p_config and p_config.enabled and not p_config.api_base_url.is_empty():
-		provider = ProviderFactory.create_provider(p_config.api_provider)
-		base_url = p_config.api_base_url
-		key = p_config.api_key
-		temp = p_config.temperature
-		model_name = p_config.model_name
-	else:
-		if not _update_provider_config():
-			return {"success": false, "error": "Configuration Error"}
-		provider = current_provider
-		base_url = api_base_url
-		key = api_key
-		temp = temperature
-		model_name = current_model_name
+	# 不再回退到主对话配置：缺项即失败，避免「以为在用摘要模型，实际悄悄换了主模型」
+	var config_error: String = p_config.validate()
+	if not config_error.is_empty():
+		return {"success": false, "error": config_error, "error_kind": "config"}
 	
-	if model_name.is_empty():
-		return {"success": false, "error": "No model selected for summarization."}
-	if not provider:
-		return {"success": false, "error": "Invalid provider for summarization."}
+	var provider: BaseLLMProvider = ProviderFactory.create_provider(p_config.api_provider)
+	if provider == null:
+		return {"success": false, "error": "Invalid provider for summarization.", "error_kind": "config"}
+	
+	provider.set_active_model_name(p_config.model_name)
+	
+	var base_url: String = p_config.api_base_url
+	var key: String = p_config.api_key
+	var temp: float = p_config.temperature
+	var model_name: String = p_config.model_name
 	
 	# 构建非流式请求
 	var body_dict: Dictionary = provider.build_request_body(model_name, p_messages, temp, false, [])
-	#var body_json: String = JSON.stringify(body_dict)
 	var body_json: String = ToolBox.stringify_json_safe(body_dict)
 	var url: String = provider.get_request_url(base_url, model_name, key, false)
 	var headers: PackedStringArray = provider.get_request_headers(key, false)
@@ -196,21 +187,31 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	http_req.timeout = float(settings.network_timeout)
 	
 	var state: Dictionary = {"is_done": false}
-	var result: Dictionary = {"success": false, "error": "", "content": ""}
+	var result: Dictionary = {"success": false, "error": "", "error_kind": "runtime", "content": ""}
 	
 	var on_completed := func(p_res: int, p_code: int, _p_headers: PackedStringArray, p_body: PackedByteArray):
 		state.is_done = true
-		if p_res != HTTPRequest.RESULT_SUCCESS or p_code != 200:
+		
+		if p_res != HTTPRequest.RESULT_SUCCESS:
+			result.error_kind = "runtime"
+			result.error = "Request failed (result: %d)" % p_res
+			return
+		
+		if p_code != 200:
+			# 4xx 基本都指向配置问题（key 错误、模型名不存在、provider 不匹配、路径写错）
+			result.error_kind = "config" if (p_code >= 400 and p_code < 500) else "runtime"
 			var err_detail: String = ""
 			if not p_body.is_empty():
 				err_detail = p_body.get_string_from_utf8().substr(0, 500)
-			result.error = "HTTP Error (code: %d, result: %d)" % [p_code, p_res]
+			result.error = "HTTP Error (code: %d)" % p_code
 			if not err_detail.is_empty():
 				result.error += "\n" + err_detail
 			return
 		
 		var parsed: Dictionary = provider.parse_non_stream_response(p_body)
 		if parsed.has("error"):
+			# 200 但响应体报错：多为模型不存在 / 无权限 / 参数不被支持
+			result.error_kind = "config"
 			result.error = "API Error: " + str(parsed.get("error", "Unknown"))
 		else:
 			result.success = true
@@ -221,7 +222,7 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	var err: Error = http_req.request(url, headers, HTTPClient.METHOD_POST, body_json)
 	if err != OK:
 		http_req.queue_free()
-		return {"success": false, "error": "Request failed: %s" % error_string(err)}
+		return {"success": false, "error": "Request failed: %s" % error_string(err), "error_kind": "config"}
 	
 	while not state.is_done:
 		await get_tree().process_frame

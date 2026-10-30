@@ -5,6 +5,8 @@ extends AiTool
 
 
 const EditorConsoleReader := preload("res://addons/godot_ai_chat/scripts/helper/editor_console_reader.gd")
+
+
 func _init() -> void:
 	tool_name = "read_errors"
 	tool_description = "Read the debugger's Errors tab — the error and warning history of game runs, stack traces included."

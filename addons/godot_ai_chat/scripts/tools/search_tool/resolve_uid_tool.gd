@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 将资源 UID（uid://xxx）反向解析为项目内的具体文件路径。

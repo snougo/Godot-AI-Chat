@@ -1,5 +1,4 @@
 @tool
-class_name AIChatUI
 extends Control
 
 ## 主 UI 控制器
@@ -35,11 +34,14 @@ signal delete_chat_button_pressed(session_name: String)
 signal workspace_changed(new_path: String)
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
-const SessionStorage := preload("res://addons/godot_ai_chat/scripts/helper/session_storage.gd")
-const TokenUsageTracker := preload("res://addons/godot_ai_chat/scripts/core/token_usage_tracker.gd")
 const SettingsPanel := preload("res://addons/godot_ai_chat/scripts/ui/settings_panel.gd")
+const SessionStorage := preload("res://addons/godot_ai_chat/scripts/helper/session_storage.gd")
+const TokenUsageTracker := preload("res://addons/godot_ai_chat/scripts/helper/token_usage_tracker.gd")
+
+
+# --- Enums ---
 
 ## UI 状态定义
 enum UIState {

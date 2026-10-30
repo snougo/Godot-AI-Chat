@@ -1,4 +1,3 @@
-@tool
 extends RefCounted
 
 ## HTTP 流式请求处理类

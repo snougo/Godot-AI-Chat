@@ -14,9 +14,11 @@ extends AiTool
 ## 说明：AI 复现某视角可直接重放历史调用参数（上下文即可）；
 ##       增量操作后的绝对状态由工具返回，避免 AI 手动累加推算。
 
+
 # --- Static 缓存：跨调用记住最近一次 look_at 目标（orbit/distance 的环绕中心） ---
 static var _last_look_at: Vector3 = Vector3.ZERO
 static var _has_look_at: bool = false
+
 
 # --- Built-in Functions ---
 
@@ -98,11 +100,13 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if not Engine.is_editor_hint():
 		return ToolResult.fail("Error: editor only tool.")
 	
-	var viewport_index: int = p_args.get("viewport_index", 0)
 	EditorInterface.set_main_screen_editor("3D")
+	
+	var viewport_index: int = p_args.get("viewport_index", 0)
 	var viewport: SubViewport = EditorInterface.get_editor_viewport_3d(viewport_index)
 	if not viewport:
 		return ToolResult.fail("Error: no 3D viewport found at index %d." % viewport_index)
+	
 	var camera: Camera3D = viewport.get_camera_3d()
 	if not camera:
 		return ToolResult.fail("Error: no active Camera3D in viewport %d." % viewport_index)
@@ -123,8 +127,18 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var has_move_by: bool = p_args.has("move_by") and not p_args["move_by"] == null
 	var has_move_by_local: bool = p_args.has("move_by_local") and not p_args["move_by_local"] == null
 	
-	if not (has_position or has_look_at or has_fov or has_projection or has_ortho_size
-			or has_orbit or has_distance or has_distance_by or has_move_by or has_move_by_local):
+	if not (
+		has_position 
+		or has_look_at 
+		or has_fov 
+		or has_projection 
+		or has_ortho_size
+		or has_orbit 
+		or has_distance 
+		or has_distance_by 
+		or has_move_by 
+		or has_move_by_local
+	):
 		return ToolResult.fail("Error: at least one operation is required. Use 'query': true to read the current view. "
 			+ "Example: {\"position\": [0, 5, 10], \"look_at\": [0, 0, 0]}")
 	
@@ -150,6 +164,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var os: float = float(p_args["orthogonal_size"])
 		if os <= 0.0:
 			return ToolResult.fail("Error: orthogonal_size must be > 0, got %f." % os)
+		
 		camera.size = os
 		var note: String = "" if camera.projection == Camera3D.PROJECTION_ORTHOGONAL else " (only effective in ortho mode)"
 		changes.append("orthogonal_size → %.2f%s" % [os, note])
@@ -159,6 +174,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var fov_val: float = float(p_args["fov"])
 		if fov_val <= 0 or fov_val > 179:
 			return ToolResult.fail("Error: FOV must be in range (0, 179], got %f." % fov_val)
+		
 		camera.fov = fov_val
 		changes.append("fov → %.1f°" % fov_val)
 	
@@ -167,6 +183,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var pos: Array = p_args["position"]
 		if pos.size() < 3:
 			return ToolResult.fail("Error: position requires 3 values [x, y, z], got %d." % pos.size())
+		
 		camera.global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
 		changes.append("position → (%.2f, %.2f, %.2f)" % [float(pos[0]), float(pos[1]), float(pos[2])])
 	
@@ -175,6 +192,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var mb: Array = p_args["move_by"]
 		if mb.size() < 3:
 			return ToolResult.fail("Error: move_by requires 3 values [x, y, z], got %d." % mb.size())
+		
 		var off := Vector3(float(mb[0]), float(mb[1]), float(mb[2]))
 		camera.global_position += off
 		changes.append("move_by → (%.2f, %.2f, %.2f)" % [off.x, off.y, off.z])
@@ -183,6 +201,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var ml: Array = p_args["move_by_local"]
 		if ml.size() < 3:
 			return ToolResult.fail("Error: move_by_local requires 3 values [right, up, forward], got %d." % ml.size())
+		
 		var loff := Vector3(float(ml[0]), float(ml[1]), float(ml[2]))
 		camera.global_position += camera.global_transform.basis * loff
 		changes.append("move_by_local → (%.2f, %.2f, %.2f)" % [loff.x, loff.y, loff.z])
@@ -197,18 +216,20 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var pitch_d: float = float(ob.get("pitch", 0.0))
 		if yaw_d == 0.0 and pitch_d == 0.0:
 			return ToolResult.fail("Error: orbit requires 'yaw' and/or 'pitch' (degrees).")
+		
 		var offset: Vector3 = camera.global_position - center
 		if yaw_d != 0.0:
 			offset = offset.rotated(Vector3.UP, deg_to_rad(yaw_d))
+		
 		if pitch_d != 0.0:
 			var view_dir: Vector3 = -offset.normalized()  # 相机指向中心
 			var right: Vector3 = view_dir.cross(Vector3.UP).normalized()
 			if right.length() < 0.001:
 				right = Vector3.RIGHT
 			offset = offset.rotated(right, deg_to_rad(pitch_d))
+		
 		camera.global_position = center + offset
-		changes.append("orbit → yaw %+.1f°, pitch %+.1f° around (%.1f, %.1f, %.1f)"
-			% [yaw_d, pitch_d, center.x, center.y, center.z])
+		changes.append("orbit → yaw %+.1f°, pitch %+.1f° around (%.1f, %.1f, %.1f)" % [yaw_d, pitch_d, center.x, center.y, center.z])
 		used_orbit = true
 	
 	# --- 8. distance / distance_by：沿视线推拉 ---
@@ -216,6 +237,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var dist: float = float(p_args["distance"])
 		if dist <= 0.0:
 			return ToolResult.fail("Error: distance must be > 0, got %f." % dist)
+		
 		var dir: Vector3 = (center - camera.global_position).normalized()
 		camera.global_position = center - dir * dist
 		changes.append("distance → %.2fm" % dist)
@@ -235,6 +257,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var target: Array = p_args["look_at"]
 		if target.size() < 3:
 			return ToolResult.fail("Error: look_at requires 3 values [x, y, z], got %d." % target.size())
+		
 		var target_pos := Vector3(float(target[0]), float(target[1]), float(target[2]))
 		_look_at_target(camera, target_pos)
 		_last_look_at = target_pos
@@ -252,6 +275,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	# 增量操作（orbit/distance/distance_by/move_by/move_by_local）后返回最终绝对状态，供 AI 感知落点
 	if used_orbit or used_dist or has_move_by or has_move_by_local:
 		result += "\n" + _format_state(camera, viewport_index)
+	
 	return ToolResult.ok(result)
 
 
@@ -265,8 +289,10 @@ func _resolve_center(p_args: Dictionary, p_camera: Camera3D) -> Vector3:
 		_last_look_at = c
 		_has_look_at = true
 		return c
+	
 	if _has_look_at:
 		return _last_look_at
+	
 	var fwd: Vector3 = -p_camera.global_transform.basis.z
 	return p_camera.global_position + fwd * 10.0
 
@@ -277,6 +303,7 @@ func _look_at_target(p_camera: Camera3D, p_target: Vector3) -> void:
 	var up := Vector3.UP
 	if abs(dir.normalized().dot(up)) > 0.9999:
 		up = Vector3.FORWARD
+	
 	p_camera.look_at(p_target, up)
 
 
@@ -305,11 +332,13 @@ func _format_state(p_camera: Camera3D, p_index: int) -> String:
 		p_camera.fov, p_camera.near, p_camera.far,
 		" | ortho_size: %.1f" % p_camera.size if is_ortho else ""])
 	lines.append("position: (%.2f, %.2f, %.2f)" % [pos.x, pos.y, pos.z])
+	
 	if _has_look_at:
 		var d: float = pos.distance_to(_last_look_at)
 		lines.append("look_at: (%.2f, %.2f, %.2f) | dist: %.2fm" % [_last_look_at.x, _last_look_at.y, _last_look_at.z, d])
 	else:
 		lines.append("look_at: (not recorded)")
-	lines.append("yaw: %.1f° | pitch: %.1f° | forward: (%.2f, %.2f, %.2f) | up: (%.2f, %.2f, %.2f)" % [
-		angles.x, angles.y, fwd.x, fwd.y, fwd.z, up.x, up.y, up.z])
+	
+	lines.append("yaw: %.1f° | pitch: %.1f° | forward: (%.2f, %.2f, %.2f) | up: (%.2f, %.2f, %.2f)" % [angles.x, angles.y, fwd.x, fwd.y, fwd.z, up.x, up.y, up.z])
+	
 	return "\n".join(lines)

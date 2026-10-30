@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 资源文件编辑工具。
@@ -8,7 +7,7 @@ extends AiTool
 ## 资源引用属性（res:// 路径）。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 
@@ -17,7 +16,7 @@ const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
 
 func _init() -> void:
 	tool_name = "edit_resource"
-	tool_description = "Edits properties of an existing Resource file."
+	tool_description = "Edits properties of an existing Resource file(tres/res)."
 
 
 # --- Public Functions ---
@@ -43,37 +42,37 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var file_path: String = p_args.get("path", "").strip_edges()
 	if file_path.is_empty():
 		return ToolResult.fail("Error: 'path' is required.")
-
+	
 	# 安全校验
 	var safety_err: String = validate_path_safety(file_path)
 	if not safety_err.is_empty():
 		return ToolResult.fail(safety_err)
-
+	
 	# 检查文件是否存在
 	if not FileAccess.file_exists(file_path):
 		return ToolResult.fail("Error: File not found at %s." % file_path)
-
+	
 	# 校验扩展名
 	var ext: String = file_path.get_extension().to_lower()
 	if ext not in RESOURCE_EXTENSIONS:
 		return ToolResult.fail("Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext)
-
+	
 	# 加载资源
 	var resource: Resource = load(file_path)
 	if not resource:
 		return ToolResult.fail("Error: Failed to load resource from %s." % file_path)
-
+	
 	var properties_raw: Variant = p_args.get("properties", {})
 	if not (properties_raw is Dictionary):
 		return ToolResult.fail("Error: 'properties' must be a dictionary (object), got %s." % typeof(properties_raw))
 	var properties: Dictionary = properties_raw as Dictionary
 	if properties.is_empty():
 		return ToolResult.fail("Error: 'properties' is required and cannot be empty.")
-
+	
 	# 记录变更
 	var changes: Array[String] = []
 	var errors: Array[String] = []
-
+	
 	for prop_name in properties:
 		var raw_val: Variant = properties[prop_name]
 		var result: ToolResult = _set_resource_property(resource, prop_name, raw_val)
@@ -81,17 +80,17 @@ func execute(p_args: Dictionary) -> ToolResult:
 			changes.append("%s → %s" % [prop_name, result.get_data()])
 		else:
 			errors.append(result.get_data())
-
+	
 	if not errors.is_empty():
 		return ToolResult.fail("Error: Failed to set some properties:\n" + "\n".join(errors))
-
+	
 	# 保存资源
 	var save_err: Error = ResourceSaver.save(resource, file_path)
 	if save_err != OK:
 		return ToolResult.fail("Error: Failed to save resource. Error code: %d" % save_err)
-
+	
 	ToolBox.update_editor_filesystem(file_path)
-
+	
 	return ToolResult.ok("Resource updated: %s\nChanges applied:\n  %s" % [file_path, "\n  ".join(changes)])
 
 
@@ -106,7 +105,7 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 	# 确定目标类型
 	var target_type: int = TYPE_NIL
 	var found: bool = false
-
+	
 	if ":" in p_prop_name:
 		# 嵌套属性，从当前值推断类型
 		var current: Variant = p_resource.get_indexed(p_prop_name)
@@ -119,22 +118,22 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 				target_type = prop.type
 				found = true
 				break
-
+	
 	if not found:
 		# 检查属性是否存在
 		if p_prop_name in p_resource:
 			var current_val: Variant = p_resource[p_prop_name]
 			target_type = typeof(current_val)
 			found = true
-
+	
 	if not found:
 		return ToolResult.fail("Property '%s' not found on resource type '%s'." % [p_prop_name, p_resource.get_class()])
-
+	
 	# 类型转换
 	var final_val: Variant = _coerce_value(p_raw_value, target_type)
 	if final_val == null and p_raw_value != null:
 		return ToolResult.fail("Failed to convert value for '%s'. Expected type: %s" % [p_prop_name, _type_name(target_type)])
-
+	
 	# 特殊处理 Texture 等资源引用
 	if target_type == TYPE_OBJECT and final_val is String:
 		var path_str: String = final_val as String
@@ -143,13 +142,13 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 				final_val = load(path_str)
 			else:
 				return ToolResult.fail("Resource not found at '%s'." % path_str)
-
+	
 	# 应用属性
 	if ":" in p_prop_name:
 		p_resource.set_indexed(p_prop_name, final_val)
 	else:
 		p_resource.set(p_prop_name, final_val)
-
+	
 	return ToolResult.ok(str(final_val))
 
 
@@ -160,11 +159,11 @@ func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_val
 func _coerce_value(p_value: Variant, p_target_type: int) -> Variant:
 	if typeof(p_value) == p_target_type:
 		return p_value
-
+	
 	# String 输入 → 目标类型
 	if p_value is String:
 		var str_val: String = (p_value as String).strip_edges()
-
+		
 		match p_target_type:
 			TYPE_BOOL:
 				var lower: String = str_val.to_lower()
@@ -173,32 +172,32 @@ func _coerce_value(p_value: Variant, p_target_type: int) -> Variant:
 				elif lower in ["false", "0", "no", "off"]:
 					return false
 				return null
-
+			
 			TYPE_INT:
 				if str_val.is_valid_int():
 					return str_val.to_int()
 				return null
-
+			
 			TYPE_FLOAT:
 				if str_val.is_valid_float():
 					return str_val.to_float()
 				return null
-
+			
 			TYPE_STRING, TYPE_STRING_NAME:
 				return str_val
-
+			
 			TYPE_VECTOR2:
 				var arr: Array = _parse_numeric_array(str_val)
 				if arr.size() >= 2:
 					return Vector2(arr[0], arr[1])
 				return null
-
+			
 			TYPE_VECTOR3:
 				var arr: Array = _parse_numeric_array(str_val)
 				if arr.size() >= 3:
 					return Vector3(arr[0], arr[1], arr[2])
 				return null
-
+			
 			TYPE_COLOR:
 				# 尝试 Color 构造函数风格
 				if str_val.begins_with("Color("):
@@ -218,23 +217,23 @@ func _coerce_value(p_value: Variant, p_target_type: int) -> Variant:
 				if arr.size() == 4:
 					return Color(arr[0], arr[1], arr[2], arr[3])
 				return null
-
+			
 			TYPE_OBJECT:
 				# 保持字符串，由调用方处理资源路径加载
 				return str_val
-
+	
 	# int → float 或 float → int
 	if p_target_type == TYPE_FLOAT and p_value is int:
 		return float(p_value)
 	if p_target_type == TYPE_INT and p_value is float:
 		return int(p_value)
-
+	
 	# bool 的 JSON 兼容
 	if p_target_type == TYPE_BOOL:
 		if p_value is bool:
 			return p_value
 		return null
-
+	
 	return p_value
 
 
@@ -246,13 +245,15 @@ func _parse_numeric_array(p_str: String) -> Array:
 	cleaned = cleaned.replace("Vector2(", "").replace("Vector3(", "").replace("Color(", "").replace(")", "")
 	cleaned = cleaned.replace("[", "").replace("]", "").replace("(", "").replace(")", "")
 	cleaned = cleaned.strip_edges()
-
+	
 	var parts: PackedStringArray = cleaned.split(",", false)
 	var result: Array = []
+	
 	for part in parts:
 		var trimmed: String = part.strip_edges()
 		if trimmed.is_valid_float():
 			result.append(trimmed.to_float())
+	
 	return result
 
 

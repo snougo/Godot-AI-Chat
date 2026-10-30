@@ -1,5 +1,4 @@
 @tool
-class_name AIChatAgentOrchestrator
 extends Node
 
 ## Agent 编排器
@@ -10,8 +9,11 @@ extends Node
 
 # --- Constants ---
 
+const AIChatCurrentChatWindow = preload("res://addons/godot_ai_chat/scripts/ui/current_chat_window.gd")
+const AIChatNetworkManager = preload("res://addons/godot_ai_chat/scripts/network/network_manager.gd")
 const JSONRepairHelper := preload("res://addons/godot_ai_chat/scripts/helper/json_repair_helper.gd")
 const ContextBuilder := preload("res://addons/godot_ai_chat/scripts/core/context_builder.gd")
+const AIChatUI = preload("res://addons/godot_ai_chat/scripts/ui/chat_ui.gd")
 
 
 # --- Public Vars ---

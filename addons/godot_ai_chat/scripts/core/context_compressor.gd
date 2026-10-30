@@ -6,22 +6,27 @@ extends RefCounted
 ## 保留第一轮原始对话 + 摘要内容，构造新的对话历史资源。
 
 
+# --- Constants ---
+
+const AIChatNetworkManager = preload("res://addons/godot_ai_chat/scripts/network/network_manager.gd")
+
+
 # --- Public Functions ---
 
 ## 执行上下文压缩
 ## [param p_history]: 原始对话历史
 ## [param p_network_manager]: 网络管理器（用于发送非流式摘要请求）
 ## [param p_config]: 压缩配置
-## [return]: {"success": bool, "error": String, "new_history": ChatMessageHistory}
+## [return]: {"success": bool, "error": String, "error_kind": String, "new_history": ChatMessageHistory}
 func compress_context(p_history: ChatMessageHistory, p_network_manager: AIChatNetworkManager, p_config: ContextCompressionConfig) -> Dictionary:
 	if not p_history or not p_network_manager or not p_config:
-		return {"success": false, "error": "Invalid parameters."}
+		return {"success": false, "error": "Invalid parameters.", "error_kind": "config"}
 	
 	# 1. 获取分组轮次
 	var turns: Array = p_history.get_grouped_turns()
 	
 	if turns.size() < 2:
-		return {"success": false, "error": "Not enough turns to compress (need at least 2)."}
+		return {"success": false, "error": "Not enough turns to compress (need at least 2).", "error_kind": "other"}
 	
 	# 2. 保留第一轮，格式化剩余轮次
 	var first_turn: Array = turns[0]
@@ -40,11 +45,15 @@ func compress_context(p_history: ChatMessageHistory, p_network_manager: AIChatNe
 	var result: Dictionary = await p_network_manager.request_non_stream_async(summary_messages, p_config)
 	
 	if not result.success:
-		return {"success": false, "error": String(result.error)}
+		return {
+			"success": false,
+			"error": String(result.error),
+			"error_kind": String(result.get("error_kind", "runtime"))
+		}
 	
 	var summary_content: String = String(result.content).strip_edges()
 	if summary_content.is_empty():
-		return {"success": false, "error": "Summary content is empty."}
+		return {"success": false, "error": "Summary content is empty.", "error_kind": "runtime"}
 	
 	AIChatLogger.info("[ContextCompressor] Summary received (%d chars)." % summary_content.length(), "ContextCompressor")
 	

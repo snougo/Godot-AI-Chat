@@ -6,10 +6,16 @@ extends EditorPlugin
 
 # 主场景路径
 const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
+
 # 插件图标
 const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/icons/plugin_icon.svg")
+
 # 用于注入游戏运行时的debug脚本
 const GameDebugSessionScript := preload("res://addons/godot_ai_chat/scripts/tools/debug_tool/game_debug_session.gd")
+
+# 主 UI 控制器节点
+const AIChatUI = preload("res://addons/godot_ai_chat/scripts/ui/chat_ui.gd")
+
 # 导出忽略脚本
 const GodotAIChatExportPluginScript := preload("res://addons/godot_ai_chat/godot_ai_chat_export_plugin.gd")
 

@@ -1,5 +1,4 @@
 @tool
-class_name ChatMessageBlock
 extends FoldableContainer
 
 ## 消息显示块
@@ -10,8 +9,9 @@ extends FoldableContainer
 
 # --- Constants ---
 
-const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown_to_bbcode.gd")
-const MarkdownStreamParser := preload("res://addons/godot_ai_chat/scripts/helper/markdown_stream_parser.gd")
+const MarkdownSegment := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_segment.gd")
+const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_to_bbcode.gd")
+const MarkdownStreamParser := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_stream_parser.gd")
 
 ## 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)

@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 执行在线搜索（Tavily Search API）。
@@ -7,7 +6,7 @@ extends AiTool
 ## 具备分阶段超时、响应体大小上限、有限重试与短期结果缓存。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 const SEARCH_HOST: String = "api.tavily.com"
 const SEARCH_PORT: int = 443
@@ -59,7 +58,7 @@ static var _search_cache: Dictionary = {}
 
 func _init() -> void:
 	tool_name = "search_web"
-	tool_description = "Performs an online search and returns a direct answer plus a list of result titles."
+	tool_description = "Performs an online search and returns a direct answer."
 
 
 # --- Public Functions ---
@@ -135,6 +134,7 @@ func _request_search(p_query: String, p_api_key: String, p_max_results: int, p_s
 		last_error = str(response.get("error", "Unknown network error."))
 		if not response.get("retryable", false) or attempt >= MAX_RETRIES:
 			break
+		
 		await _sleep(RETRY_BASE_DELAY * float(attempt + 1))
 	
 	return ToolResult.fail("Error: %s" % last_error)
@@ -255,9 +255,11 @@ func _parse_response(p_json_text: String) -> ToolResult:
 	
 	var lines: Array[String] = []
 	var results: Array = json.get("results", [])
+	
 	for item: Variant in results:
 		if not item is Dictionary:
 			continue
+		
 		var entry: Dictionary = item
 		var url: String = str(entry.get("url", "")).strip_edges()
 		var title: String = str(entry.get("title", "")).strip_edges()
@@ -265,6 +267,7 @@ func _parse_response(p_json_text: String) -> ToolResult:
 			title = url if not url.is_empty() else "Untitled"
 		if url.is_empty():
 			url = "#"
+		
 		var content: String = _truncate(str(entry.get("content", "")).strip_edges(), MAX_RESULT_CONTENT_CHARS)
 		lines.append("%d. [%s](%s)\n%s" % [lines.size() + 1, title, url, content])
 	

@@ -1,5 +1,4 @@
 @tool
-class_name AIChatCurrentChatWindow
 extends Node
 
 ## 当前聊天窗口逻辑控制器
@@ -21,6 +20,7 @@ signal token_usage_updated(usage: Dictionary)
 
 # --- Constants ---
 
+const ChatMessageBlock = preload("res://addons/godot_ai_chat/scripts/ui/chat_message_block.gd")
 const StreamMessageAssembler := preload("res://addons/godot_ai_chat/scripts/core/stream_message_assembler.gd")
 
 const CULLING_INTERVAL: float = 0.2 # 每秒检测5次，足够平滑且低耗

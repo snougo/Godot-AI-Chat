@@ -54,30 +54,30 @@ func get_parameters_schema() -> Dictionary:
 func execute(p_args: Dictionary) -> ToolResult:
 	if not Engine.is_editor_hint():
 		return ToolResult.fail("Error: editor only tool.")
-
+	
 	var viewport_index: int = int(p_args.get("viewport_index", 0))
 	var max_width: int = int(p_args.get("max_width", DEFAULT_MAX_WIDTH))
 	var wait_frames: int = clampi(int(p_args.get("wait_frames", DEFAULT_WAIT_FRAMES)), 1, MAX_WAIT_FRAMES)
 	var crop: Array = p_args.get("crop", [])
-
+	
 	EditorInterface.set_main_screen_editor("3D")
 	var viewport: Viewport = EditorInterface.get_editor_viewport_3d(viewport_index)
 	if viewport == null:
 		return ToolResult.fail("Error: no 3D viewport found at index %d." % viewport_index)
-
+	
 	# 等若干帧，确保拿到最新渲染结果（顶点动画 / GPU compute 输出）
 	for _i in wait_frames:
 		await RenderingServer.frame_post_draw
-
+	
 	var image: Image = viewport.get_texture().get_image()
 	if image == null:
 		return ToolResult.fail("Error: failed to capture viewport image.")
-
+	
 	var info: PackedStringArray = PackedStringArray()
 	var scene_root: Node = EditorInterface.get_edited_scene_root()
 	info.append("scene: %s" % ("(none)" if scene_root == null else str(scene_root.name)))
 	info.append("viewport %d | native %dx%d" % [viewport_index, image.get_width(), image.get_height()])
-
+	
 	if crop.size() >= 4:
 		var w: int = image.get_width()
 		var h: int = image.get_height()
@@ -87,12 +87,12 @@ func execute(p_args: Dictionary) -> ToolResult:
 		var ch: int = clampi(int(float(crop[3]) * float(h)), 1, h - cy)
 		image = image.get_region(Rect2i(cx, cy, cw, ch))
 		info.append("crop [%d, %d, %d, %d]" % [cx, cy, cw, ch])
-
+	
 	if image.get_width() > max_width:
 		var nh: int = maxi(int(round(float(image.get_height()) * float(max_width) / float(image.get_width()))), 1)
 		image.resize(max_width, nh, Image.INTERPOLATE_LANCZOS)
 		info.append("downscaled to %dx%d" % [max_width, nh])
-
+	
 	info.append(_describe_camera(viewport))
 	return ToolResult.ok_with_image("\n".join(info), image.save_png_to_buffer(), "image/png")
 
@@ -102,8 +102,10 @@ func _describe_camera(p_viewport: Viewport) -> String:
 	var cam: Camera3D = p_viewport.get_camera_3d()
 	if cam == null:
 		return "camera: (none)"
+	
 	var pos: Vector3 = cam.global_position
 	var fwd: Vector3 = -cam.global_transform.basis.z
+	
 	return "camera: pos (%.2f, %.2f, %.2f) | fwd (%.2f, %.2f, %.2f) | fov %.0f | %s" % [
 		pos.x, pos.y, pos.z, fwd.x, fwd.y, fwd.z, cam.fov,
 		"ortho" if cam.projection == Camera3D.PROJECTION_ORTHOGONAL else "perspective"]

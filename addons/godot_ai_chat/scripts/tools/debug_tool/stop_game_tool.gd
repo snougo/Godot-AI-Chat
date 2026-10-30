@@ -26,6 +26,8 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	# 停止也是异步的，等待状态收敛
 	await (Engine.get_main_loop() as SceneTree).create_timer(0.4).timeout
+	
 	if EditorInterface.is_playing_scene():
 		return ToolResult.fail("Stop dispatched, but the game is still reported as playing.")
+	
 	return ToolResult.ok("Game stopped.")

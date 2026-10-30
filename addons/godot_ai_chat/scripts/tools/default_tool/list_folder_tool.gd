@@ -1,11 +1,11 @@
-@tool
 extends AiTool
 
 ## 列出文件夹结构工具。
 ## - 递归展开完整目录树；
 ## - 目标目录（根）及其前 depth 层子目录的直接文件完整列出文件名；
 ## - 其余目录的直接文件以 "N files in this folder" 计数形式显示；
-## - 排除 godot_doc 目录（专供 search_godot_api 使用，与项目无关）。
+## - 排除 godot_doc 目录（专供 search_godot_api 使用，与项目无关）；
+## - 目标为项目根目录（res://）时列名深度强制为 0，忽略传入的 depth。
 
 
 # --- Constants ---
@@ -14,6 +14,9 @@ const EXCLUDED_DIR_NAMES: PackedStringArray = ["godot_doc"]
 
 ## 允许的最大文件名展开深度上限（防止整棵树全展开导致输出过大）
 const MAX_LIST_FILES_DEPTH: int = 5
+
+## 项目根目录路径。读取该目录时列名深度强制为 0，忽略传入的 depth。
+const PROJECT_ROOT_PATH: String = "res://"
 
 
 # --- Built-in Functions ---
@@ -25,6 +28,7 @@ func _init() -> void:
 
 # --- Public Functions ---
 
+## 获取工具参数的 JSON Schema
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -35,7 +39,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"depth": {
 				"type": "integer",
-				"description": "Subdirectory levels below the target that list file names. Deeper levels show a file count. 0 = only the target folder lists its files. Directory structure is always fully expanded.",
+				"description": "Subdirectory levels below the target that list file names.",
 				"minimum": 0,
 				"maximum": 5,
 				"default": 0
@@ -58,6 +62,10 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var list_files_depth: int = int(p_args.get("depth", 0))
 	list_files_depth = clampi(list_files_depth, 0, MAX_LIST_FILES_DEPTH)
 	
+	# 项目根目录：列名深度统一强制为 0，忽略传入的 depth，保证行为一致性
+	if _is_project_root(path):
+		list_files_depth = 0
+	
 	var root_name: String = path.get_file()
 	if root_name.is_empty():
 		root_name = path.trim_suffix("/")
@@ -71,6 +79,11 @@ func execute(p_args: Dictionary) -> ToolResult:
 
 
 # --- Private Functions ---
+
+# 判断是否为项目根目录（兼容 "res://" 与 "res:///" 两种写法）
+func _is_project_root(p_path: String) -> bool:
+	return p_path.rstrip("/") == PROJECT_ROOT_PATH.rstrip("/")
+
 
 # 构建目录树文本。
 # p_list_files_depth >= 0: 本层直接文件逐个列名（目标根目录及其前 N 层子目录）

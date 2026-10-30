@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub Issue 详情工具
@@ -7,7 +6,7 @@ extends BaseGithubTool
 ## 并可选择连带抓取讨论评论。
 ## 与 fetch_github_pr_* 系列互补：那些工具走 /pulls 端点，本工具走 /issues 端点。
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 const DEFAULT_REPO: String = "godotengine/godot"
 const DEFAULT_COMMENTS_LIMIT: int = 20
@@ -129,17 +128,24 @@ func _format_issue(p_json: Dictionary) -> String:
 		if raw_label is Dictionary:
 			var label: Dictionary = raw_label
 			labels.append(str(label.get("name", "")))
+	
 	var label_text := "-"
 	if not labels.is_empty():
 		label_text = ", ".join(PackedStringArray(labels))
 	
-	var user: Dictionary = p_json.get("user", {})
-	var milestone: Dictionary = p_json.get("milestone", {})
+	# user / milestone 在 GitHub 响应中可能显式为 null（已注销账号、未设置里程碑）
+	var user: Dictionary = get_dict_field(p_json, "user")
+	var milestone: Dictionary = get_dict_field(p_json, "milestone")
+	# body 为空描述时同样为 null，避免输出 "<null>"
+	var body_value: Variant = p_json.get("body")
+	var body_text: String = body_value if body_value is String else ""
 	
 	var output := "Issue #%d: %s\n" % [int(p_json.get("number", 0)), str(p_json.get("title", ""))]
 	output += "State: %s" % str(p_json.get("state", "?"))
+	
 	if p_json.has("state_reason") and p_json.get("state_reason") != null:
 		output += " (%s)" % str(p_json.get("state_reason"))
+	
 	output += "\n"
 	output += "Labels: %s\n" % label_text
 	output += "Author: @%s | created: %s | updated: %s | comments: %d\n" % [
@@ -148,12 +154,14 @@ func _format_issue(p_json: Dictionary) -> String:
 		str(p_json.get("updated_at", "")).left(10),
 		int(p_json.get("comments", 0))
 	]
+	
 	if not milestone.is_empty():
 		output += "Milestone: %s\n" % str(milestone.get("title", ""))
 	if p_json.has("pull_request"):
 		output += "Type: pull request%s\n" % (" (draft)" if bool(p_json.get("draft", false)) else "")
+	
 	output += "URL: %s\n" % str(p_json.get("html_url", ""))
-	output += "\n--- Body ---\n%s\n" % str(p_json.get("body", ""))
+	output += "\n--- Body ---\n%s\n" % body_text
 	return output
 
 
@@ -175,11 +183,16 @@ func _fetch_comments(p_repo: String, p_issue_number: int, p_comments_limit: int)
 	var comments: Array = json
 	var output := "\n--- Comments (%d, oldest first) ---\n\n" % comments.size()
 	for item in comments:
+		if not (item is Dictionary):
+			continue
 		var comment: Dictionary = item
-		var user: Dictionary = comment.get("user", {})
+		var user: Dictionary = get_dict_field(comment, "user")
+		var body_value: Variant = comment.get("body")
+		var body_text: String = body_value if body_value is String else ""
 		output += "--- @%s (%s) ---\n%s\n\n" % [
 			str(user.get("login", "?")),
 			str(comment.get("created_at", "")).left(10),
-			str(comment.get("body", ""))
+			body_text
 		]
+	
 	return output

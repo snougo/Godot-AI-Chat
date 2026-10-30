@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub Pull Request 提交列表工具
@@ -95,14 +94,19 @@ func _format_pr_commits(p_json: Variant) -> String:
 	var commits: Array = p_json
 	var output := "Commits (%d):\n\n" % commits.size()
 	for item in commits:
+		if not (item is Dictionary):
+			continue
 		var commit: Dictionary = item
-		var commit_data: Dictionary = commit.get("commit", {})
-		var author: Dictionary = commit_data.get("author", {})
-		var message: String = str(commit_data.get("message", ""))
+		var commit_data: Dictionary = get_dict_field(commit, "commit")
+		# commit.author 在缺少作者信息时为 null，同样会触发 Nil → Dictionary 赋值错误
+		var author: Dictionary = get_dict_field(commit_data, "author")
+		var message_value: Variant = commit_data.get("message")
+		var message: String = message_value if message_value is String else ""
 		var first_line := message.split("\n")[0] if "\n" in message else message
 		output += "• %s — %s (%s)\n" % [
 			str(commit.get("sha", "")).left(7),
 			first_line,
 			str(author.get("date", ""))
 		]
+	
 	return output

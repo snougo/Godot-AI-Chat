@@ -1,6 +1,5 @@
-@tool
-class_name MarkdownSegment
 extends RefCounted
+
 ## Markdown 行内解析结果中的一段。
 ##
 ## 只有两种形态，用 [member kind] 区分：

@@ -1,4 +1,3 @@
-@tool
 extends BaseGithubTool
 
 ## GitHub Pull Request 讨论评论工具
@@ -95,11 +94,16 @@ func _format_pr_comments(p_json: Variant) -> String:
 	var comments: Array = p_json
 	var output := "Comments (%d):\n\n" % comments.size()
 	for item in comments:
+		if not (item is Dictionary):
+			continue
 		var comment: Dictionary = item
-		var user: Dictionary = comment.get("user", {})
+		var user: Dictionary = get_dict_field(comment, "user")
+		var body_value: Variant = comment.get("body")
+		var body_text: String = body_value if body_value is String else ""
 		output += "--- @%s (%s) ---\n%s\n\n" % [
 			str(user.get("login", "?")),
 			str(comment.get("created_at", "")),
-			str(comment.get("body", ""))
+			body_text
 		]
+	
 	return output

@@ -1,4 +1,3 @@
-@tool
 class_name AIChatHtmlParser
 extends RefCounted
 
@@ -14,7 +13,7 @@ extends RefCounted
 ## - 命名实体表扩充；支持 <?xml ?> 处理指令与 <![CDATA[]]> 跳过。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 ## 内容为原始文本的元素（内部不解析嵌套标签）
 const RAW_TEXT_ELEMENTS: Array[String] = ["script", "style"]

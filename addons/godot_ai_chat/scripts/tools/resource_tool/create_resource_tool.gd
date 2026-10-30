@@ -1,4 +1,3 @@
-@tool
 extends AiTool
 
 ## 资源文件创建工具。
@@ -8,7 +7,7 @@ extends AiTool
 ## 务必指定 resource_type 为具体的资源子类（如 StyleBoxFlat），避免使用基类 Resource。
 
 
-# --- Enums / Constants ---
+# --- Constants ---
 
 ## 允许的资源文件扩展名
 const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]

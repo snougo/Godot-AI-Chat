@@ -1,5 +1,4 @@
 @tool
-class_name AIChatController
 extends RefCounted
 
 ## 聊天域控制器
@@ -9,7 +8,9 @@ extends RefCounted
 
 # --- Constants ---
 
+const AIChatCurrentChatWindow = preload("res://addons/godot_ai_chat/scripts/ui/current_chat_window.gd")
 const SessionStorage := preload("res://addons/godot_ai_chat/scripts/helper/session_storage.gd")
+const AIChatUI = preload("res://addons/godot_ai_chat/scripts/ui/chat_ui.gd")
 
 
 # --- Private Vars ---
