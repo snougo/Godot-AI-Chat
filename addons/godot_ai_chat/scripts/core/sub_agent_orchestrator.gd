@@ -82,8 +82,10 @@ func run_task() -> String:
 		_remove_sub_agent()
 		return "Error: failed to initialize Sub Agent API Provider."
 	
-	# 告知 Provider 目标模型：下方能力查询发生在 build_request_body() 之前
+	# 告知 Provider 目标模型与端点：下方能力查询（schema 方言 / inline 图片）
+	# 发生在 build_request_body() 之前，无法通过请求参数传入
 	provider.set_active_model_name(_config.model_name)
+	provider.set_active_base_url(_config.api_base_url)
 	
 	# 工具定义方言与图片交付方式均由 Provider 以能力查询自行声明
 	var requires_gemini_schema: bool = provider.requires_gemini_tool_schema()

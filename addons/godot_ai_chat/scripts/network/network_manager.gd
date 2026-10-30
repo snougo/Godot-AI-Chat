@@ -167,6 +167,7 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 		return {"success": false, "error": "Invalid provider for summarization.", "error_kind": "config"}
 	
 	provider.set_active_model_name(p_config.model_name)
+	provider.set_active_base_url(p_config.api_base_url)
 	
 	var base_url: String = p_config.api_base_url
 	var key: String = p_config.api_key
@@ -253,9 +254,10 @@ func _update_provider_config() -> bool:
 	
 	current_provider = ProviderFactory.create_provider(settings.api_provider)
 	if current_provider != null:
-		# 告知 Provider 目标模型：工具 schema 方言 / inline 图片等能力查询发生在
-		# build_request_body() 之前，那时无法通过请求参数传入模型名
+		# 告知 Provider 目标模型与端点：工具 schema 方言 / inline 图片等能力查询
+		# 发生在 build_request_body() 之前，无法通过请求参数传入
 		current_provider.set_active_model_name(current_model_name)
+		current_provider.set_active_base_url(api_base_url)
 	return current_provider != null
 
 

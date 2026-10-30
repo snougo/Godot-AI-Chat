@@ -39,33 +39,24 @@ extends BaseLLMProvider
 const CHAT_API_ENDPOINT: Array[String] = [
 	"glm-5.3-flash",
 	"glm-5.3",
-	"glm-5.2",
-	"glm-5.1",
 	"kimi-k3.1-pro",
-	"kimi-k3",
-	"kimi-k2.7-code",
-	"kimi-k2.6",
 	"deepseek-v4-pro",
-	"deepseek-v4-flash",
-	"deepseek-v4-flash-vision-exp",
 	"deepseek-v4.1-flash",
-	"deepseek-flash",
-	"mimo-v2.5",
-	"mimo-v2.5-pro",
+	"mimo-v2.6-flash",
 	"mimo-v2.6-pro",
-	"hy3",
 	"longcat-2.0",
 	"minimax-m3.1-flash",
+	"hy4-preview",
+	"step-5-preview"
 ]
 
 ## OpenAI Responses 兼容模型
 ## （官方端点表 @ai-sdk/openai 对应的模型）
 const RESPONSES_API_ENDPOINT: Array[String] = [
 	"gpt-6-luna",
-	"gpt-5.6-luna",
 	"grok-4.7",
-	"grok-4.6",
 	"muse-spark-1.2-contributor",
+	"muse-spark-1.3-contributor",
 ]
 
 ## Anthropic Messages 兼容模型
@@ -76,16 +67,13 @@ const ANTHROPIC_API_ENDPOINT: Array[String] = [
 	"minimax-m2.5",
 	"qwen3.8-max",
 	"qwen3.8-flash",
-	"qwen3.7-max",
-	"qwen3.7-plus",
-	"qwen3.6-plus",
 	"claude-haiku-5-5",
 ]
 
 ## Google Gemini 原生端点模型
 ## （官方端点表 @ai-sdk/google 对应的模型）
 const GOOGLE_API_ENDPOINT: Array[String] = [
-	"gemini-4-argon-contributor",
+	"gemini-4-argon",
 ]
 
 ## 各协议族在 Base URL（inference 根）之下的路径段
@@ -141,6 +129,11 @@ func _init() -> void:
 	_chat_handler = OpenAIChatCompletionsProvider.new()
 	_responses_handler = OpenAIResponsesProvider.new()
 	_anthropic_handler = AnthropicCompatibleProvider.new()
+	
+	# opencode 的 /anthropic/v1/messages 是官方协议透传，允许 tool_result 内联图片
+	# 图片随 tool_result 正常透传，模型可正确解析画面
+	_anthropic_handler.trust_inline_tool_images = true
+	
 	_google_handler = GeminiProvider.new()
 
 
@@ -168,14 +161,22 @@ func set_active_model_name(p_model_name: String) -> void:
 	_last_model_name = p_model_name
 
 
+## [覆写] 提前接收 Base URL，并分发给内部 Handler
+## Anthropic 兼容 Handler 需要它判定端点是否官方（方案 B 决定了是否内联工具图片）
+func set_active_base_url(p_base_url: String) -> void:
+	_anthropic_handler.set_active_base_url(_normalize_base_url(p_base_url))
+
+
 ## [覆写] 工具定义方言：仅 Google 原生端点需要 Gemini 顶展 schema
 func requires_gemini_tool_schema() -> bool:
 	return _get_handler(_last_model_name) is GeminiProvider
 
 
-## [覆写] 工具图片交付方式：Gemini 原生支持把图片以 inline_data 直嵌 Tool 消息
+## [覆写] 工具图片交付方式：直接委托当前协议 Handler 的能力声明
+## Gemini inline_data / Responses function_call_output / 官方 Anthropic tool_result 支持内联；
+## Chat Completions 的 tool 消息只接受文本；Anthropic 兼容网关按方案 B 默认不内联。
 func supports_inline_tool_images() -> bool:
-	return _get_handler(_last_model_name) is GeminiProvider
+	return _get_handler(_last_model_name).supports_inline_tool_images()
 
 
 ## 获取 HTTP 请求头（按模型路由到对应协议的认证方式）

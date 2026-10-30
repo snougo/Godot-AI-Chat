@@ -10,7 +10,7 @@ extends RefCounted
 ## 3. 数据落地由 StreamMessageAssembler 负责。
 
 
-# --- Enums / Constants ---
+# --- Enums ---
 
 ## 流式响应解析协议类型
 enum StreamParserType {
@@ -123,6 +123,17 @@ func requires_gemini_tool_schema() -> bool:
 ## 从请求参数获得模型名，混合协议 Provider 需要靠本方法提前得知目标模型。
 ## 单协议 Provider 无需覆写（默认空实现）。
 func set_active_model_name(_p_model_name: String) -> void:
+	pass
+
+
+## [可覆写] 提前告知 Provider 当前使用的 Base URL（供能力查询类方法使用）
+##
+## 与 set_active_model_name() 同理：supports_inline_tool_images() 这类能力查询
+## 发生在请求构造之前，此时 get_request_url() 尚未被调用。
+## 兼容网关（如 Anthropic 兼容 Provider）需要 Base URL 才能判定端点是否官方，
+## 故靠本方法提前注入配置态，使能力查询与请求顺序完全解耦。
+## 单协议 Provider 无需覆写（默认空实现）。
+func set_active_base_url(_p_base_url: String) -> void:
 	pass
 
 

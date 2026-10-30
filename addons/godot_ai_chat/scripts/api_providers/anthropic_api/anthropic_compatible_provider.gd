@@ -16,9 +16,17 @@ extends BaseAnthropicProvider
 const ANTHROPIC_API_VERSION := "2023-06-01"
 
 
+# --- Public Vars ---
+
+## 是否信任该网关对 tool_result 内联图片的透传（默认关闭）
+## opencode 这类「官方协议透传」端点可由其 Provider 显式打开
+var trust_inline_tool_images: bool = false
+
+
 # --- Private Vars ---
 
-# 记录最近一次请求的 Base URL（AIChatNetworkManager 总是先调 get_request_url 再调 get_request_headers）
+# 当前会话的 Base URL：由 set_active_base_url() 提前注入，
+# get_request_url() 每次调用也会刷新（双保险，不依赖调用顺序）
 var _last_base_url: String = ""
 
 
@@ -87,6 +95,23 @@ func supports_model_list_api(p_base_url: String) -> bool:
 ## 返回 DeepSeek 内置模型列表
 func get_static_model_list() -> Array[String]:
 	return ["deepseek-v4-flash", "deepseek-v4-pro"]
+
+
+## [覆写] 工具产出的图片是否内联到 tool_result
+##
+## 方案 B：只有官方 Anthropic 端点信任该结构；
+## 兼容网关（DeepSeek / OpenRouter / OneAPI 等）回退为「图片转独立 User 消息」。
+## 如需对某个网关放行，改为按 Base URL 精确判断即可。
+func supports_inline_tool_images() -> bool:
+	return SUPPORTS_INLINE_TOOL_IMAGES and (trust_inline_tool_images or _is_official_anthropic(_last_base_url))
+
+
+## [覆写] 提前接收 Base URL
+##
+## supports_inline_tool_images() 需要 Base URL 判断端点是否官方，
+## 而该查询发生在请求构造之前（get_request_url() 尚未调用），故由调用方提前注入。
+func set_active_base_url(p_base_url: String) -> void:
+	_last_base_url = p_base_url
 
 
 # --- Private Functions ---

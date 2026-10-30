@@ -50,6 +50,11 @@ func get_request_url(p_base_url: String, p_model_name: String, _p_api_key: Strin
 		return base + "/v1/responses"
 
 
+## Responses API 的 function_call_output.output 支持内容数组，可内联图片
+func supports_inline_tool_images() -> bool:
+	return true
+
+
 ## [子类覆写] 构建请求体 (Body) — Responses API 格式
 func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage], p_temperature: float, p_stream: bool, p_tool_definitions: Array = []) -> Dictionary:
 	var body: Dictionary = {
@@ -135,10 +140,29 @@ func build_request_body_impl(p_model_name: String, p_messages: Array[ChatMessage
 					})
 			
 			ChatMessage.ROLE_TOOL:
+				var output_value: Variant = msg.content if not msg.content.is_empty() else "SUCCESS"
+				if not msg.images.is_empty():
+					var output_blocks: Array = []
+					if not msg.content.is_empty():
+						output_blocks.append({"type": "input_text", "text": msg.content})
+					for img: Dictionary in msg.images:
+						var raw_data: Variant = img.get("data")
+						if not raw_data is PackedByteArray:
+							continue
+						var image_data: PackedByteArray = raw_data
+						if image_data.is_empty():
+							continue
+						var mime: String = img.get("mime", "image/png")
+						output_blocks.append({
+							"type": "input_image",
+							"image_url": "data:%s;base64,%s" % [mime, Marshalls.raw_to_base64(image_data)]
+						})
+					if not output_blocks.is_empty():
+						output_value = output_blocks
 				input_items.append({
 					"type": "function_call_output",
 					"call_id": msg.tool_call_id,
-					"output": msg.content
+					"output": output_value
 				})
 	
 	if not instructions.is_empty():

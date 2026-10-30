@@ -14,6 +14,13 @@ const USE_SYSTEM_CACHE_CONTROL := true
 ## 同理，部分网关不接受 tools 内的 cache_control
 const USE_TOOLS_CACHE_CONTROL := true
 
+## 工具结果内联图片：官方 Messages API 允许 tool_result.content 为内容块数组，
+## 可直接内嵌 image 块，无需另拆一条 User 消息。
+## 不支持该结构的兼容网关覆写 supports_inline_tool_images() 关闭即可回退旧行为。
+const SUPPORTS_INLINE_TOOL_IMAGES := true
+## Anthropic 接受的内嵌图片 MIME 类型白名单（其它类型会整条请求 400）
+const SUPPORTED_IMAGE_MEDIA_TYPES: Array[String] = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+
 
 # --- Private Vars ---
 
@@ -30,6 +37,11 @@ func reset_stream_state() -> void:
 
 func get_stream_parser_type() -> StreamParserType:
 	return StreamParserType.SSE
+
+
+## [可覆写] 是否把工具产出的图片内联到 tool_result 中
+func supports_inline_tool_images() -> bool:
+	return SUPPORTS_INLINE_TOOL_IMAGES
 
 
 ## [子类覆写] 构建请求体 (Body)
@@ -381,13 +393,62 @@ func _convert_message_to_anthropic(p_msg: ChatMessage) -> Dictionary:
 	
 	if role == ChatMessage.ROLE_TOOL:
 		role = "user"
-		content = [{ "type": "tool_result", "tool_use_id": p_msg.tool_call_id, "content": p_msg.content }]
+		content = [{ "type": "tool_result", "tool_use_id": p_msg.tool_call_id, "content": _build_tool_result_content(p_msg) }]
 	elif role == ChatMessage.ROLE_USER:
 		content = _build_user_content(p_msg)
 	elif role == ChatMessage.ROLE_ASSISTANT:
 		content = _build_assistant_content(p_msg)
 	
 	return { "role": role, "content": content }
+
+
+# 构造 tool_result 的 content 字段：工具文本 + 可选图片块
+#
+# Anthropic 的 tool_result.content 既可以是字符串，也可以是内容块数组；
+# 图片以 base64 image 块内嵌在工具结果里，模型在同一位置即可看到工具产出，
+# 不必再插入一条 "Image content from tool(s)..." 的 User 消息。
+# 无图时保持纯字符串形式，最大化兼容第三方网关。
+# [param p_msg]: role=tool 的消息
+# [return]: String（无图）或 Array（含 image 块）
+func _build_tool_result_content(p_msg: ChatMessage) -> Variant:
+	var image_blocks: Array = []
+	
+	for img: Dictionary in p_msg.images:
+		var raw_data: Variant = img.get("data")
+		if not raw_data is PackedByteArray:
+			continue
+		
+		var image_data: PackedByteArray = raw_data
+		if image_data.is_empty():
+			continue
+		
+		var media_type: String = String(img.get("mime", "image/png"))
+		# 常见非标准写法归一化，避免因 MIME 拼写差异被整条丢弃
+		if media_type == "image/jpg":
+			media_type = "image/jpeg"
+		if not (media_type in SUPPORTED_IMAGE_MEDIA_TYPES):
+			AIChatLogger.warn("[BaseAnthropicProvider] Unsupported tool result image mime '%s', skipped." % media_type)
+			continue
+		
+		image_blocks.append({
+			"type": "image",
+			"source": {
+				"type": "base64",
+				"media_type": media_type,
+				"data": Marshalls.raw_to_base64(image_data)
+			}
+		})
+	
+	# 无可用图片：沿用旧的纯字符串形式
+	if image_blocks.is_empty():
+		# 空结果兜底：Anthropic 不接受空的 tool_result content
+		return p_msg.content if not p_msg.content.is_empty() else "SUCCESS"
+	
+	var blocks: Array = []
+	if not p_msg.content.is_empty():
+		blocks.append({ "type": "text", "text": p_msg.content })
+	blocks.append_array(image_blocks)
+	return blocks
 
 
 func _build_user_content(p_msg: ChatMessage) -> Variant:
