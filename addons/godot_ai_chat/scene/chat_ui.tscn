@@ -76,7 +76,6 @@ theme_override_constants/separation = 4
 [node name="StatusLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=2121040211]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_a7m7s")
-text = "Ready"
 label_settings = SubResource("LabelSettings_2kdn8")
 vertical_alignment = 1
 text_overrun_behavior = 1
@@ -84,7 +83,6 @@ text_overrun_behavior = 1
 [node name="WorkspaceLabel" type="Label" parent="TabContainer/Chat/VBoxContainer" unique_id=891807978]
 layout_mode = 2
 theme_override_styles/normal = SubResource("StyleBoxFlat_5m1uj")
-text = "Current Workspace: res://addons/godot_ai_chat"
 label_settings = SubResource("LabelSettings_ju5xs")
 vertical_alignment = 1
 text_overrun_behavior = 1
@@ -235,15 +233,6 @@ vertical_alignment = 1
 [node name="CurrentTokenUsage" type="Label" parent="TabContainer/Chat/VBoxContainer/InfoContainer" unique_id=430120038]
 layout_mode = 2
 size_flags_horizontal = 3
-tooltip_text = "Current Request:
- - Prompt: 0
- - Completion: 0
- - Total: 0
-
-Session Total:
- - Prompt: 0
- - Completion: 0
- - Total: 0"
 mouse_filter = 0
 text = "Total Tokens: 0"
 label_settings = SubResource("LabelSettings_yewlv")
@@ -268,21 +257,13 @@ layout_mode = 2
 [node name="FileDialog" type="FileDialog" parent="." unique_id=1325562377]
 oversampling_override = 1.0
 title = "Open a Directory"
-size = Vector2i(1600, 1400)
-min_size = Vector2i(1600, 1400)
-file_mode = 2
-display_mode = 1
-
-[node name="WorkspaceFileDialog" type="FileDialog" parent="." unique_id=1662165699]
-title = "Open a Directory"
-size = Vector2i(1600, 1400)
-min_size = Vector2i(1200, 800)
+size = Vector2i(800, 800)
+min_size = Vector2i(800, 800)
 file_mode = 2
 display_mode = 1
 
 [node name="AcceptDialog" type="AcceptDialog" parent="." unique_id=1907732757]
 initial_position = 1
-size = Vector2i(600, 400)
-min_size = Vector2i(600, 400)
-dialog_text = "Connection failed. Is the API URL correct and the server running?"
+size = Vector2i(800, 400)
+min_size = Vector2i(800, 400)
 dialog_autowrap = true

@@ -63,7 +63,7 @@ enum UIState {
 
 @onready var _workspace_label: Label = $TabContainer/Chat/VBoxContainer/WorkspaceLabel
 @onready var _workspace_select_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/WorkspaceSelectButton
-@onready var _workspace_file_dialog: FileDialog = $WorkspaceFileDialog
+#@onready var _workspace_file_dialog: FileDialog = $WorkspaceFileDialog
 
 @onready var _session_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/SessionSelector
 @onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/DeleteButton
@@ -129,7 +129,7 @@ func _ready() -> void:
 	_send_button.pressed.connect(_on_send_button_pressed)
 	
 	_workspace_select_button.pressed.connect(_on_workspace_select_button_pressed)
-	_workspace_file_dialog.dir_selected.connect(_on_workspace_dir_selected)
+	_file_dialog.dir_selected.connect(_on_workspace_dir_selected)
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	_allow_editor_script_checkbutton.button_pressed = settings.allow_editor_script_execution
@@ -380,7 +380,36 @@ func _get_status_color(p_state: UIState) -> Color:
 func _show_error_dialog(p_msg: String) -> void:
 	_error_dialog.title = "Error"
 	_error_dialog.dialog_text = p_msg
+	# [不要改成 always_on_top] AcceptDialog 构造时即 transient = true，而 transient 与
+	# always_on_top 互斥：两者并存会让每次显示/关闭各报一条 ERROR。
+	# 这里保持默认 transient —— 附加子窗口本来就在父窗口之上，足以起警示作用；
+	# 提示框不需要拖动，因此接受它同屏拖动卡顿的代价。详见 primers/macos_window_notes.md。
 	_error_dialog.popup_centered()
+
+
+# 以「置顶的独立窗口」方式显示提示框
+# [param p_dialog]: 待显示的提示框（AcceptDialog / 其子类）
+func _show_notice_dialog(p_dialog: Window) -> void:
+	p_dialog.show()
+	p_dialog.grab_focus()
+	_center_over_editor(p_dialog)
+
+
+# 将窗口居中于编辑器主窗口
+# [为什么等一帧] 对话框的最终尺寸要等一次布局才确定，show() 之后立刻取 size 会拿到旧值，
+# 居中位置就会偏。
+func _center_over_editor(p_dialog: Window) -> void:
+	await get_tree().process_frame
+	
+	if not is_instance_valid(p_dialog) or not p_dialog.visible:
+		return
+	
+	var reference: Window = get_window()
+	if reference == null or reference == p_dialog:
+		p_dialog.move_to_center()
+		return
+	
+	p_dialog.position = reference.position + (reference.size - p_dialog.size) / 2
 
 
 func _update_workspace_display(p_path: String) -> void:
@@ -490,10 +519,15 @@ func _on_model_name_filter_text_changed(_new_text: String) -> void:
 
 
 func _on_save_as_markdown_button_pressed() -> void:
+	# 与「选择工作区」共用同一个 FileDialog：切模式前清掉上次残留的过滤器与文件名
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
 	_file_dialog.clear_filters()
+	_file_dialog.current_file = ""
 	_file_dialog.add_filter("*.md", "Markdown File")
 	_file_dialog.current_dir = PluginPaths.SESSION_DIR
+	
+	# [注意] set_file_mode 会用默认标题覆盖 title，故标题必须在 file_mode 之后设置
+	_file_dialog.title = "Select Save Directory"
 	
 	# 使用当前会话文件名（去掉.tres后缀，改为.md）
 	if not _current_session_name.is_empty():
@@ -528,12 +562,18 @@ func _on_filesystem_changed() -> void:
 
 
 func _on_workspace_select_button_pressed() -> void:
-	_workspace_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
-	_workspace_file_dialog.title = "Select Workspace Directory"
+	# 与「导出 Markdown」共用同一个 FileDialog：切模式前清掉上次残留的过滤器与文件名
+	_file_dialog.clear_filters()
+	_file_dialog.current_file = ""
+	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+	# [注意] set_file_mode 会用默认标题覆盖 title，故标题必须在 file_mode 之后设置
+	_file_dialog.title = "Select Workspace Directory"
+	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	if not settings.workspace_path.is_empty():
-		_workspace_file_dialog.current_dir = settings.workspace_path
-	_workspace_file_dialog.popup_centered()
+		_file_dialog.current_dir = settings.workspace_path
+	
+	_file_dialog.popup_centered()
 
 
 func _on_workspace_dir_selected(p_dir: String) -> void:

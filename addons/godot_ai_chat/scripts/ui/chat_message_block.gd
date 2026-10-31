@@ -12,11 +12,13 @@ extends FoldableContainer
 const MarkdownSegment := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_segment.gd")
 const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_to_bbcode.gd")
 const MarkdownStreamParser := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_stream_parser.gd")
+## 文本查看窗口（原生独立窗口，详见该脚本内说明）
+const TextViewerWindow := preload("res://addons/godot_ai_chat/scripts/ui/text_viewer_window.gd")
 
 ## 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
 
-## 角色标题样式资源
+# 角色标题样式资源
 const TITLE_STYLE_ASSISTANT: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/assistant_title.tres")
 const TITLE_STYLE_USER: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/user_title.tres")
 const TITLE_STYLE_TOOL: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/tool_title.tres")
@@ -39,13 +41,12 @@ const REASONING_WRAP_MODE: TextEdit.LineWrappingMode = TextEdit.LINE_WRAPPING_BO
 ## [临时探针] 单次写入耗时告警阈值（微秒）：超过则打印，用于确认卡顿是否仍在写入路径
 const REASONING_PROBE_WARN_USEC: int = 30000
 
-## 内联预览显示的工具参数最大字符数
-## [为什么必须有上限] 文档创建类工具的 arguments 常达数十~数百 KB，且多为"一整行"的转义 JSON。
-## 旧实现对每个参数增量都会：解析全量 JSON → 全量序列化 → 清空并整段重排 RichTextLabel
-## →（fit_content + 自动换行测量，对一整行超长文本做断行分析）。
-## 这些成本都与参数总长度成正比，且全部发生在主线程、中间没有任何 await 点，
-## 于是"一大段 chunk 冲进来"表现为编辑器卡死，历史加载表现为"停在某条消息几秒"。
-##
+# 内联预览显示的工具参数最大字符数
+# [为什么必须有上限] 文档创建类工具的 arguments 常达数十~数百 KB，且多为"一整行"的转义 JSON。
+# 旧实现对每个参数增量都会：解析全量 JSON → 全量序列化 → 清空并整段重排 RichTextLabel
+# →（fit_content + 自动换行测量，对一整行超长文本做断行分析）。
+# 这些成本都与参数总长度成正比，且全部发生在主线程、中间没有任何 await 点，
+# 于是"一大段 chunk 冲进来"表现为编辑器卡死，历史加载表现为"停在某条消息几秒"。
 ## 预览取小值是安全的：完整参数由查看窗口提供，预览只承担"一眼看出调用了什么工具"。
 const TOOL_ARGS_RENDER_LIMIT: int = 600
 ## 参数长度不超过该值时，内联预览先做一次 JSON 美化（仅影响预览显示）
@@ -54,16 +55,6 @@ const TOOL_ARGS_PARSE_LIMIT: int = 600
 const TOOL_ARGS_VIEWER_PARSE_LIMIT: int = 1048576
 ## [临时探针] 单次参数渲染耗时告警阈值（微秒），用于验证封顶是否生效
 const TOOL_ARGS_PROBE_WARN_USEC: int = 5000
-
-## 查看窗口默认尺寸
-const TEXT_VIEWER_WINDOW_SIZE: Vector2i = Vector2i(1000, 800)
-## 查看窗口最小尺寸
-const TEXT_VIEWER_WINDOW_MIN_SIZE: Vector2i = Vector2i(600, 400)
-## 查看窗口四周留白（像素）
-const TEXT_VIEWER_MARGIN: float = 8.0
-## 查看窗口内容区底部预留高度（像素）：给 AcceptDialog 的按钮区留位。
-## 取值与旧版 popup_code_viewer_window.tscn 中的 offset_bottom 一致，避免内容压住 OK 按钮。
-const TEXT_VIEWER_BOTTOM_RESERVED: float = 49.0
 
 
 # --- @onready Vars ---
@@ -109,14 +100,12 @@ var _is_first_text: bool = true
 # 标记上一行是否为空白行（用于压缩连续空白行）
 var _previous_line_was_blank: bool = false
 
-# 文本查看窗口（懒创建并复用；关闭时清空文本）
-# [为什么复用] 每次点击都实例化/释放窗口会带来反复创建子窗口与文本缓冲的开销，
+# 文本查看窗口（原生独立窗口，懒创建并复用；关闭时清空文本）
+# [为什么复用] 每次点击都实例化/释放窗口会带来反复创建系统窗口与文本缓冲的开销，
 # 也容易产生"多窗口互相串扰、关不掉"这类 bug。
-var _text_viewer_window: AcceptDialog = null
-# 工具参数视图：纯 TextEdit —— 无高亮器、无行号槽、无任何逐行装饰
-var _text_viewer_args_edit: TextEdit = null
-# 代码视图：CodeEdit —— 保留语法高亮与行号
-var _text_viewer_code_edit: CodeEdit = null
+# [为什么拆成独立脚本] force_native 的设置时机、首次呈现后的尺寸往返刷新、子控件布局同步、
+# Esc 关闭都属于窗口自身的职责；留在消息块里会让"消息渲染"和"窗口管理"两件事纠缠。
+var _text_viewer_window: TextViewerWindow = null
 
 # 表格渲染状态
 var _in_table: bool = false
@@ -924,84 +913,19 @@ func _typewriter_loop() -> void:
 	get_tree().create_timer(0.016).timeout.connect(_typewriter_loop)
 
 
-# 打开（或复用）文本查看窗口
+# 打开文本查看窗口
 # [param p_text]: 待显示文本（完整内容，不做截断）
 # [param p_is_code_view]: true = 代码视图（语法高亮 + 行号）；false = 工具参数视图（纯文本）
 func _show_text_viewer(p_text: String, p_is_code_view: bool) -> void:
-	if not is_instance_valid(_text_viewer_window):
-		_create_text_viewer_window()
+	# is_queued_for_deletion() 必须一起判：点 Close 后同一帧内又点 Popout 时，
+	# 旧窗口已经 queue_free 但尚未真正释放，is_instance_valid() 仍然返回 true，
+	# 此时复用会把内容写进一个即将消失的窗口。
+	if not is_instance_valid(_text_viewer_window) or _text_viewer_window.is_queued_for_deletion():
+		_text_viewer_window = TextViewerWindow.new()
+		add_child(_text_viewer_window)
+		AIChatLogger.debug("[ChatMessageBlock] Text viewer created")
 	
-	if not is_instance_valid(_text_viewer_args_edit) or not is_instance_valid(_text_viewer_code_edit):
-		return
-	
-	# 两种用途用两个控件表达，而不是靠开关一堆属性：
-	# 参数视图在结构上就没有高亮器与行号槽，也就不可能被后续改动"顺手打开"而回归性能。
-	_text_viewer_args_edit.visible = not p_is_code_view
-	_text_viewer_code_edit.visible = p_is_code_view
-	
-	if p_is_code_view:
-		_text_viewer_code_edit.text = p_text
-	else:
-		_text_viewer_args_edit.text = p_text
-	
-	_text_viewer_window.popup_centered(TEXT_VIEWER_WINDOW_SIZE)
-
-
-# 创建文本查看窗口（纯代码构建，不新增场景资源）
-# [为什么代码构建] 窗口的关键配置本身就是性能契约，而 .tscn 不支持注释、编辑器还会重写它，
-# 把契约放在场景里等于把理由丢掉；本文件其余 UI（代码块、工具面板、思考框）也一律是代码构建。
-func _create_text_viewer_window() -> void:
-	var window: AcceptDialog = AcceptDialog.new()
-	window.title = "Viewer"
-	window.size = TEXT_VIEWER_WINDOW_SIZE
-	window.min_size = TEXT_VIEWER_WINDOW_MIN_SIZE
-	# 注意：Godot 4 的属性名是 dialog_hide_on_ok（Godot 3 才叫 hide_on_ok）
-	window.dialog_hide_on_ok = true
-	
-	# 复刻旧版场景的布局：四周留白 + 底部给按钮区留位，避免内容压住 OK 按钮
-	var margin: MarginContainer = MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.offset_left = TEXT_VIEWER_MARGIN
-	margin.offset_top = TEXT_VIEWER_MARGIN
-	margin.offset_right = -TEXT_VIEWER_MARGIN
-	margin.offset_bottom = -TEXT_VIEWER_BOTTOM_RESERVED
-	window.add_child(margin)
-	
-	# 1. 工具参数视图：只设必要项，其余全部沿用 TextEdit 默认值 ——
-	#    高亮器默认 null、没有行号槽、draw_tabs / draw_spaces / minimap_draw / scroll_smooth 默认全为 false，
-	#    这正是"一个不做任何渲染的 TextEdit"。
-	#    wrap 固定 NONE：这是 TextEdit 最省的模式（可见行数 == 逻辑行数，无需逐行换行测量）；
-	#    参数文本已按真实换行渲染，本就不需要换行。
-	var args_edit: TextEdit = TextEdit.new()
-	args_edit.editable = false
-	args_edit.wrap_mode = TextEdit.LINE_WRAPPING_NONE
-	args_edit.caret_blink = false
-	args_edit.highlight_current_line = false
-	margin.add_child(args_edit)
-	
-	# 2. 代码视图：保留语法高亮与行号（与旧版代码块弹窗一致）
-	var code_edit: CodeEdit = CodeEdit.new()
-	code_edit.editable = false
-	code_edit.syntax_highlighter = SYNTAX_HIGHLIGHTER_RES
-	code_edit.gutters_draw_line_numbers = true
-	code_edit.draw_tabs = true
-	code_edit.minimap_draw = false
-	code_edit.wrap_mode = CodeEdit.LINE_WRAPPING_NONE
-	# 平滑滚动是"逐帧重绘新露出区域"的持续成本，对查看器不划算（TextEdit 默认即为 false）
-	code_edit.scroll_smooth = false
-	margin.add_child(code_edit)
-	
-	# 关闭路径统一处理：OK 按钮 / 右上角关闭 / Esc
-	window.confirmed.connect(_on_text_viewer_closed)
-	window.canceled.connect(_on_text_viewer_closed)
-	window.close_requested.connect(_on_text_viewer_closed)
-	
-	add_child(window)
-	_text_viewer_window = window
-	_text_viewer_args_edit = args_edit
-	_text_viewer_code_edit = code_edit
-	# 验证窗口是否真的被复用：正常应当每个消息块最多出现一次
-	AIChatLogger.debug("[ChatMessageBlock] Text viewer created")
+	_text_viewer_window.show_content(p_text, p_is_code_view)
 
 
 # 构造查看窗口显示的工具参数文本
@@ -1098,8 +1022,6 @@ func _clear_content() -> void:
 	if is_instance_valid(_text_viewer_window):
 		_text_viewer_window.queue_free()
 	_text_viewer_window = null
-	_text_viewer_args_edit = null
-	_text_viewer_code_edit = null
 	
 	if _content_container.has_meta("shown_calls"):
 		_content_container.set_meta("shown_calls", [])
@@ -1134,20 +1056,6 @@ func _ensure_text_block(p_instant: bool) -> void:
 
 
 # --- Signal Callbacks ---
-
-# 查看窗口关闭回调：隐藏并清空文本
-# [为什么清空内容] 文本是内存占用的大头（TextServer 侧的文本缓冲），窗口节点本身很小。
-# 关闭即释放内容，既避免"看起来像泄漏"，也省掉每次点击重建窗口的开销。
-func _on_text_viewer_closed() -> void:
-	if not is_instance_valid(_text_viewer_window):
-		return
-	
-	_text_viewer_window.visible = false
-	if is_instance_valid(_text_viewer_args_edit):
-		_text_viewer_args_edit.text = ""
-	if is_instance_valid(_text_viewer_code_edit):
-		_text_viewer_code_edit.text = ""
-
 
 # 普通段落行
 func _on_parser_text_line(p_line: String) -> void:

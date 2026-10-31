@@ -123,7 +123,7 @@ func _initialize_plugin_file_environment() -> void:
 		# 确保对话存档目录存在
 	if not DirAccess.dir_exists_absolute(PluginPaths.SESSION_DIR):
 		DirAccess.make_dir_recursive_absolute(PluginPaths.SESSION_DIR)
-		await get_tree().create_timer(1.0).timeout
+		await get_tree().create_timer(5.0).timeout
 		
 		var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
 		editor_file_system.scan()
