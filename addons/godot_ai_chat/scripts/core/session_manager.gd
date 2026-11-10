@@ -62,7 +62,7 @@ func load_session(p_session_name: String) -> ChatMessageHistory:
 	return null
 
 
-## 删除会话
+## 删除会话（移入系统回收站，之后可从回收站还原）
 ## [param p_session_name]: 会话文件名
 ## [return]: 是否删除成功
 func delete_session(p_session_name: String) -> bool:
@@ -70,17 +70,23 @@ func delete_session(p_session_name: String) -> bool:
 	
 	if not FileAccess.file_exists(archive_path):
 		return false
-	if DirAccess.remove_absolute(archive_path) == OK:
-		if current_session_path == archive_path:
-			_disconnect_auto_save()
-			current_session_path = ""
-			_current_history = null
-			# 当前会话已删除，清空 opencode 路由 ID，避免后续请求继续携带失效会话标识
-			OpenCodeGoProvider.set_conversation_session_id("")
-		ToolBox.update_editor_filesystem(archive_path)
-		return true
 	
-	return false
+	# 回收站只接受全局路径，res:// 必须先转换为系统绝对路径
+	var trash_error: Error = OS.move_to_trash(ProjectSettings.globalize_path(archive_path))
+	
+	if trash_error != OK:
+		AIChatLogger.error("[AIChatSessionManager] Failed to move session to trash: %s (%s)" % [p_session_name, error_string(trash_error)])
+		return false
+	
+	if current_session_path == archive_path:
+		_disconnect_auto_save()
+		current_session_path = ""
+		_current_history = null
+		# 当前会话已删除，清空 opencode 路由 ID，避免后续请求继续携带失效会话标识
+		OpenCodeGoProvider.set_conversation_session_id("")
+	
+	ToolBox.update_editor_filesystem(archive_path)
+	return true
 
 
 ## 加载最新的会话

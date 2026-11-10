@@ -1,14 +1,13 @@
 extends RefCounted
 
-## URL 辅助工具
-##
-## 用于处理和规范化 API 端点 URL 的工具类。
+# URL 辅助工具
+# 用于处理和规范化 API 端点 URL 的工具类。
 
 
 # --- Public Functions ---
 
-## 规范化智谱 AI (ZhipuAI) 的 API 端点
-## 能够处理用户输入的各种不完整或带有多余斜杠的 URL
+# 规范化智谱 AI (ZhipuAI) 的 API 端点
+# 能够处理用户输入的各种不完整或带有多余斜杠的 URL
 static func normalize_zhipu_url(p_input_url: String) -> String:
 	var url: String = p_input_url.strip_edges()
 	
@@ -52,9 +51,9 @@ static func normalize_zhipu_url(p_input_url: String) -> String:
 	return url + "/api/paas/v4/chat/completions"
 
 
-## 解析 URL 为结构化数据
-## [param p_url]: 完整 URL 字符串
-## [return]: {protocol: String, host: String, port: int, path: String}
+# 解析 URL 为结构化数据
+# [param p_url]: 完整 URL 字符串
+# [return]: {protocol: String, host: String, port: int, path: String}
 static func parse_url(p_url: String) -> Dictionary:
 	var protocol_pos: int = p_url.find("://")
 	# [修复] 无协议头时显式指定协议，避免 protocol 为垃圾值导致 TLS 判定异常

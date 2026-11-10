@@ -14,7 +14,7 @@ func _init() -> void:
 
 # --- Public Functions ---
 
-## 获取工具参数的 JSON Schema
+# 获取工具参数的 JSON Schema
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -32,9 +32,9 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-## 执行文件重命名操作
-## [param p_args]: 包含 source_path 和 new_name 的参数字典
-## [return]: 包含成功状态和操作结果的字典
+# 执行文件重命名操作
+# [param p_args]: 包含 source_path 和 new_name 的参数字典
+# [return]: 包含成功状态和操作结果的字典
 func execute(p_args: Dictionary) -> ToolResult:
 	var source_path: String = p_args.get("source_path", "")
 	var new_name: String = p_args.get("new_name", "")
@@ -80,5 +80,5 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if err != OK:
 		return ToolResult.fail("Error: failed to rename. Error code: " + str(err))
 	
-	ToolBox.refresh_editor_filesystem()
+	ToolBox.update_editor_filesystem(source_path)
 	return ToolResult.ok("Successfully renamed '%s' to '%s'." % [source_path, target_path])

@@ -1,11 +1,10 @@
 @tool
 extends Node
 
-## Agent 编排器
-##
-## 负责管理 AI 对话循环，处理工具调用链的执行。
-## 本类不解析任何协议、不直接改写消息数据：
-## 协议解析由 Provider 负责，数据落地由 StreamMessageAssembler 负责。
+# Agent 编排器
+# 负责管理 AI 对话循环，处理工具调用链的执行。
+# 本类不解析任何协议、不直接改写消息数据：
+# 协议解析由 Provider 负责，数据落地由 StreamMessageAssembler 负责。
 
 # --- Constants ---
 
@@ -22,22 +21,22 @@ var network_manager: AIChatNetworkManager
 var current_chat_window: AIChatCurrentChatWindow
 var chat_ui: AIChatUI
 
-## 当前工作流是否已被用户取消
+# 当前工作流是否已被用户取消
 var is_cancelled: bool = false
 
 
 # --- Public Functions ---
 
-## 取消当前工作流
+# 取消当前工作流
 func cancel_workflow() -> void:
 	is_cancelled = true
 	if network_manager:
 		network_manager.cancel_stream()
 
 
-## 运行聊天循环
-## [param p_base_history]: 基础历史记录
-## [param p_settings]: 插件设置
+# 运行聊天循环
+# [param p_base_history]: 基础历史记录
+# [param p_settings]: 插件设置
 func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettingsConfig) -> void:
 	is_cancelled = false
 	

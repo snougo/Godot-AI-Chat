@@ -1,8 +1,7 @@
-@tool
 extends AiTool
 
-## 列出所有可用的 AI 技能及其当前状态（已挂载/激活或未激活）。
-## 用于查看当前可用的功能或可以学习的新技能。
+# 列出所有可用的 AI 技能及其当前状态（已挂载/激活或未激活）。
+# 用于查看当前可用的功能或可以学习的新技能。
 
 
 # --- Built-in Functions ---
@@ -14,7 +13,7 @@ func _init() -> void:
 
 # --- Public Functions ---
 
-## 获取工具参数的 JSON Schema
+# 获取工具参数的 JSON Schema
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
@@ -23,9 +22,9 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-## 执行工具逻辑，列出所有可用技能
-## [param p_args]: 参数字典（此工具不需要参数）
-## [return]: 包含成功状态和技能列表的字典
+# 执行工具逻辑，列出所有可用技能
+# [param p_args]: 参数字典（此工具不需要参数）
+# [return]: 包含成功状态和技能列表的字典
 func execute(p_args: Dictionary) -> ToolResult:
 	var all_skills: Array = ToolRegistry.get_available_skill_names()
 	

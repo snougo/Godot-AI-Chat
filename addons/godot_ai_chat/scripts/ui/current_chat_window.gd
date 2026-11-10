@@ -1,20 +1,20 @@
 @tool
 extends Node
 
-## 当前聊天窗口逻辑控制器
-##
-## 作为纯视图层，订阅 ChatMessageHistory 的数据变更信号进行渲染，
-## 并负责流式渲染、可视性剔除与自动滚动。
-##
-## 职责边界：
-## 1. 数据的增删一律由 ChatMessageHistory 负责，本类不得直接改写其内容；
-## 2. 协议解析由 Provider 负责，本类只消费协议无关的 LLMStreamDelta；
-## 3. 数据落地由 StreamMessageAssembler 负责，本类只驱动 UI 动画。
+# 当前聊天窗口逻辑控制器
+#
+# 作为纯视图层，订阅 ChatMessageHistory 的数据变更信号进行渲染，
+# 并负责流式渲染、可视性剔除与自动滚动。
+#
+# 职责边界：
+# 1. 数据的增删一律由 ChatMessageHistory 负责，本类不得直接改写其内容；
+# 2. 协议解析由 Provider 负责，本类只消费协议无关的 LLMStreamDelta；
+# 3. 数据落地由 StreamMessageAssembler 负责，本类只驱动 UI 动画。
 
 
 # --- Signals ---
 
-## 当 Token 使用量更新时发出
+# 当 Token 使用量更新时发出
 signal token_usage_updated(usage: Dictionary)
 
 
@@ -24,25 +24,25 @@ const ChatMessageBlock = preload("res://addons/godot_ai_chat/scripts/ui/chat_mes
 const StreamMessageAssembler := preload("res://addons/godot_ai_chat/scripts/core/stream_message_assembler.gd")
 
 const CULLING_INTERVAL: float = 0.2 # 每秒检测5次，足够平滑且低耗
-## 消息块场景
+# 消息块场景
 const CHAT_MESSAGE_BLOCK_SCENE: PackedScene = preload(PluginPaths.CHAT_MESSAGE_BLOCK_SCENE)
-## [自动滚动] 距底部多少像素以内视为"在底部"
+# [自动滚动] 距底部多少像素以内视为"在底部"
 const BOTTOM_THRESHOLD: float = 50.0
-## 可视性剔除缓冲区（像素）：上下各预留，确保快速滚动时不会看到空白
+# 可视性剔除缓冲区（像素）：上下各预留，确保快速滚动时不会看到空白
 const CULLING_BUFFER: float = 400.0
-## 剔除调试输出的可见块数量阈值（低于该值不打印，避免刷屏）
+# 剔除调试输出的可见块数量阈值（低于该值不打印，避免刷屏）
 const CULLING_DEBUG_THRESHOLD: int = 16
 
 
 # --- Public Vars ---
 
-## 消息列表容器引用
+# 消息列表容器引用
 var chat_list_container: VBoxContainer
-## 滚动容器引用
+# 滚动容器引用
 var chat_scroll_container: ScrollContainer
-## 当前加载的聊天历史资源（唯一数据源）
+# 当前加载的聊天历史资源（唯一数据源）
 var chat_history: ChatMessageHistory
-## 当前使用的模型名称（用于助手消息标题展示）
+# 当前使用的模型名称（用于助手消息标题展示）
 var current_model_name: String = ""
 
 
@@ -82,7 +82,7 @@ func _process(delta: float) -> void:
 
 # --- Public Functions ---
 
-## 加载聊天历史资源并刷新显示
+# 加载聊天历史资源并刷新显示
 func load_session_history_resource(p_session_history: ChatMessageHistory) -> void:
 	_unbind_history()
 	
@@ -97,7 +97,7 @@ func load_session_history_resource(p_session_history: ChatMessageHistory) -> voi
 	refresh_display()
 
 
-## 清空当前会话视图（仅断开数据绑定并清空 UI，不删除数据）
+# 清空当前会话视图（仅断开数据绑定并清空 UI，不删除数据）
 func clear_session() -> void:
 	_unbind_history()
 	
@@ -108,19 +108,19 @@ func clear_session() -> void:
 		child.queue_free()
 
 
-## 追加用户消息到历史（渲染由数据信号驱动）
+# 追加用户消息到历史（渲染由数据信号驱动）
 func append_user_message(p_text: String, p_images: Array = []) -> void:
 	chat_history.add_user_message(p_text, p_images)
 
 
-## 追加错误消息到 UI（不入库）
+# 追加错误消息到 UI（不入库）
 func append_error_message(p_text: String) -> void:
 	var block: ChatMessageBlock = _create_block()
 	block.set_error(p_text)
 	_scroll_to_bottom()
 
 
-## 追加工具消息到历史（渲染由数据信号驱动）
+# 追加工具消息到历史（渲染由数据信号驱动）
 func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call_id: String, p_image_data: PackedByteArray = PackedByteArray(), p_image_mime: String = "") -> void:
 	var msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_TOOL, p_result_text, p_tool_name)
 	msg.tool_call_id = p_tool_call_id
@@ -131,9 +131,9 @@ func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call
 	chat_history.add_message(msg)
 
 
-## 处理单个流式数据块
-## [param p_raw_chunk]: 原始数据块
-## [param p_provider]: LLM 提供者实例，用于把数据块翻译为协议无关增量
+# 处理单个流式数据块
+# [param p_raw_chunk]: 原始数据块
+# [param p_provider]: LLM 提供者实例，用于把数据块翻译为协议无关增量
 func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -> void:
 	# 1. 确保存在正在渲染的流式块（全量重绘可能已释放旧块）
 	_ensure_streaming_block()
@@ -167,7 +167,7 @@ func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -
 		update_token_usage(delta.usage)
 
 
-## 结束流式接收：刷出缓冲并将流式消息入库
+# 结束流式接收：刷出缓冲并将流式消息入库
 func flush_stream_buffer() -> void:
 	var has_live_block: bool = is_instance_valid(_streaming_block)
 	
@@ -195,8 +195,8 @@ func flush_stream_buffer() -> void:
 	_streaming_block = null
 
 
-## 丢弃正在接收中的流式消息
-## 既不落库，也不保留 UI 块。数据层面的回滚由 ChatMessageHistory.rollback_incomplete_turn() 负责。
+# 丢弃正在接收中的流式消息
+# 既不落库，也不保留 UI 块。数据层面的回滚由 ChatMessageHistory.rollback_incomplete_turn() 负责。
 func discard_streaming_message() -> void:
 	_assembler.begin()
 	
@@ -207,8 +207,8 @@ func discard_streaming_message() -> void:
 	_stream_rendered_ids.clear()
 
 
-## 全量重绘消息列表
-## 供外部在「流式数据被修正」或「数据层发生回滚」后调用；重绘期间重复调用会被合并。
+# 全量重绘消息列表
+# 供外部在「流式数据被修正」或「数据层发生回滚」后调用；重绘期间重复调用会被合并。
 func refresh_display() -> void:
 	if _is_loading:
 		_refresh_pending = true
@@ -245,7 +245,7 @@ func refresh_display() -> void:
 		refresh_display()
 
 
-## 更新 Token 使用量并发出信号
+# 更新 Token 使用量并发出信号
 func update_token_usage(p_usage: Dictionary) -> void:
 	if not p_usage.is_empty():
 		token_usage_updated.emit(p_usage)

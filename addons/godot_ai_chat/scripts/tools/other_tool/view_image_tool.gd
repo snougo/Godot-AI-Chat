@@ -1,10 +1,10 @@
-@tool
 extends AiTool
 
 ## 从指定路径读取图片文件。
 ## 支持读取图片数据并附加到消息中。
 
-# --- Enums / Constants ---
+
+# --- Constants ---
 
 ## 允许读取的图片文件扩展名白名单
 const ALLOWED_EXTENSIONS: Array[String] = ["png", "jpg", "jpeg"]
@@ -33,9 +33,9 @@ func get_parameters_schema() -> Dictionary:
 	}
 
 
-## 执行图片读取操作
-## [param p_args]: 包含 path 的参数字典
-## [return]: 包含成功状态和图片数据的字典
+# 执行图片读取操作
+# [param p_args]: 包含 path 的参数字典
+# [return]: 包含成功状态和图片数据的字典
 func execute(p_args: Dictionary) -> ToolResult:
 	var path: String = p_args.get("path", "")
 	
@@ -52,11 +52,12 @@ func execute(p_args: Dictionary) -> ToolResult:
 	
 	return _read_image_file(path)
 
+
 # --- Private Functions ---
 
-## 验证路径安全性
-## [param p_path]: 要验证的路径
-## [return]: 验证结果字典
+# 验证路径安全性
+# [param p_path]: 要验证的路径
+# [return]: 验证结果字典
 func _validate_path(p_path: String) -> ToolResult:
 	if not p_path.begins_with("res://"):
 		return ToolResult.fail("Error: Path must start with 'res://'.")
@@ -65,9 +66,9 @@ func _validate_path(p_path: String) -> ToolResult:
 	return ToolResult.ok("")
 
 
-## 验证文件扩展名
-## [param p_path]: 文件路径
-## [return]: 验证结果字典
+# 验证文件扩展名
+# [param p_path]: 文件路径
+# [return]: 验证结果字典
 func _validate_extension(p_path: String) -> ToolResult:
 	var ext: String = p_path.get_extension().to_lower()
 	if ext not in ALLOWED_EXTENSIONS:
@@ -75,9 +76,9 @@ func _validate_extension(p_path: String) -> ToolResult:
 	return ToolResult.ok("")
 
 
-## 读取图片文件
-## [param p_path]: 图片文件路径
-## [return]: 包含图片数据的字典
+# 读取图片文件
+# [param p_path]: 图片文件路径
+# [return]: 包含图片数据的字典
 func _read_image_file(p_path: String) -> ToolResult:
 	if not FileAccess.file_exists(p_path):
 		return ToolResult.fail("Error: File does not exist at path " + p_path)
@@ -97,9 +98,9 @@ func _read_image_file(p_path: String) -> ToolResult:
 	)
 
 
-## 根据文件扩展名确定 MIME 类型
-## [param p_path]: 文件路径
-## [return]: MIME 类型字符串
+# 根据文件扩展名确定 MIME 类型
+# [param p_path]: 文件路径
+# [return]: MIME 类型字符串
 func _determine_mime_type(p_path: String) -> String:
 	if p_path.ends_with(".jpg") or p_path.ends_with(".jpeg"):
 		return "image/jpeg"

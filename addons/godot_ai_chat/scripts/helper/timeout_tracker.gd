@@ -10,8 +10,8 @@ extends RefCounted
 # --- Enums ---
 
 enum Phase {
-	WAITING_FIRST_TOKEN,  ## 等待首token阶段（连接+请求+等首数据）
-	STREAMING             ## 流式接收阶段（停顿超时）
+	WAITING_FIRST_TOKEN,  # 等待首token阶段（连接+请求+等首数据）
+	STREAMING             # 流式接收阶段（停顿超时）
 }
 
 

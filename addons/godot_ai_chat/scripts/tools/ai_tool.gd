@@ -1,10 +1,10 @@
-@tool
 class_name AiTool
 extends RefCounted
 
 ## AI 工具的基类
 ##
 ## 定义了 AI 工具必须实现的接口以及通用的安全检查逻辑。
+
 
 # --- Constants ---
 

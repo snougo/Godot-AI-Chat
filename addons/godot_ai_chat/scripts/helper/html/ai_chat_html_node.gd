@@ -37,7 +37,15 @@ var tag_name: String = ""
 var attributes: Dictionary = {}
 var children: Array[AIChatHtmlNode] = []
 var text: String = ""
-var parent: AIChatHtmlNode = null
+
+
+# --- Private Vars ---
+
+# 父节点弱引用
+# [为什么不能强引用] 子节点强引用父节点会与 children 的强引用构成环，
+# 而 RefCounted 没有环回收，整棵 DOM 树（连同 AIChatHtmlDocument.raw_html 原文）
+# 会在每次网页解析后永久滞留。统一通过 get_parent() 读取，不要在外部直接触碰本字段。
+var _parent_ref: WeakRef = null
 
 
 # --- Public Functions ---
@@ -81,11 +89,20 @@ func is_void() -> bool:
 	return is_element() and VOID_ELEMENTS.has(tag_name)
 
 
+## 读取父节点；父节点已释放时返回 null
+func get_parent() -> AIChatHtmlNode:
+	if _parent_ref == null:
+		return null
+	
+	return _parent_ref.get_ref() as AIChatHtmlNode
+
+
 ## 追加子节点（会自动从原父节点摘除）
 func append_child(p_child: AIChatHtmlNode) -> AIChatHtmlNode:
-	if p_child.parent != null:
-		p_child.parent.remove_child(p_child)
-	p_child.parent = self
+	var old_parent: AIChatHtmlNode = p_child.get_parent()
+	if old_parent != null:
+		old_parent.remove_child(p_child)
+	p_child._parent_ref = weakref(self)
 	children.append(p_child)
 	return p_child
 
@@ -95,14 +112,15 @@ func remove_child(p_child: AIChatHtmlNode) -> AIChatHtmlNode:
 	var index: int = children.find(p_child)
 	if index != -1:
 		children.remove_at(index)
-		p_child.parent = null
+		p_child._parent_ref = null
 	return p_child
 
 
 ## 将自身从父节点摘除
 func remove() -> void:
-	if parent != null:
-		parent.remove_child(self)
+	var own_parent: AIChatHtmlNode = get_parent()
+	if own_parent != null:
+		own_parent.remove_child(self)
 
 
 ## 是否存在指定属性（属性名不区分大小写）

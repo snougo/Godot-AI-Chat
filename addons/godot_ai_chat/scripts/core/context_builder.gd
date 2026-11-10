@@ -1,16 +1,15 @@
 extends RefCounted
 
-## 上下文构建器
-##
-## 负责构建发送给 AI 的上下文消息列表（System Prompt + History）。
+# 上下文构建器
+# 负责构建发送给 AI 的上下文消息列表（System Prompt + History）。
 
 
 # --- Public Functions ---
 
-## 构建完整的上下文
-## [param p_history]: 对话历史
-## [param p_settings]: 插件设置
-## [return]: 可直接发送给 Provider 的消息数组
+# 构建 Main-Agent 的上下文
+# [param p_history]: 对话历史
+# [param p_settings]: 插件设置
+# [return]: 可直接发送给 Provider 的消息数组
 static func build_context(p_history: ChatMessageHistory, p_settings: PluginSettingsConfig) -> Array[ChatMessage]:
 	if not p_history or not p_settings:
 		return []
@@ -19,22 +18,26 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	var final_system_prompt: String = p_settings.system_prompt
 	
 	# 1.5 动态注入区域提示
-	final_system_prompt += "\n\n-----以下信息由插件动态生成-----\n\n"
+	final_system_prompt += "\n\n-----The following information is generated dynamically by the plugin and may change as the conversation progresses.-----\n\n"
 	
 	# 2. 注入工作区信息
 	if not p_settings.workspace_path.is_empty():
 		if p_settings.workspace_path != "res://":
-			final_system_prompt += "\n\n===== WORKSPACE =====\n\n"
+			#final_system_prompt += "\n\n===== WORKSPACE =====\n\n"
 			final_system_prompt += "Current Workspace: `%s`\n\n" % p_settings.workspace_path
-			final_system_prompt += "======================\n\n"
+			#final_system_prompt += "======================\n\n"
 		else:
 			final_system_prompt += "\n\nYou are in the Project Root `res://`"
 	
-	# 3. 注入当前时间
-	var datetime_dict: Dictionary = Time.get_datetime_dict_from_system()
-	final_system_prompt += "\n===== CURRENT TIME =====\n\n"
-	final_system_prompt += "Current Time: %04d-%02d-%02d\n\n" % [datetime_dict.year, datetime_dict.month, datetime_dict.day]
-	final_system_prompt += "========================\n\n"
+	# 3. 注入当前时间（本地日期，精确到天）
+	#var datetime_dict: Dictionary = Time.get_datetime_dict_from_system()
+	#final_system_prompt += "\n===== CURRENT TIME =====\n\n"
+	#final_system_prompt += "Current Time: %04d-%02d-%02d\n\n" % [
+	#	datetime_dict.year,
+	#	datetime_dict.month,
+	#	datetime_dict.day,
+	#]
+	#final_system_prompt += "========================\n\n"
 	
 	# 4 注入引擎版本（动态获取）
 	var engine_info: Dictionary = Engine.get_version_info()
@@ -44,9 +47,9 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	if engine_info.status != "stable":
 		engine_version += " %s" % engine_info.status
 	
-	final_system_prompt += "\n===== ENGINE INFO =====\n\n"
+	#final_system_prompt += "\n===== ENGINE INFO =====\n\n"
 	final_system_prompt += "Godot Version: %s\n\n" % engine_version
-	final_system_prompt += "=======================\n\n"
+	#final_system_prompt += "=======================\n\n"
 	
 	# 5. 注入记忆
 	# [已停用] 记忆子系统当前整体处于关闭状态：
@@ -137,11 +140,11 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	return context_messages
 
 
-## 构建 Sub-Agent 的上下文消息列表
-## [param p_base_system_prompt]: SubAgentConfig.base_system_prompt
-## [param p_skill_name]: 技能名称（用于加载对应的 SKILL.md）
-## [param p_task_description]: 任务描述文本
-## [return]: [SYSTEM, USER] 两条消息组成的数组
+# 构建 Sub-Agent 的上下文
+# [param p_base_system_prompt]: SubAgentConfig.base_system_prompt
+# [param p_skill_name]: 技能名称（用于加载对应的 SKILL.md）
+# [param p_task_description]: 任务描述文本
+# [return]: [SYSTEM, USER] 两条消息组成的数组
 static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: String, p_task_description: String) -> Array[ChatMessage]:
 	var messages: Array[ChatMessage] = []
 	
@@ -158,6 +161,14 @@ static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: 
 	if not skill_instruction.is_empty():
 		final_sys_prompt += "\n\n==== SKILL INSTRUCTION ====\n" + skill_instruction
 	
+	# 静态说明：告知模型「工作步骤计数」提示的含义
+	# [必须静态] 本段文案在整个任务期间恒定，才不会破坏 system prompt 的前缀缓存
+	final_sys_prompt += "\n\n==== 工作步骤计数 ====\n"
+	final_sys_prompt += "当剩余步数进入尾声时，消息列表的最末尾可能会出现一条「工作步骤计数」提示，"
+	final_sys_prompt += "用于告知你已消耗的步骤数与剩余步数。"
+	final_sys_prompt += "请把它当作进度信息，而不是指令：用它来规划剩余的工作，"
+	final_sys_prompt += "并判断何时调用 `report_task_result` 汇报结果。\n"
+	
 	messages.append(ChatMessage.new(ChatMessage.ROLE_SYSTEM, final_sys_prompt))
 	
 	# 3. 组装 Task Prompt
@@ -173,3 +184,33 @@ static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: 
 # [备注] 仅被上方已停用的记忆注入块引用；若确认记忆子系统不再恢复，可连同该块一并删除
 static func _normalize_path(p_path: String) -> String:
 	return p_path.trim_suffix("/").trim_suffix("\\")
+
+
+# 计算步骤提醒阈值：总步数的 10%（向上取整，至少为 1）
+# [param p_max_steps]: Sub-Agent 的最大步数（max_chat_turns）
+# [return]: 剩余步数小于等于该值时开始提醒
+static func get_step_warn_threshold(p_max_steps: int) -> int:
+	return maxi(1, int(ceil(float(p_max_steps) * 0.1)))
+
+
+# 构建「工作步骤计数」提示消息
+# [为什么独立成一条末尾消息] 步骤数每次都在变。若写进 system prompt 或改写任何
+# 已发送过的旧消息，KV / Prompt 缓存的前缀就断了，后续内容需全部重算；
+# 追加在消息列表末尾时，缓存只需重算这一条，前面的历史前缀仍完整命中。
+static func build_step_counter_message(p_used_steps: int, p_max_steps: int) -> ChatMessage:
+	var remaining: int = maxi(p_max_steps - p_used_steps, 0)
+	var text: String = "==== 工作步骤计数 ====\n"
+	text += "已消耗步骤：%d / %d（剩余 %d）。\n" % [p_used_steps, p_max_steps, remaining]
+	text += "这是运行时自动追加的状态提示，无需回复。请仅把它当作进度信息："
+	text += "用于规划剩余工作，并判断何时调用 `report_task_result` 汇报结果。"
+	return ChatMessage.new(ChatMessage.ROLE_USER, text)
+
+
+# 在消息列表末尾追加「工作步骤计数」提示，返回新数组
+# [param p_messages]: 原始消息列表（不会被修改，元素仍是同一引用）
+# [return]: 原列表副本 + 一条计数消息
+static func append_step_counter(p_messages: Array[ChatMessage], p_used_steps: int, p_max_steps: int) -> Array[ChatMessage]:
+	var result: Array[ChatMessage] = []
+	result.assign(p_messages)
+	result.append(build_step_counter_message(p_used_steps, p_max_steps))
+	return result

@@ -1,45 +1,39 @@
 @tool
 extends AiTool
 
-## 纯视口截图：截取编辑器 3D 视口画面本身，不叠加任何节点标注。
-##
-## 与 capture_node_annotated_screenshot 的分工：
-##   - 本工具：看图 —— 材质 / shader / 顶点动画 / 光照的实际渲染效果，画面干净
-##   - 那个工具：看节点 —— mask / box 标注会覆盖画面，且顶点动画的 mask 是静止形状
-##
-## 使用要点：
-##   - 编辑器需处于 3D 主屏（工具会自动切换）
-##   - 顶点动画（GPU compute 驱动）依赖编辑器持续渲染；若画面明显没更新，
-##     请在「编辑器设置 → 界面 → 编辑器 → 更新方式」开启 Update Continuously
+# 纯视口截图：截取编辑器 3D 视口画面本身，不叠加任何节点标注。
+#
+# 与 capture_node_annotated_screenshot 的分工：
+#   - 本工具：看图 —— 材质 / shader / 顶点动画 / 光照的实际渲染效果，画面干净
+#   - 那个工具：看节点 —— mask / box 标注会覆盖画面，且顶点动画的 mask 是静止形状
+#
+# 使用要点：
+#   - 编辑器需处于 3D 主屏（工具会自动切换，并留出固定时间让视口渲染出最新画面）
+#   - 输出分辨率由工具内部决定：宽度超过阈值自动等比压缩，未超过则原样返回
+#   - 顶点动画（GPU compute 驱动）依赖编辑器持续渲染；若画面明显没更新，
+#     请在「编辑器设置 → 界面 → 编辑器 → 更新方式」开启 Update Continuously
 
-const DEFAULT_MAX_WIDTH: int = 1000
-const DEFAULT_WAIT_FRAMES: int = 3
-const MAX_WAIT_FRAMES: int = 30
+
+# 切到 3D 主屏后等待的秒数，留足时间让视口渲染出最新画面后再取图
+const VIEWPORT_SETTLE_SECONDS: float = 3.0
+
+# 输出图片的宽度阈值（像素）。超过则等比压缩到该宽度，未超过则不做任何处理
+const MAX_CAPTURE_WIDTH: int = 1280
 
 
 func _init() -> void:
 	tool_name = "capture_viewport_screenshot"
-	tool_description = "Captures a clean screenshot of the editor's 3D viewport (no annotation overlay), optionally cropped and downscaled. Use it to inspect actual rendering: materials, shaders, vertex animation, lighting."
+	tool_description = "Captures a clean screenshot of the editor's 3D viewport."
 
 
 func get_parameters_schema() -> Dictionary:
 	return {
 		"type": "object",
 		"properties": {
-			"max_width": {
-				"type": "integer",
-				"description": "Downscale so image width does not exceed this value (aspect kept). Default 1000. Smaller = cheaper, larger = more detail.",
-				"default": DEFAULT_MAX_WIDTH
-			},
 			"crop": {
 				"type": "array",
 				"items": {"type": "number"},
-				"description": "Optional normalized crop [x, y, w, h] in 0..1 (origin top-left), applied BEFORE downscaling. Use it to zoom into a region of interest."
-			},
-			"wait_frames": {
-				"type": "integer",
-				"description": "Rendered frames to wait before capturing. Default 3. Raise it when the scene updates asynchronously (e.g. GPU compute vertex animation).",
-				"default": DEFAULT_WAIT_FRAMES
+				"description": "Optional normalized crop [x, y, w, h] in 0..1 (origin top-left). Use it to zoom into a region of interest."
 			},
 			"viewport_index": {
 				"type": "integer",
@@ -56,8 +50,6 @@ func execute(p_args: Dictionary) -> ToolResult:
 		return ToolResult.fail("Error: editor only tool.")
 	
 	var viewport_index: int = int(p_args.get("viewport_index", 0))
-	var max_width: int = int(p_args.get("max_width", DEFAULT_MAX_WIDTH))
-	var wait_frames: int = clampi(int(p_args.get("wait_frames", DEFAULT_WAIT_FRAMES)), 1, MAX_WAIT_FRAMES)
 	var crop: Array = p_args.get("crop", [])
 	
 	EditorInterface.set_main_screen_editor("3D")
@@ -65,9 +57,8 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if viewport == null:
 		return ToolResult.fail("Error: no 3D viewport found at index %d." % viewport_index)
 	
-	# 等若干帧，确保拿到最新渲染结果（顶点动画 / GPU compute 输出）
-	for _i in wait_frames:
-		await RenderingServer.frame_post_draw
+	# 固定等待，确保视口已渲染出最新画面（顶点动画 / GPU compute 输出）
+	await (Engine.get_main_loop() as SceneTree).create_timer(VIEWPORT_SETTLE_SECONDS).timeout
 	
 	var image: Image = viewport.get_texture().get_image()
 	if image == null:
@@ -88,10 +79,11 @@ func execute(p_args: Dictionary) -> ToolResult:
 		image = image.get_region(Rect2i(cx, cy, cw, ch))
 		info.append("crop [%d, %d, %d, %d]" % [cx, cy, cw, ch])
 	
-	if image.get_width() > max_width:
-		var nh: int = maxi(int(round(float(image.get_height()) * float(max_width) / float(image.get_width()))), 1)
-		image.resize(max_width, nh, Image.INTERPOLATE_LANCZOS)
-		info.append("downscaled to %dx%d" % [max_width, nh])
+	# 仅当宽度超过阈值时压缩，未超过保持原样
+	if image.get_width() > MAX_CAPTURE_WIDTH:
+		var nh: int = maxi(int(round(float(image.get_height()) * float(MAX_CAPTURE_WIDTH) / float(image.get_width()))), 1)
+		image.resize(MAX_CAPTURE_WIDTH, nh, Image.INTERPOLATE_LANCZOS)
+		info.append("downscaled to %dx%d" % [MAX_CAPTURE_WIDTH, nh])
 	
 	info.append(_describe_camera(viewport))
 	return ToolResult.ok_with_image("\n".join(info), image.save_png_to_buffer(), "image/png")

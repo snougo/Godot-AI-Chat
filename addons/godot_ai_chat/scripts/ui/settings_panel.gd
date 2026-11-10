@@ -1,20 +1,19 @@
 @tool
 extends Control
 
-## 设置面板
-##
-## 负责管理插件的设置界面，包括加载、显示和保存用户配置。
+# 设置面板
+# 负责管理插件的设置界面，包括加载、显示和保存用户配置。
 
 
 # --- Signals ---
 
-## 当用户点击保存按钮并且设置成功保存后发出
+# 当用户点击保存按钮并且设置成功保存后发出
 signal settings_saved
 
 
 # --- Enums / Constants ---
 
-## 保存按钮的内部状态
+# 保存按钮的内部状态
 enum SaveButtonState {
 	IDLE,   ## 空闲状态
 	SAVING  ## 正在保存状态
@@ -53,7 +52,7 @@ enum SaveButtonState {
 
 # --- Public Vars ---
 
-## 持有加载后的设置资源对象
+# 持有加载后的设置资源对象
 var settings_resource: PluginSettingsConfig
 
 

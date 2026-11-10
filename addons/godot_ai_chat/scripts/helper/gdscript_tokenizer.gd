@@ -1,17 +1,17 @@
 extends RefCounted
 
-## 字符级 GDScript 分词器，为安全静态分析提供可靠的词法基础。
-##
-## 设计目标：
-## - 精确区分 代码 / 字符串 / 注释（含三引号、raw 字符串、StringName、
-##   NodePath、转义引号、跨行字符串、行续接）；
-## - 不构建 AST、不校验语法合法性，宽容式扫描；
-## - 与安全策略解耦：本类只输出词法事实，是否拦截由消费方决定。
+# 字符级 GDScript 分词器，为安全静态分析提供可靠的词法基础。
+#
+# 设计目标：
+# - 精确区分 代码 / 字符串 / 注释（含三引号、raw 字符串、StringName、
+#   NodePath、转义引号、跨行字符串、行续接）；
+# - 不构建 AST、不校验语法合法性，宽容式扫描；
+# - 与安全策略解耦：本类只输出词法事实，是否拦截由消费方决定。
 
 
 # --- Constants ---
 
-## GDScript 4 关键字表。
+# GDScript 4 关键字表。
 const KEYWORDS: Array[String] = [
 	"if", "elif", "else", "for", "while", "match", "when",
 	"func", "class", "extends", "var", "const", "signal", "class_name",
@@ -21,25 +21,25 @@ const KEYWORDS: Array[String] = [
 	"break", "continue", "return",
 ]
 
-## 双字符运算符（先于单字符匹配）。
+# 双字符运算符（先于单字符匹配）。
 const TWO_CHAR_OPS: Array[String] = [
 	"==", "!=", "<=", ">=", "&&", "||", "->", "::", "..",
 	"+=", "-=", "*=", "/=", "%=", "**", "<<", ">>", ":=",
 ]
 
-## 单字符运算符（$ 为节点路径简写，也在此列）。
+# 单字符运算符（$ 为节点路径简写，也在此列）。
 const SINGLE_OPS: String = "+-*/%=<>!&|^~.,:?$()[]{}"
 
-## 赋值左侧前一 token 命中这些值则视为"非变量赋值"（属性/参数/索引等）。
+# 赋值左侧前一 token 命中这些值则视为"非变量赋值"（属性/参数/索引等）。
 const NON_ASSIGNMENT_PREV: Array[String] = [".", "(", ",", "[", "{"]
 
-## 语句头关键字，其后出现的 `=` 不作为变量赋值追踪。
+# 语句头关键字，其后出现的 `=` 不作为变量赋值追踪。
 const STATEMENT_KEYWORDS: Array[String] = [
 	"if", "elif", "while", "match", "for",
 	"return", "assert", "break", "continue", "pass", "class_name",
 ]
 
-## RHS 首 token 命中这些关键字时不作为类型/引用记录。
+# RHS 首 token 命中这些关键字时不作为类型/引用记录。
 const IGNORED_RHS_KEYWORDS: Array[String] = [
 	"true", "false", "null", "func", "if", "for", "while", "match",
 	"return", "self", "super", "await", "pass", "break", "continue",
@@ -49,29 +49,29 @@ const IGNORED_RHS_KEYWORDS: Array[String] = [
 # --- Enums ---
 
 enum TokenType {
-	KEYWORD,      ## 关键字（if/for/var/self...）
-	IDENTIFIER,   ## 标识符（含 @annotation、$Node 的 Node 部分）
-	OPERATOR,     ## 运算符（含 :=、==、->、$、% 等）
-	NUMBER,       ## 数字字面量
-	STRING,       ## 字符串（含引号/前缀/转义原文，如 r"..."、&"..."）
-	COMMENT,      ## 注释（# 到行尾）
-	WHITESPACE,   ## 空格/制表符/回车
-	NEWLINE,      ## 换行
-	UNKNOWN,      ## 无法识别的字符（宽容跳过）
+	KEYWORD,      # 关键字（if/for/var/self...）
+	IDENTIFIER,   # 标识符（含 @annotation、$Node 的 Node 部分）
+	OPERATOR,     # 运算符（含 :=、==、->、$、% 等）
+	NUMBER,       # 数字字面量
+	STRING,       # 字符串（含引号/前缀/转义原文，如 r"..."、&"..."）
+	COMMENT,      # 注释（# 到行尾）
+	WHITESPACE,   # 空格/制表符/回车
+	NEWLINE,      # 换行
+	UNKNOWN,      # 无法识别的字符（宽容跳过）
 }
 
 
 # --- Public Functions ---
 
-## 将源码切分为扁平 Token 流（含精确行列号）。
+# 将源码切分为扁平 Token 流（含精确行列号）。
 static func tokenize(p_code: String) -> Array[Token]:
 	var engine := _Engine.new(p_code)
 	return engine._run()
 
 
-## 提取所有 `obj.method(` 形式的调用（含链式 `).method(`、`$Node.method(`）。
-## 返回数组，每项: {object: String, method: String, line: int, column: int, args: Array[String]}
-## args 为按 token 边界切分的参数原始文本（空格连接，含引号）。
+# 提取所有 `obj.method(` 形式的调用（含链式 `).method(`、`$Node.method(`）。
+# 返回数组，每项: {object: String, method: String, line: int, column: int, args: Array[String]}
+# args 为按 token 边界切分的参数原始文本（空格连接，含引号）。
 static func extract_calls(p_code: String) -> Array[Dictionary]:
 	var tokens := tokenize(p_code)
 	var calls: Array[Dictionary] = []
@@ -114,7 +114,7 @@ static func extract_calls(p_code: String) -> Array[Dictionary]:
 	return calls
 
 
-## 提取源码中所有 `res://` 开头的字符串字面量（去引号，不重复判断交给调用方）。
+# 提取源码中所有 `res://` 开头的字符串字面量（去引号，不重复判断交给调用方）。
 static func extract_res_paths(p_code: String) -> Array[String]:
 	var result: Array[String] = []
 	for t in tokenize(p_code):
@@ -125,8 +125,8 @@ static func extract_res_paths(p_code: String) -> Array[String]:
 	return result
 
 
-## 构建 变量名 → 对象类型 映射（含引用链解析，最多 10 轮收敛）。
-## 例: var h = HTTPRequest.new() → {"h": "HTTPRequest"}
+# 构建 变量名 → 对象类型 映射（含引用链解析，最多 10 轮收敛）。
+# 例: var h = HTTPRequest.new() → {"h": "HTTPRequest"}
 static func build_symbol_table(p_code: String) -> Dictionary:
 	var tokens := tokenize(p_code)
 	var direct: Dictionary = {}
@@ -146,8 +146,8 @@ static func build_symbol_table(p_code: String) -> Dictionary:
 	return _resolve_refs(direct, refs)
 
 
-## 构建 变量名 → 字符串字面量值 映射（含引用链解析）。
-## 例: var p = "res://a.gd" → {"p": "res://a.gd"}
+# 构建 变量名 → 字符串字面量值 映射（含引用链解析）。
+# 例: var p = "res://a.gd" → {"p": "res://a.gd"}
 static func build_path_var_table(p_code: String) -> Dictionary:
 	var tokens := tokenize(p_code)
 	var literals: Dictionary = {}
@@ -289,7 +289,7 @@ static func _strip_quote(p_value: String) -> String:
 
 # --- Inner Classes ---
 
-## 单个 Token：保留原始文本（含引号/转义），携带 1-based 行列号。
+# 单个 Token：保留原始文本（含引号/转义），携带 1-based 行列号。
 class Token:
 	var type: int = -1
 	var value: String = ""
@@ -297,7 +297,7 @@ class Token:
 	var column: int = 1
 
 
-## 单遍字符级扫描状态机。跨行字符串、行续接在推进时同步更新行列号。
+# 单遍字符级扫描状态机。跨行字符串、行续接在推进时同步更新行列号。
 class _Engine:
 	var _code: String = ""
 	var _pos: int = 0

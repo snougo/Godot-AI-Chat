@@ -6,16 +6,12 @@ extends EditorPlugin
 
 # 主场景路径
 const CHAT_HUB_SCENE_PATH: String = "res://addons/godot_ai_chat/scene/chat_hub.tscn"
-
-# 插件图标
-const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/icons/plugin_icon.svg")
-
-# 用于注入游戏运行时的debug脚本
-const GameDebugSessionScript := preload("res://addons/godot_ai_chat/scripts/tools/debug_tool/game_debug_session.gd")
-
 # 主 UI 控制器节点
 const AIChatUI = preload("res://addons/godot_ai_chat/scripts/ui/chat_ui.gd")
-
+# 插件图标
+const PLUGIN_ICON: Texture2D = preload("res://addons/godot_ai_chat/assets/icons/plugin_icon.svg")
+# AI Debug Probe 通道（依赖 res://debug_probe/ 模块）
+const ProbeChannelScript := preload("res://debug_probe/probe_channel.gd")
 # 导出忽略脚本
 const GodotAIChatExportPluginScript := preload("res://addons/godot_ai_chat/godot_ai_chat_export_plugin.gd")
 
@@ -28,6 +24,8 @@ var _chat_hub_instance: Control = null
 var _godot_ai_chat_dock: EditorDock = null
 # 导出自定义插件实例（用于从导出包中排除本插件）
 var _export_plugin: EditorExportPlugin = null
+# AI Debug Probe 调试通道实例
+var _probe_channel: EditorDebuggerPlugin = null
 
 
 # --- Built-in Functions ---
@@ -37,7 +35,7 @@ func _enter_tree() -> void:
 	# 这必须在实例化任何 UI 或逻辑脚本之前完成，以确保路径有效
 	self._initialize_plugin_file_environment()
 	
-	GameDebugSessionScript.register(self)
+	_register_probe_channel()
 	
 	# 注册导出自定义插件：导出项目时自动排除本插件目录
 	_export_plugin = GodotAIChatExportPluginScript.new()
@@ -93,12 +91,14 @@ func _exit_tree() -> void:
 		if is_instance_valid(_godot_ai_chat_dock):
 			remove_dock(_godot_ai_chat_dock)
 			_godot_ai_chat_dock.queue_free()
+			# 统一释放仍在运行的 Sub-Agent（它们挂在编辑器 root 上，不随 Dock 释放）
+			AIChatSubAgentOrchestrator.cancel_all()
 			_godot_ai_chat_dock = null
 	
 	# 注意：ToolRegistry 是静态的，不需要显式清理，
 	# 重新启用插件时会覆盖注册，这是安全的。
 	
-	GameDebugSessionScript.unregister(self)
+	_unregister_probe_channel()
 	
 	# 注销导出自定义插件
 	if _export_plugin != null:
@@ -128,3 +128,19 @@ func _initialize_plugin_file_environment() -> void:
 		var editor_file_system: EditorFileSystem = get_editor_interface().get_resource_filesystem()
 		editor_file_system.scan()
 		AIChatLogger.info("[Godot AI Chat] Initializing plugin file environment (First Run Scan)...")
+
+
+# 注册 AI Debug Probe 的调试器通道：游戏侧探针（res://debug_probe/）靠它收发消息
+func _register_probe_channel() -> void:
+	_probe_channel = ProbeChannelScript.new()
+	ProbeChannelScript.instance = _probe_channel
+	add_debugger_plugin(_probe_channel)
+
+
+func _unregister_probe_channel() -> void:
+	if _probe_channel == null:
+		return
+	
+	remove_debugger_plugin(_probe_channel)
+	ProbeChannelScript.instance = null
+	_probe_channel = null

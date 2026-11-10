@@ -46,7 +46,7 @@ const CHAT_API_ENDPOINT: Array[String] = [
 	"mimo-v2.6-pro",
 	"longcat-2.0",
 	"minimax-m3.1-flash",
-	"hy4-preview",
+	"hy4",
 	"step-5-preview"
 ]
 

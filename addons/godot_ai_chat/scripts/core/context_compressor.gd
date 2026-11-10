@@ -1,9 +1,8 @@
 extends RefCounted
 
-## 上下文压缩器
-##
-## 当对话轮次超过设定阈值时，将旧对话送 LLM 进行摘要压缩。
-## 保留第一轮原始对话 + 摘要内容，构造新的对话历史资源。
+# 上下文压缩器
+# 当对话轮次超过设定阈值时，将旧对话送 LLM 进行摘要压缩。
+# 保留第一轮原始对话 + 摘要内容，构造新的对话历史资源。
 
 
 # --- Constants ---
@@ -13,11 +12,11 @@ const AIChatNetworkManager = preload("res://addons/godot_ai_chat/scripts/network
 
 # --- Public Functions ---
 
-## 执行上下文压缩
-## [param p_history]: 原始对话历史
-## [param p_network_manager]: 网络管理器（用于发送非流式摘要请求）
-## [param p_config]: 压缩配置
-## [return]: {"success": bool, "error": String, "error_kind": String, "new_history": ChatMessageHistory}
+# 执行上下文压缩
+# [param p_history]: 原始对话历史
+# [param p_network_manager]: 网络管理器（用于发送非流式摘要请求）
+# [param p_config]: 压缩配置
+# [return]: {"success": bool, "error": String, "error_kind": String, "new_history": ChatMessageHistory}
 func compress_context(p_history: ChatMessageHistory, p_network_manager: AIChatNetworkManager, p_config: ContextCompressionConfig) -> Dictionary:
 	if not p_history or not p_network_manager or not p_config:
 		return {"success": false, "error": "Invalid parameters.", "error_kind": "config"}

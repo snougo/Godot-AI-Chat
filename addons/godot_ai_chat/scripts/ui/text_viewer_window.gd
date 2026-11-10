@@ -1,44 +1,59 @@
 @tool
 extends Window
 
-## 文本查看窗口（原生独立窗口）
-##
-## 用于消息块的「Popout」：在独立的系统窗口中查看代码块全文或工具调用的完整参数。
-##
-## [为什么必须 force_native] 插件 UI 挂在 EditorDock 里，位于编辑器主视口内，而编辑器主窗口
-## 开启了 gui_embed_subwindows。因此任何 Window 子类（含 AcceptDialog）都会被当作内嵌子窗口，
-## 画在编辑器视口里 —— 既不是独立窗口，也会与编辑器界面互相遮挡。force_native 是让引擎
-## 忽略父视口与项目设置、直接使用系统原生窗口的唯一开关。
-##
-## [只设 force_native 不够] 原生窗口有一组必须配套处理的细节：
-## 1. force_native 只允许在窗口未显示时修改 → _init() 先 visible = false 再设标志位；
-## 2. 原生子窗口首次呈现时不绘制内容（只显示底色）→ 必须跨帧做一次 1 像素尺寸往返；
-## 3. Window 不是容器，程序化改 size 不会重排子控件 → _update_content_layout() 显式同步；
-## 4. 原生窗口是独立 Viewport，主题不会继承编辑器主题 → 显式指定并自铺背景；
-## 5. 原生窗口没有 OK 按钮，也没有 Esc 默认行为 → 标题栏关闭 / Close 按钮 / Esc 三处统一处理。
+# 文本查看窗口（原生独立窗口）
+#
+# 用于消息块的「Popout」：在独立的系统窗口中查看代码块全文或工具调用的完整参数。
+#
+# [为什么必须 force_native] 插件 UI 挂在 EditorDock 里，位于编辑器主视口内，而编辑器主窗口
+# 开启了 gui_embed_subwindows。因此任何 Window 子类（含 AcceptDialog）都会被当作内嵌子窗口，
+# 画在编辑器视口里 —— 既不是独立窗口，也会与编辑器界面互相遮挡。force_native 是让引擎
+# 忽略父视口与项目设置、直接使用系统原生窗口的唯一开关。
+#
+# [只设 force_native 不够] 原生窗口有一组必须配套处理的细节：
+# 1. force_native 只允许在窗口未显示时修改 → _init() 先 visible = false 再设标志位；
+# 2. 原生子窗口首次呈现时不绘制内容（只显示底色）→ 必须跨帧做一次 1 像素尺寸往返；
+# 3. Window 不是容器，程序化改 size 不会重排子控件 → _update_content_layout() 显式同步；
+# 4. 原生窗口是独立 Viewport，主题不会继承编辑器主题 → 显式指定并自铺背景；
+# 5. 原生窗口没有 OK 按钮，也没有 Esc 默认行为 → 标题栏关闭 / Close 按钮 / Esc 三处统一处理。
 
 
 # --- Constants ---
 
-## 预加载代码高亮主题
+# 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
 
-## 初始窗口尺寸（仅首次打开时使用，之后沿用用户调整过的尺寸）
+# 初始窗口尺寸（仅首次打开时使用，之后沿用用户调整过的尺寸）
 const WINDOW_SIZE: Vector2i = Vector2i(1000, 800)
-## 窗口最小尺寸
+# 窗口最小尺寸
 const MIN_WINDOW_SIZE: Vector2i = Vector2i(600, 400)
-## 初始尺寸相对参考窗口（编辑器主窗口）的内缩像素：小屏幕上避免窗口比编辑器还大
+# 初始尺寸相对参考窗口（编辑器主窗口）的内缩像素：小屏幕上避免窗口比编辑器还大
 const REFERENCE_SIZE_MARGIN: int = 120
-## 内容区四周留白（像素），由 PanelContainer 的 stylebox 内容边距提供
+# 内容区四周留白（像素），由 PanelContainer 的 stylebox 内容边距提供
 const CONTENT_MARGIN: int = 8
-## 顶部工具条与内容区之间的间隔
+# 顶部工具条与内容区之间的间隔
 const HEADER_SEPARATION: int = 6
-## 编辑器主题不可用时的兜底背景色
+# 编辑器主题不可用时的兜底背景色
 const FALLBACK_BG_COLOR: Color = Color(0.12, 0.13, 0.16)
-## 代码视图标题
+# 代码视图标题
 const TITLE_CODE: String = "Code"
-## 工具参数视图标题
+# 工具参数视图标题
 const TITLE_ARGS: String = "Tool Arguments"
+# 工具结果视图标题
+const TITLE_TOOL_OUTPUT: String = "Tool Output"
+
+
+# --- Enum ---
+
+# 视图类型
+# [为什么用枚举而不是布尔开关] 三种用途的结构要求不同：代码要高亮器 + 行号，
+# 参数与结果都不要；结果还需要自动换行。用独立控件表达，
+# 避免后续改动把高亮器「顺手打开」而回归性能。
+enum ViewKind {
+	CODE,        ## 代码：语法高亮 + 行号，不换行
+	ARGS,        ## 工具参数：纯文本，不换行（参数已按真实换行渲染）
+	TOOL_OUTPUT, ## 工具结果：纯文本，按边界换行（日志/错误信息常见超长单行）
+}
 
 
 # --- Private Vars ---
@@ -53,6 +68,8 @@ var _args_edit: TextEdit = null
 var _code_edit: CodeEdit = null
 # 首次呈现刷新时使用的目标尺寸
 var _refresh_target_size: Vector2i = Vector2i.ZERO
+# 工具结果视图：纯 TextEdit，按边界换行
+var _output_edit: TextEdit = null
 
 
 # --- Built-in Functions ---
@@ -90,24 +107,27 @@ func _unhandled_key_input(p_event: InputEvent) -> void:
 
 # --- Public Functions ---
 
-## 显示内容并呈现窗口（窗口实例由调用方复用或新建）
-## [param p_text]: 待显示文本（完整内容，不做截断）
-## [param p_is_code_view]: true = 代码视图（语法高亮 + 行号）；false = 工具参数视图（纯文本）
-func show_content(p_text: String, p_is_code_view: bool) -> void:
-	var view_title: String = TITLE_CODE if p_is_code_view else TITLE_ARGS
+# 显示内容并呈现窗口（窗口实例由调用方复用或新建）
+# [param p_text]: 待显示文本（完整内容，不做截断）
+# [param p_view]: 视图类型
+func show_content(p_text: String, p_view: ViewKind = ViewKind.ARGS) -> void:
+	var view_title: String = _title_for_view(p_view)
 	title = view_title
 	_title_label.text = view_title
 	
-	# 两种用途用两个控件表达，而不是靠开关一堆属性：
-	# 参数视图在结构上就没有高亮器与行号槽，也就不可能被后续改动"顺手打开"而回归性能。
-	_code_edit.visible = p_is_code_view
-	_args_edit.visible = not p_is_code_view
-	if p_is_code_view:
-		_code_edit.text = p_text
-	else:
-		_args_edit.text = p_text
+	_code_edit.visible = (p_view == ViewKind.CODE)
+	_args_edit.visible = (p_view == ViewKind.ARGS)
+	_output_edit.visible = (p_view == ViewKind.TOOL_OUTPUT)
 	
-	# 窗口已开着时又点了 Popout：只换内容，不重置用户调好的尺寸与位置
+	match p_view:
+		ViewKind.CODE:
+			_code_edit.text = p_text
+		ViewKind.ARGS:
+			_args_edit.text = p_text
+		ViewKind.TOOL_OUTPUT:
+			_output_edit.text = p_text
+	
+	# 窗口已开着时又点了 Open：只换内容，不重置用户调好的尺寸与位置
 	if visible:
 		grab_focus()
 		return
@@ -175,6 +195,18 @@ func _build_ui() -> Control:
 	_code_edit.scroll_smooth = false
 	_code_edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_code_edit)
+	
+	# 3. 工具结果视图：纯文本 + 自动换行
+	#    工具结果是日志/错误信息，常含超长单行，按边界换行更适合阅读。
+	#    换行测量发生在首次设置文本时，只在用户点开时执行一次，不在流式热路径上。
+	_output_edit = TextEdit.new()
+	_output_edit.editable = false
+	_output_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_output_edit.caret_blink = false
+	_output_edit.highlight_current_line = false
+	_output_edit.scroll_smooth = false
+	_output_edit.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(_output_edit)
 	
 	return _panel
 
@@ -263,6 +295,17 @@ func _reference_window() -> Window:
 		return null
 	
 	return parent_window
+
+
+# 视图类型 → 窗口标题
+func _title_for_view(p_view: ViewKind) -> String:
+	match p_view:
+		ViewKind.CODE:
+			return TITLE_CODE
+		ViewKind.TOOL_OUTPUT:
+			return TITLE_TOOL_OUTPUT
+		_:
+			return TITLE_ARGS
 
 
 # --- Signal Callbacks ---

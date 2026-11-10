@@ -1,24 +1,24 @@
 extends RefCounted
 
-## HTTP 流式请求处理类
-##
-## 负责底层的 HTTP 流式请求处理，支持 SSE 和 JSON List 协议，在后台线程中运行。
-##
-## [线程模型] 网络 IO 全部在 WorkerThreadPool 任务中完成；本类对外暴露的信号
-## 一律通过 call_deferred 投递回主线程，因此消费端无需关心线程安全问题。
-##
-## [资源回收] WorkerThreadPool 要求每个任务最终都被 wait_for_task_completion() 等待一次。
-## 直接等待会阻塞主线程，故本类采用「逐帧轮询 is_task_completed()，确认完成后再等待」的策略：
-## 轮询本身无阻塞，等待时任务已结束因而立即返回。
+# HTTP 流式请求处理类
+#
+# 负责底层的 HTTP 流式请求处理，支持 SSE 和 JSON List 协议，在后台线程中运行。
+#
+# [线程模型] 网络 IO 全部在 WorkerThreadPool 任务中完成；本类对外暴露的信号
+# 一律通过 call_deferred 投递回主线程，因此消费端无需关心线程安全问题。
+#
+# [资源回收] WorkerThreadPool 要求每个任务最终都被 wait_for_task_completion() 等待一次。
+# 直接等待会阻塞主线程，故本类采用「逐帧轮询 is_task_completed()，确认完成后再等待」的策略：
+# 轮询本身无阻塞，等待时任务已结束因而立即返回。
 
 
 # --- Signals ---
 
-## 当接收到一个完整的 JSON 数据块时触发
+# 当接收到一个完整的 JSON 数据块时触发
 signal chunk_received(chunk_data: Dictionary)
-## 请求正常结束时触发
+# 请求正常结束时触发
 signal finished
-## 请求失败时触发
+# 请求失败时触发
 signal failed(error_message: String)
 
 
@@ -27,9 +27,19 @@ signal failed(error_message: String)
 const URLHelper := preload("res://addons/godot_ai_chat/scripts/helper/url_helper.gd")
 const Utf8Helper := preload("res://addons/godot_ai_chat/scripts/helper/utf8_helper.gd")
 
-## 任务结束后的回收等待告警阈值（毫秒）
-## 超过该时长仍未结束只打印一次告警，不做阻塞等待，也不放弃对该任务的回收
+# 任务结束后的回收等待告警阈值（毫秒）
+# 超过该时长仍未结束只打印一次告警，不做阻塞等待，也不放弃对该任务的回收
 const CLEANUP_WARN_MSEC: int = 1000
+
+
+# --- Public Vars ---
+
+# 最近一次请求的 HTTP 状态码（0 表示未获得响应，如连接阶段失败）
+# [用途] 供上层判断错误类型（如 429 限流可重试），避免解析错误消息字符串
+var last_status_code: int = 0
+
+# 服务端通过 Retry-After 头建议的等待秒数（-1 表示未提供或无法解析）
+var last_retry_after_s: float = -1.0
 
 
 # --- Private Vars ---
@@ -77,17 +87,19 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 
 # --- Public Functions ---
 
-## 开始执行流式请求（在线程池中运行）
+# 开始执行流式请求（在线程池中运行）
 func start() -> void:
 	_stop_flag = false
 	_has_emitted_first_chunk = false
+	last_status_code = 0
+	last_retry_after_s = -1.0
 	_task_id = WorkerThreadPool.add_task(self._thread_task, false, "Godot AI Chat Stream Request")
 	AIChatLogger.debug("StreamRequest: Task ID %d started" % _task_id)
 
 
-## 请求取消当前请求
-## 仅置位停止标志并唤醒工作线程，不在调用线程做任何等待。
-## 工作线程会在下一个轮询周期（约 10ms）自行关闭连接并退出。
+# 请求取消当前请求
+# 仅置位停止标志并唤醒工作线程，不在调用线程做任何等待。
+# 工作线程会在下一个轮询周期（约 10ms）自行关闭连接并退出。
 func cancel() -> void:
 	# 使用 Mutex 保护跨线程访问
 	_stop_flag_lock.lock()
@@ -98,9 +110,9 @@ func cancel() -> void:
 	# 由工作线程在下一轮 poll 检测到 _stop_flag 后自行 close，避免数据竞争
 
 
-## 请求回收线程池任务槽位（非阻塞）
-## 必须在任务结束（finished / failed 信号）或 cancel() 之后调用。
-## 本方法不会阻塞调用线程：它先检查任务是否已结束，未结束则推迟到后续帧继续检查。
+# 请求回收线程池任务槽位（非阻塞）
+# 必须在任务结束（finished / failed 信号）或 cancel() 之后调用。
+# 本方法不会阻塞调用线程：它先检查任务是否已结束，未结束则推迟到后续帧继续检查。
 func request_thread_cleanup() -> void:
 	if _task_id < 0:
 		return
@@ -135,6 +147,12 @@ func _poll_thread_cleanup() -> void:
 
 
 # 在下一帧再次检查任务状态
+# [为什么必须用 lambda 而不是普通方法 Callable]
+# 标准方法 Callable 只保存 ObjectID，不会为 RefCounted 增加引用；
+# 而 request_chat_async() 返回后，本对象可能已无其它强引用（current_stream_request 已被清空），
+# 若此时后台任务尚未结束，实例会被提前释放 —— 工作线程随即访问已释放内存，
+# 且任务槽位永远等不到 wait_for_task_completion()。
+# GDScriptLambdaSelfCallable 内部持有 Ref<RefCounted>，能在整个轮询期间可靠地持有本实例。
 func _schedule_cleanup_poll() -> void:
 	if _cleanup_scheduled:
 		return
@@ -142,11 +160,14 @@ func _schedule_cleanup_poll() -> void:
 	
 	var tree: SceneTree = Engine.get_main_loop() as SceneTree
 	if tree == null:
+		# 没有主循环可挂帧回调：此时宁可同步等待一次，也不放弃任务槽位回收
+		AIChatLogger.warn("StreamRequest: no SceneTree available; waiting for task %d synchronously." % _task_id)
+		WorkerThreadPool.wait_for_task_completion(_task_id)
 		_task_id = -1
 		_cleanup_scheduled = false
 		return
 	
-	tree.process_frame.connect(_on_cleanup_frame, CONNECT_ONE_SHOT)
+	tree.process_frame.connect(func() -> void: _on_cleanup_frame(), CONNECT_ONE_SHOT)
 
 
 # process_frame 回调：归还调度标记并继续轮询
@@ -231,8 +252,10 @@ func _thread_task() -> void:
 		return
 	
 	var response_code: int = client.get_response_code()
+	last_status_code = response_code
 	
 	if response_code != 200:
+		last_retry_after_s = _parse_retry_after(client)
 		var error_body: PackedByteArray = PackedByteArray()
 		
 		while client.get_status() == HTTPClient.STATUS_BODY:
@@ -426,3 +449,19 @@ func _should_stop() -> bool:
 	var result: bool = _stop_flag
 	_stop_flag_lock.unlock()
 	return result
+
+
+# 解析服务端 Retry-After 头
+# [为什么只认纯数字] HTTP-date 形式（如 "Wed, 21 Oct 2015 07:28:00 GMT"）
+# 需要时区换算，收益远低于成本；解析失败一律回落到上层的指数退避。
+# [param p_client]: 已完成响应头的 HTTPClient
+# [return]: 建议等待秒数；未提供或无法解析时返回 -1
+func _parse_retry_after(p_client: HTTPClient) -> float:
+	for header: String in p_client.get_response_headers():
+		if not header.to_lower().begins_with("retry-after:"):
+			continue
+		var value: String = header.substr(header.find(":") + 1).strip_edges()
+		if value.is_valid_float():
+			return maxf(value.to_float(), 0.0)
+		return -1.0
+	return -1.0

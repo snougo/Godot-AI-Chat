@@ -1,15 +1,14 @@
 extends RefCounted
 
-## UTF-8 辅助工具
-##
-## 处理逐块到达的字节缓冲区中不完整 UTF-8 序列的检测。
+# UTF-8 辅助工具
+# 处理逐块到达的字节缓冲区中不完整 UTF-8 序列的检测。
 
 
 # --- Public Functions ---
 
-## 返回缓冲区末尾不完整 UTF-8 序列的字节数（0 = 末尾字符已完整）
-## [param p_buf]: 字节缓冲区
-## [return]: 末尾不完整字节序列长度；0 表示缓冲区末尾是一个完整字符
+# 返回缓冲区末尾不完整 UTF-8 序列的字节数（0 = 末尾字符已完整）
+# [param p_buf]: 字节缓冲区
+# [return]: 末尾不完整字节序列长度；0 表示缓冲区末尾是一个完整字符
 static func incomplete_tail_bytes(p_buf: PackedByteArray) -> int:
 	var size: int = p_buf.size()
 	if size == 0:

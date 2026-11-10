@@ -1,10 +1,10 @@
 @tool
 extends Control
 
-## 聊天中心控制器
-##
-## 插件的主入口，作为组合根负责依赖注入，并协调聊天循环。
-## 会话管理逻辑已抽取至 AIChatController。
+# 聊天中心控制器
+# 插件的主入口，作为组合根负责依赖注入，并协调聊天循环。
+# 会话管理逻辑已抽取至 AIChatController。
+
 
 # --- Constants ---
 

@@ -1,9 +1,8 @@
 @tool
 extends Node
 
-## 网络管理器
-##
-## 负责 Provider 配置装配、模型列表拉取，以及主对话链路的中继与生命周期管理。
+# 网络管理器
+# 负责 Provider 配置装配、模型列表拉取，以及主对话链路的中继与生命周期管理。
 
 
 # --- Signals ---
@@ -37,9 +36,9 @@ var api_base_url: String = ""
 var temperature: float = 0.7
 var current_model_name: String = ""
 
-## 发起当前流式请求时所用的 Provider 实例
-## [为什么与 current_provider 分开] current_provider 会被 get_model_list() 等操作重建，
-## 而流式解析必须始终使用**发起该请求的那个实例**（其内部持有槽位映射、用量累计等流内状态）。
+# 发起当前流式请求时所用的 Provider 实例
+# [为什么与 current_provider 分开] current_provider 会被 get_model_list() 等操作重建，
+# 而流式解析必须始终使用**发起该请求的那个实例**（其内部持有槽位映射、用量累计等流内状态）。
 var streaming_provider: BaseLLMProvider = null
 
 
@@ -51,16 +50,17 @@ func _ready() -> void:
 
 # --- Public Functions ---
 
-## 设置当前模型名称
+# 设置当前模型名称
 func set_model_name(p_model_name: String) -> void:
 	current_model_name = p_model_name
 
 
-## 从API端点获取模型列表
+# 从API端点获取模型列表
 func get_model_list() -> void:
 	if not _update_provider_config():
 		get_model_list_request_failed.emit("Invalid Provider Configuration")
 		return
+	
 	if api_base_url.is_empty():
 		get_model_list_request_failed.emit("Please Configure Plugin Settings!")
 		return
@@ -84,7 +84,7 @@ func get_model_list() -> void:
 		get_model_list_request_failed.emit("Request failed: %s" % error_string(err))
 
 
-## 异步网络请求
+# 异步网络请求
 func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	if current_stream_request != null:
 		cancel_stream()
@@ -148,11 +148,11 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	return result
 
 
-## 非流式异步请求（用于上下文压缩等场景）
-## [param p_messages]: 消息列表
-## [param p_config]: 压缩配置（必须完整有效，调用方需先 validate）
-## [return]: {"success": bool, "error": String, "error_kind": String, "content": String}
-##           error_kind: "config" | "runtime"
+# 非流式异步请求（用于上下文压缩等场景）
+# [param p_messages]: 消息列表
+# [param p_config]: 压缩配置（必须完整有效，调用方需先 validate）
+# [return]: {"success": bool, "error": String, "error_kind": String, "content": String}
+# error_kind: "config" | "runtime"
 func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextCompressionConfig) -> Dictionary:
 	if p_config == null:
 		return {"success": false, "error": "Compression config is missing.", "error_kind": "config"}
@@ -232,9 +232,8 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 	return result
 
 
-## 取消当前流式请求
-##
-## 非阻塞：置位停止标志后立即交由后台线程自行收尾，主线程不做任何等待。
+# 取消当前流式请求
+# 非阻塞：置位停止标志后立即交由后台线程自行收尾，主线程不做任何等待。
 func cancel_stream() -> void:
 	if current_stream_request:
 		current_stream_request.cancel()

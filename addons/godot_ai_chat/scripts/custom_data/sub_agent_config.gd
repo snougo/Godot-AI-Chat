@@ -12,7 +12,7 @@ extends Resource
 @export var model_name: String = ""
 @export var supports_vision: bool = false
 
-@export_range(1, 800, 1) var max_chat_turns: int = 200
+@export_range(1, 1000, 1) var max_chat_turns: int = 500
 @export var network_timeout: int = 180
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.6
 
@@ -27,7 +27,7 @@ extends Resource
 - 仔细阅读任务描述，理解你要做什么。
 - 调用 `report_task_result` 工具进行任务报告，而不是直接回复。
 
-> 如果工具调用失败，最多尝试2次，如果依然失败，直接放弃当前任务并进行报告。
+> 如果工具调用一直失败，可按需跳过，切勿重复尝试。
 
 ---
 

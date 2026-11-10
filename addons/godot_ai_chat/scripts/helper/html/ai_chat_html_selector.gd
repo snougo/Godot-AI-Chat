@@ -16,7 +16,7 @@ extends RefCounted
 ##         :nth-of-type / :nth-last-of-type
 
 
-# --- Enums / Constants ---
+# --- Enums ---
 
 enum Combinator { NONE, DESCENDANT, CHILD, ADJACENT, SIBLING }
 
@@ -259,17 +259,17 @@ static func _matches_complex_upwards(p_node: AIChatHtmlNode, p_complex: Array, p
 	
 	match p_combinator:
 		Combinator.DESCENDANT:
-			var ancestor: AIChatHtmlNode = p_node.parent
+			var ancestor: AIChatHtmlNode = p_node.get_parent()
 			while ancestor != null and ancestor.is_element():
 				if _matches_compound(ancestor, compound):
 					if p_step_index == 0:
 						return true
 					if _matches_complex_upwards(ancestor, p_complex, p_step_index - 1, p_complex[p_step_index - 1]["combinator"]):
 						return true
-				ancestor = ancestor.parent
+				ancestor = ancestor.get_parent()
 			return false
 		Combinator.CHILD:
-			var parent: AIChatHtmlNode = p_node.parent
+			var parent: AIChatHtmlNode = p_node.get_parent()
 			if parent == null or not parent.is_element():
 				return false
 			if not _matches_compound(parent, compound):
@@ -368,7 +368,7 @@ static func _matches_pseudo(p_node: AIChatHtmlNode, p_pseudo: Dictionary) -> boo
 		"only-child":
 			return _previous_element_sibling(p_node) == null and _next_element_sibling(p_node) == null
 		"first-of-type":
-			var parent: AIChatHtmlNode = p_node.parent
+			var parent: AIChatHtmlNode = p_node.get_parent()
 			if parent == null:
 				return true
 			for child in parent.children:
@@ -376,7 +376,7 @@ static func _matches_pseudo(p_node: AIChatHtmlNode, p_pseudo: Dictionary) -> boo
 					return child == p_node
 			return false
 		"last-of-type":
-			var parent_last: AIChatHtmlNode = p_node.parent
+			var parent_last: AIChatHtmlNode = p_node.get_parent()
 			if parent_last == null:
 				return true
 			var last: AIChatHtmlNode = null
@@ -403,7 +403,7 @@ static func _matches_pseudo(p_node: AIChatHtmlNode, p_pseudo: Dictionary) -> boo
 # 返回节点在兄弟元素中的 1-based 序号。
 # p_of_type 为 true 时仅统计同名标签；p_from_end 为 true 时从末尾反向计数。
 static func _element_index(p_node: AIChatHtmlNode, p_of_type: bool, p_from_end: bool) -> int:
-	var parent: AIChatHtmlNode = p_node.parent
+	var parent: AIChatHtmlNode = p_node.get_parent()
 	if parent == null:
 		return 1
 	
@@ -502,7 +502,7 @@ static func _is_signed_integer(p_text: String) -> bool:
 # --- Private Functions: Sibling helpers ---
 
 static func _previous_element_sibling(p_node: AIChatHtmlNode) -> AIChatHtmlNode:
-	var parent: AIChatHtmlNode = p_node.parent
+	var parent: AIChatHtmlNode = p_node.get_parent()
 	if parent == null:
 		return null
 	
@@ -515,7 +515,7 @@ static func _previous_element_sibling(p_node: AIChatHtmlNode) -> AIChatHtmlNode:
 
 
 static func _next_element_sibling(p_node: AIChatHtmlNode) -> AIChatHtmlNode:
-	var parent: AIChatHtmlNode = p_node.parent
+	var parent: AIChatHtmlNode = p_node.get_parent()
 	if parent == null:
 		return null
 	

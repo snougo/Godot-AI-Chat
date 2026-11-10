@@ -1,25 +1,16 @@
-extends AiTool
+@tool
+extends BaseResourceTool
 
-## 资源文件编辑工具。
-## 用于编辑已存在的 .tres/.res 资源文件的属性。
-## 加载现有资源 → 设置属性 → 重新保存。
-## 支持简单属性（int, float, bool, String, Color, Vector2, Vector3）和
-## 资源引用属性（res:// 路径）。
-
-
-# --- Constants ---
-
-const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
-
-
-# --- Built-in Functions ---
+## 改已有资源的属性。语义：全成功或全不写。
+## 1. 先把每条属性解析成写入计划（类型校验在这一步完成）；
+## 2. 有一条不合法 → 整份拒绝，内存与磁盘都不动；
+## 3. 写盘失败 → 把已改的值回滚，文件保持原样；
+## 4. 回执给 old_value / new_value / applied（读回来的值）。
 
 func _init() -> void:
 	tool_name = "edit_resource"
-	tool_description = "Edits properties of an existing Resource file(tres/res)."
+	tool_description = "Edits properties of an existing .tres/.res in one all-or-nothing pass."
 
-
-# --- Public Functions ---
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -27,11 +18,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Full path to the existing `.tres` or `.res` file."
+				"description": "Full path of an existing .tres/.res file."
 			},
 			"properties": {
 				"type": "object",
-				"description": "Dictionary of property names and their new values."
+				"description": "Property name -> new value. Sub-properties use ':' (e.g. \"xxx:xxxx\"). Values may be native JSON or strings like \"#8a7f70\", \"[1,2,3]\", \"res://x.png\", \"new:StandardMaterial3D\", \"null\"."
 			}
 		},
 		"required": ["path", "properties"]
@@ -39,233 +30,84 @@ func get_parameters_schema() -> Dictionary:
 
 
 func execute(p_args: Dictionary) -> ToolResult:
-	var file_path: String = p_args.get("path", "").strip_edges()
-	if file_path.is_empty():
-		return ToolResult.fail("Error: 'path' is required.")
+	var unknown: String = check_params(p_args, ["path", "properties"])
+	if not unknown.is_empty():
+		return ToolResult.fail(unknown)
 	
-	# 安全校验
-	var safety_err: String = validate_path_safety(file_path)
-	if not safety_err.is_empty():
-		return ToolResult.fail(safety_err)
+	var path: String = text_of(p_args, "path")
 	
-	# 检查文件是否存在
-	if not FileAccess.file_exists(file_path):
-		return ToolResult.fail("Error: File not found at %s." % file_path)
+	var loaded: Dictionary = load_resource_file(path)
+	if loaded.resource == null:
+		return ToolResult.fail(str(loaded.error))
 	
-	# 校验扩展名
-	var ext: String = file_path.get_extension().to_lower()
-	if ext not in RESOURCE_EXTENSIONS:
-		return ToolResult.fail("Error: Invalid extension '.%s'. Resource files must use: .tres or .res." % ext)
+	var resource: Resource = loaded.resource
 	
-	# 加载资源
-	var resource: Resource = load(file_path)
-	if not resource:
-		return ToolResult.fail("Error: Failed to load resource from %s." % file_path)
+	var props_raw: Variant = p_args.get("properties")
+	if not (props_raw is Dictionary) or (props_raw as Dictionary).is_empty():
+		return ToolResult.fail("'properties' must be a non-empty object, e.g. {\"roughness\": 0.8, \"albedo_color\": \"#8a7f70\"}.")
 	
-	var properties_raw: Variant = p_args.get("properties", {})
-	if not (properties_raw is Dictionary):
-		return ToolResult.fail("Error: 'properties' must be a dictionary (object), got %s." % typeof(properties_raw))
-	var properties: Dictionary = properties_raw as Dictionary
-	if properties.is_empty():
-		return ToolResult.fail("Error: 'properties' is required and cannot be empty.")
+	var props: Dictionary = props_raw
 	
-	# 记录变更
-	var changes: Array[String] = []
-	var errors: Array[String] = []
+	# 1) 解析（不落地）
+	var writes: Array[Dictionary] = []
+	var problems: Array[String] = []
 	
-	for prop_name in properties:
-		var raw_val: Variant = properties[prop_name]
-		var result: ToolResult = _set_resource_property(resource, prop_name, raw_val)
-		if result.is_ok():
-			changes.append("%s → %s" % [prop_name, result.get_data()])
-		else:
-			errors.append(result.get_data())
-	
-	if not errors.is_empty():
-		return ToolResult.fail("Error: Failed to set some properties:\n" + "\n".join(errors))
-	
-	# 保存资源
-	var save_err: Error = ResourceSaver.save(resource, file_path)
-	if save_err != OK:
-		return ToolResult.fail("Error: Failed to save resource. Error code: %d" % save_err)
-	
-	ToolBox.update_editor_filesystem(file_path)
-	
-	return ToolResult.ok("Resource updated: %s\nChanges applied:\n  %s" % [file_path, "\n  ".join(changes)])
-
-
-# --- Private Functions ---
-
-# 设置资源上的一个属性，自动处理类型转换
-# [param p_resource]: 目标资源对象
-# [param p_prop_name]: 属性名（支持 ":" 嵌套路径）
-# [param p_raw_value]: 原始值
-# [return]: ToolResult，成功时 data 为转换后的值的字符串表示
-func _set_resource_property(p_resource: Resource, p_prop_name: String, p_raw_value: Variant) -> ToolResult:
-	# 确定目标类型
-	var target_type: int = TYPE_NIL
-	var found: bool = false
-	
-	if ":" in p_prop_name:
-		# 嵌套属性，从当前值推断类型
-		var current: Variant = p_resource.get_indexed(p_prop_name)
-		if current != null:
-			target_type = typeof(current)
-			found = true
-	else:
-		for prop in p_resource.get_property_list():
-			if prop.name == p_prop_name:
-				target_type = prop.type
-				found = true
-				break
-	
-	if not found:
-		# 检查属性是否存在
-		if p_prop_name in p_resource:
-			var current_val: Variant = p_resource[p_prop_name]
-			target_type = typeof(current_val)
-			found = true
-	
-	if not found:
-		return ToolResult.fail("Property '%s' not found on resource type '%s'." % [p_prop_name, p_resource.get_class()])
-	
-	# 类型转换
-	var final_val: Variant = _coerce_value(p_raw_value, target_type)
-	if final_val == null and p_raw_value != null:
-		return ToolResult.fail("Failed to convert value for '%s'. Expected type: %s" % [p_prop_name, _type_name(target_type)])
-	
-	# 特殊处理 Texture 等资源引用
-	if target_type == TYPE_OBJECT and final_val is String:
-		var path_str: String = final_val as String
-		if path_str.begins_with("res://"):
-			if ResourceLoader.exists(path_str):
-				final_val = load(path_str)
-			else:
-				return ToolResult.fail("Resource not found at '%s'." % path_str)
-	
-	# 应用属性
-	if ":" in p_prop_name:
-		p_resource.set_indexed(p_prop_name, final_val)
-	else:
-		p_resource.set(p_prop_name, final_val)
-	
-	return ToolResult.ok(str(final_val))
-
-
-# 将值转换为目标类型
-# [param p_value]: 原始值
-# [param p_target_type]: 目标类型枚举
-# [return]: 转换后的值，失败返回 null
-func _coerce_value(p_value: Variant, p_target_type: int) -> Variant:
-	if typeof(p_value) == p_target_type:
-		return p_value
-	
-	# String 输入 → 目标类型
-	if p_value is String:
-		var str_val: String = (p_value as String).strip_edges()
+	for raw_key in props.keys():
+		var key: String = str(raw_key)
+		var split: Dictionary = split_property_key(key)
+		if not bool(split.get("ok", false)):
+			problems.append(str(split.get("error", "")))
+			continue
 		
-		match p_target_type:
-			TYPE_BOOL:
-				var lower: String = str_val.to_lower()
-				if lower in ["true", "1", "yes", "on"]:
-					return true
-				elif lower in ["false", "0", "no", "off"]:
-					return false
-				return null
-			
-			TYPE_INT:
-				if str_val.is_valid_int():
-					return str_val.to_int()
-				return null
-			
-			TYPE_FLOAT:
-				if str_val.is_valid_float():
-					return str_val.to_float()
-				return null
-			
-			TYPE_STRING, TYPE_STRING_NAME:
-				return str_val
-			
-			TYPE_VECTOR2:
-				var arr: Array = _parse_numeric_array(str_val)
-				if arr.size() >= 2:
-					return Vector2(arr[0], arr[1])
-				return null
-			
-			TYPE_VECTOR3:
-				var arr: Array = _parse_numeric_array(str_val)
-				if arr.size() >= 3:
-					return Vector3(arr[0], arr[1], arr[2])
-				return null
-			
-			TYPE_COLOR:
-				# 尝试 Color 构造函数风格
-				if str_val.begins_with("Color("):
-					var inner: String = str_val.substr(6, str_val.length() - 7)
-					var parts: PackedStringArray = inner.split(",")
-					if parts.size() == 3:
-						return Color(parts[0].to_float(), parts[1].to_float(), parts[2].to_float())
-					if parts.size() == 4:
-						return Color(parts[0].to_float(), parts[1].to_float(), parts[2].to_float(), parts[3].to_float())
-				# 十六进制
-				if str_val.begins_with("#"):
-					return Color(str_val)
-				# 数值数组
-				var arr: Array = _parse_numeric_array(str_val)
-				if arr.size() == 3:
-					return Color(arr[0], arr[1], arr[2])
-				if arr.size() == 4:
-					return Color(arr[0], arr[1], arr[2], arr[3])
-				return null
-			
-			TYPE_OBJECT:
-				# 保持字符串，由调用方处理资源路径加载
-				return str_val
+		var sub: Array = split.get("sub_path", [])
+		var write: Dictionary = resolve_property_write(resource, str(split.get("property", "")), sub, props[raw_key])
+		
+		if not bool(write.get("ok", false)):
+			problems.append("'%s': %s" % [key, str(write.get("error", ""))])
+			continue
+		
+		write["key"] = key
+		writes.append(write)
 	
-	# int → float 或 float → int
-	if p_target_type == TYPE_FLOAT and p_value is int:
-		return float(p_value)
-	if p_target_type == TYPE_INT and p_value is float:
-		return int(p_value)
+	if not problems.is_empty():
+		return ToolResult.fail("Nothing was written — %d of %d properties are invalid:\n%s" % [problems.size(), props.size(), "\n".join(PackedStringArray(problems))])
 	
-	# bool 的 JSON 兼容
-	if p_target_type == TYPE_BOOL:
-		if p_value is bool:
-			return p_value
-		return null
+	# 2) 落地并记录回滚点
+	var rows: Array[Dictionary] = []
+	for write: Dictionary in writes:
+		var indexed: String = str(write.get("indexed"))
+		var before: Variant = write.get("current")
+		resource.set_indexed(indexed, write.get("value"))
+		var after: Variant = resource.get_indexed(indexed)
+		rows.append({
+			"property": indexed,
+			"old_value": json_safe(before),
+			"new_value": json_safe(after),
+			"applied": values_equal(after, write.get("value")),
+			"rollback_value": before,
+		})
 	
-	return p_value
-
-
-# 从字符串解析数值数组
-# 支持格式: "[1, 2, 3]" 或 "1, 2, 3" 或 "Vector3(1, 2, 3)"
-func _parse_numeric_array(p_str: String) -> Array:
-	var cleaned: String = p_str
-	# 移除常见包装: Vector2/3(...), Color(...), [...]
-	cleaned = cleaned.replace("Vector2(", "").replace("Vector3(", "").replace("Color(", "").replace(")", "")
-	cleaned = cleaned.replace("[", "").replace("]", "").replace("(", "").replace(")", "")
-	cleaned = cleaned.strip_edges()
+	# 3) 写盘；失败则回滚内存里的改动
+	var save_error: String = save_resource_file(resource, path)
+	if not save_error.is_empty():
+		for row: Dictionary in rows:
+			resource.set_indexed(str(row.get("property")), row.get("rollback_value"))
+		return ToolResult.fail("%s\nReverted %d change(s) in memory; the file on disk was not touched." % [save_error, rows.size()])
 	
-	var parts: PackedStringArray = cleaned.split(",", false)
-	var result: Array = []
+	var mismatched: int = 0
+	for row: Dictionary in rows:
+		row.erase("rollback_value")
+		if not bool(row.get("applied", false)):
+			mismatched += 1
 	
-	for part in parts:
-		var trimmed: String = part.strip_edges()
-		if trimmed.is_valid_float():
-			result.append(trimmed.to_float())
+	var summary: Dictionary = {
+		"ok": true,
+		"path": path,
+		"resource_type": resource.get_class(),
+		"script": script_path_of(resource),
+		"changed": rows.size(),
+		"mismatched": mismatched,
+		"properties": rows,
+	}
 	
-	return result
-
-
-# 获取类型名称
-func _type_name(p_type: int) -> String:
-	match p_type:
-		TYPE_BOOL: return "bool"
-		TYPE_INT: return "int"
-		TYPE_FLOAT: return "float"
-		TYPE_STRING: return "String"
-		TYPE_VECTOR2: return "Vector2"
-		TYPE_VECTOR3: return "Vector3"
-		TYPE_COLOR: return "Color"
-		TYPE_OBJECT: return "Resource/Object"
-		_: return "Variant"
+	return ToolResult.ok(JSON.stringify(summary, "\t") + "\n\n" + RESOURCE_SAVE_HINT)

@@ -187,16 +187,28 @@ static func _load_and_register_tool(p_path: String) -> void:
 		AIChatLogger.error("[ToolRegistry] Failed to load script (null): %s" % tool_path)
 		return
 	
-	if script is GDScript:
-		var gd_script: GDScript = script
-		var tool_instance: Object = gd_script.new()
-		if tool_instance is AiTool and tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):
-			var tool: AiTool = tool_instance
-			var t_name: String = tool.tool_name
-			if not t_name.is_empty():
-				main_agent_tools[t_name] = tool
-		else:
-			AIChatLogger.error("[ToolRegistry] Script does not extend AiTool, skipped: %s" % tool_path)
+	if not (script is GDScript):
+		AIChatLogger.error("[ToolRegistry] Script is not a GDScript, skipped: %s" % tool_path)
+		return
+	
+	var gd_script: GDScript = script
+	var tool_instance: Object = gd_script.new()
+	# 脚本编译失败时（最常见原因：它 preload 的文件被移动或删除）new() 会失败并返回 null，
+	# 引擎会先打印 "Nonexistent function 'new' in base 'GDScript'"。这里补一句原因，
+	# 避免只凭引擎报错去猜，也避免后面误报成「没有继承 AiTool」。
+	# 注意：不要改用 Script.can_instantiate() 判断——它表示"当前是否已就绪可实例化"，
+	# 编辑器里刚 load() 的脚本（包括完全正常的）都会返回 false。
+	if tool_instance == null:
+		AIChatLogger.error("[ToolRegistry] Tool script failed to compile, skipped: %s (check its preload paths)" % tool_path)
+		return
+	
+	if tool_instance is AiTool and tool_instance.has_method("execute") and tool_instance.has_method("get_parameters_schema"):
+		var tool: AiTool = tool_instance
+		var t_name: String = tool.tool_name
+		if not t_name.is_empty():
+			main_agent_tools[t_name] = tool
+	else:
+		AIChatLogger.error("[ToolRegistry] Script does not extend AiTool, skipped: %s" % tool_path)
 
 
 # 将工具引用解析为实际脚本路径（兼容 res:// 路径与 uid:// 引用两种存储形式）

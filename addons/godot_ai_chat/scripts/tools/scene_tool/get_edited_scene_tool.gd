@@ -1,27 +1,29 @@
 @tool
 extends BaseSceneTool
 
+## 当前编辑场景的树结构。外部实例与挂载脚本会标出来，避免"往实例内部加节点"这类白干。
+
 
 func _init() -> void:
 	tool_name = "get_edited_scene"
-	tool_description = "Retrieves the hierarchy of the currently edited scene in the Godot Editor. Use `open_file` first to open target scene"
+	tool_description = "Shows the hierarchy of the currently edited scene."
 
 
 func get_parameters_schema() -> Dictionary:
-	return {
-		"type": "object",
-		"properties": {},
-		"required": []
-	}
+	return {"type": "object", "properties": {}, "required": []}
 
 
 func execute(_p_args: Dictionary) -> ToolResult:
-	if not Engine.is_editor_hint():
-		return ToolResult.fail("Editor only tool.")
-	
 	var root: Node = get_active_scene_root()
-	if not root:
-		return ToolResult.fail("No active scene in editor.")
+	if root == null:
+		return ToolResult.fail("No active scene in the editor. Open one with `open_file` first.")
 	
-	var tree_str: String = get_scene_tree_string(root)
-	return ToolResult.ok("Current Scene: %s\n```\n%s\n```" % [root.name, tree_str])
+	var output: String = "%s\nroot: %s (%s)\n```\n%s\n```\n%s" % [
+		scene_label(root),
+		root.name,
+		root.get_class(),
+		get_scene_tree_string(root),
+		SAVE_HINT,
+	]
+	
+	return ToolResult.ok(output)

@@ -15,11 +15,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"skill_name": {
 				"type": "string",
-				"description": "The exact name of the Skill to assign to the Sub Agent."
+				"description": "The exact name of the Skill to assign to the Sub Agent(case-sensitivity)."
 			},
 			"task_description": {
 				"type": "string",
-				"description": "Very detailed instructions on what you want the Sub Agent to do."
+				"description": "detailed instructions on what you want the Sub Agent to do."
 			}
 		},
 		"required": ["skill_name", "task_description"]

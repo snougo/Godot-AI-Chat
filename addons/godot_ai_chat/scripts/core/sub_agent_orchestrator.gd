@@ -2,20 +2,43 @@
 class_name AIChatSubAgentOrchestrator
 extends Node
 
-## Sub-Agent 编排器
-##
-## 使用技能（Skill）声明的工具集独立完成一个任务，并回报结果。
-## 与主 Agent 完全隔离：独立历史、独立工具集、独立 Provider 实例。
+# Sub-Agent 编排器
+# 使用技能（Skill）声明的工具集独立完成一个任务，并回报结果。
+# 与主 Agent 完全隔离：独立历史、独立工具集、独立 Provider 实例。
+# 网络层与主 Agent 共用同一套 StreamRequest 实现，隔离性由「独立实例」而非「独立实现」保证。
+
 
 # --- Constants ---
 
 const ContextBuilder := preload("res://addons/godot_ai_chat/scripts/core/context_builder.gd")
 const StreamMessageAssembler := preload("res://addons/godot_ai_chat/scripts/core/stream_message_assembler.gd")
+const StreamRequest := preload("res://addons/godot_ai_chat/scripts/network/stream_request.gd")
 const JSONRepairHelper := preload("res://addons/godot_ai_chat/scripts/helper/json_repair_helper.gd")
-const URLHelper := preload("res://addons/godot_ai_chat/scripts/helper/url_helper.gd")
-const Utf8Helper := preload("res://addons/godot_ai_chat/scripts/helper/utf8_helper.gd")
 
 const REPORT_TASK_TOOL_SCRIPT: Resource = preload("res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/report_task_result_tool.gd")
+
+# 控制台流式输出段落标识（空串表示当前没有打开的段落）
+const CONSOLE_SEGMENT_THINKING: String = "thinking"
+const CONSOLE_SEGMENT_CONTENT: String = "content"
+
+# 控制台流式输出的行缓冲刷新阈值（字符数）
+# [为什么需要] 编辑器 Output 面板按整行追加，长时间没有换行的内容不会显示；
+# 累积到该长度即强制作为一行输出，兼顾「实时可见」与「不刷屏」
+const CONSOLE_FLUSH_THRESHOLD: int = 160
+
+# --- 重试策略 ---
+# 可重试的 HTTP 状态码：429 限流 + 上游临时故障
+# [为什么不含 4xx 其它码] 配置/参数错误，重试只是浪费配额和时间
+# [为什么不含超时与连接失败] network_timeout 默认 180s，重试会把一次失败放大成数分钟卡死
+const RETRYABLE_STATUS_CODES: Array[int] = [429, 500, 502, 503, 504]
+# 最大重试次数（不含首次请求），即最多发出 RETRY_MAX_ATTEMPTS + 1 次请求
+const RETRY_MAX_ATTEMPTS: int = 3
+# 指数退避基础秒数：10 → 20 → 40
+const RETRY_BASE_DELAY_S: float = 10.0
+# 单次等待上限：服务端可能回 Retry-After: 3600，必须夹住
+const RETRY_MAX_DELAY_S: float = 60.0
+# 抖动比例：避免多个客户端在同一时刻集体重试，把限流窗口再次撞满
+const RETRY_JITTER_RATIO: float = 0.2
 
 
 # --- Public Vars ---
@@ -30,17 +53,29 @@ var _config: SubAgentConfig
 var _history: ChatMessageHistory
 var _sub_agent_tools: Dictionary = {}
 
-# 主线程 SSE 解析临时状态（仅 _do_stream_request 使用；Sub-Agent 单线程顺序执行，无并发）
-var _sse_text_buffer: String = ""
-var _sse_processed_pos: int = 0
-var _sse_current_event: String = ""
+# 控制台流式输出：当前打开的段落
+# [为什么需要状态] 流式增量是碎片化的，段落标题只能在首块打印一次；
+# 段落切换 / 结束时必须补换行，否则多段文本会挤在同一行。
+var _console_segment: String = ""
+
+# 控制台输出行缓冲：编辑器面板按整行刷新，故先缓冲再整行输出
+var _console_line_buffer: String = ""
+
+# 活动实例登记表（供插件停用时统一释放）
+static var _active_instances: Array[AIChatSubAgentOrchestrator] = []
 
 
 # --- Built-in Functions ---
 
 func _exit_tree() -> void:
+	_active_instances.erase(self)
 	_clean_reference()
 	AIChatLogger.info("[SubAgent] Removed from scene tree and ready to free.")
+
+
+func _ready() -> void:
+	if not _active_instances.has(self):
+		_active_instances.append(self)
 
 
 # --- Public Functions ---
@@ -91,25 +126,47 @@ func run_task() -> String:
 	var requires_gemini_schema: bool = provider.requires_gemini_tool_schema()
 	var supports_inline: bool = provider.supports_inline_tool_images()
 	
-	# 4. 主循环（使用 HTTPClient 主线程轮询）
+	# 4. 主循环（统一走 StreamRequest：后台线程网络 IO，主线程解析与落地）
 	var turns_taken: int = 0
 	var final_report: String = ""
 	var has_reported: bool = false
 	
+	# 步骤提醒阈值：剩余步数 ≤ 总步数 10% 时才注入计数提示
+	# [为什么不每轮注入] 每轮约数十 tokens，长任务下累计可观；且临近上限时模型才真正需要这类信息
+	var step_warn_threshold: int = ContextBuilder.get_step_warn_threshold(_config.max_chat_turns)
+	# 仅用于避免在提醒期内每轮刷一条日志
+	var step_notice_logged: bool = false
+	
 	while turns_taken < _config.max_chat_turns:
 		turns_taken += 1
 		
+		# 轮次分隔：流式输出需要明确的上下文边界，否则多轮内容在控制台里首尾相连
+		_close_console_segment()
+		AIChatLogger.info("[Sub Agent] --- Turn %d ---" % turns_taken)
+		
 		# 构建流式请求
 		var tool_defs: Array[Dictionary] = _get_tool_definitions(requires_gemini_schema)
-		var body: Dictionary = provider.build_request_body(_config.model_name, _history.messages, _config.temperature, true, tool_defs)
+		
+		# 步骤计数提示：仅在剩余步数进入最后 10% 时，追加到「请求副本」末尾，不写入 _history
+		# [为什么不改 system / 不改旧消息] KV(Prompt) 缓存按「从头算起的最长公共前缀」命中：
+		# system prompt 或任何已发送过的消息一旦变动，其后内容全部失效；
+		# 而末尾追加只会重算这一条，历史前缀照常命中，成本为零。
+		var used_steps: int = turns_taken - 1
+		var request_messages: Array[ChatMessage] = _history.messages
+		if _config.max_chat_turns - used_steps <= step_warn_threshold:
+			if not step_notice_logged:
+				step_notice_logged = true
+				AIChatLogger.info("[Sub Agent] Step budget running low: %d / %d consumed." % [used_steps, _config.max_chat_turns])
+			request_messages = ContextBuilder.append_step_counter(_history.messages, used_steps, _config.max_chat_turns)
+		
+		var body: Dictionary = provider.build_request_body(_config.model_name, request_messages, _config.temperature, true, tool_defs)
 		var url: String = provider.get_request_url(_config.api_base_url, _config.model_name, _config.api_key, true)
 		var headers: PackedStringArray = provider.get_request_headers(_config.api_key, true)
 		
-		# 使用 HTTPClient 直接轮询（主线程，避免 StreamRequest 线程问题）
-		# 传入 provider 以便 SSE 解析时委托到其自身的 parse_stream_chunk，
-		# 让 ChatCompletions / Responses / Anthropic 三种 SSE 协议各自走自己的分派
-		#var response = await _do_stream_request(url, headers, JSON.stringify(body), provider, _config.network_timeout)
-		var response: Dictionary = await _do_stream_request(url, headers, ToolBox.stringify_json_safe(body), provider, _config.network_timeout)
+		# 统一流式请求（带重试）：请求体以 Dictionary 传入，序列化推迟到后台线程；
+		# 协议分派由 provider.parse_stream_chunk 决定；仅 429 / 5xx 走指数退避重试
+		var response: Dictionary = await _do_stream_request_with_retry(url, headers, body, provider, _config.network_timeout)
+		
 		if response.has("error"):
 			AIChatLogger.error("[Sub Agent] " + String(response.error))
 			_remove_sub_agent()
@@ -120,12 +177,7 @@ func run_task() -> String:
 		var raw_tool_calls: Variant = response.get("tool_calls", [])
 		var response_tool_calls: Array = raw_tool_calls if raw_tool_calls is Array else []
 		
-		AIChatLogger.info("[Sub Agent] --- Turn %d ---" % turns_taken)
-		
-		if not reasoning.is_empty():
-			AIChatLogger.info("[Sub Agent Thinking]:\n" + reasoning)
-		if not content.is_empty():
-			AIChatLogger.info("[Sub Agent Output]:\n" + content)
+		# 思考 / 正文已在流式接收过程中实时打印到控制台，此处不再整段重复输出
 		
 		if content.is_empty() and not response_tool_calls.is_empty():
 			content = " "
@@ -133,6 +185,7 @@ func run_task() -> String:
 		var assistant_msg: ChatMessage = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, content)
 		assistant_msg.reasoning_content = reasoning
 		assistant_msg.tool_calls = response_tool_calls
+		
 		# 回传 Anthropic extended-thinking 块的签名，多轮 thinking 会话必需
 		var thinking_signature: String = String(response.get("thinking_signature", ""))
 		if not thinking_signature.is_empty():
@@ -225,130 +278,136 @@ func run_task() -> String:
 	+ "Please re-invoke the Sub Agent to continue from where it left off."
 
 
+# 释放全部活动 Sub-Agent（插件停用时调用）
+static func cancel_all() -> void:
+	for instance: AIChatSubAgentOrchestrator in _active_instances.duplicate():
+		if is_instance_valid(instance):
+			instance.queue_free()
+	_active_instances.clear()
+
+
 # --- Private Functions ---
 
-# 使用 HTTPClient 在主线程轮询流式响应
-# 解析委托 provider.parse_stream_chunk 完成协议分派，落地委托 StreamMessageAssembler 完成
-# [return]: {"content", "reasoning_content", "tool_calls", "thinking_signature"} 或 {"error"}
-func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: String, p_provider: BaseLLMProvider, p_timeout_s: int) -> Dictionary:
-	var tracker: TimeoutTracker = TimeoutTracker.from_network_timeout(p_timeout_s)
-	var has_received_first_chunk: bool = false
+# 带重试的流式请求
+# 只对「等一会就好」的服务端错误（429 / 5xx）做指数退避重试：
+# 配置错误（4xx）与超时类错误直接失败返回，重试无意义或代价过高。
+# [param ...]: 同 _do_stream_request()
+# [return]: 同 _do_stream_request()；重试耗尽后返回最后一次的错误结果
+func _do_stream_request_with_retry(p_url: String, p_headers: PackedStringArray, p_body: Dictionary, p_provider: BaseLLMProvider, p_timeout_s: int) -> Dictionary:
+	var attempt: int = 0
+	var response: Dictionary = await _do_stream_request(p_url, p_headers, p_body, p_provider, p_timeout_s)
 	
-	var client: HTTPClient = HTTPClient.new()
+	while response.has("error"):
+		var status_code: int = int(response.get("status_code", 0))
+		# 重试预算用尽，或错误类型不可重试 → 直接返回最后一次结果
+		if attempt >= RETRY_MAX_ATTEMPTS or not RETRYABLE_STATUS_CODES.has(status_code):
+			break
+		
+		attempt += 1
+		# 防御性收尾：非 200 时不会输出正文，但保证段落状态干净
+		_close_console_segment()
+		var delay: float = _compute_retry_delay(attempt, float(response.get("retry_after", -1.0)))
+		await _wait_before_retry(delay, attempt, status_code)
+		
+		response = await _do_stream_request(p_url, p_headers, p_body, p_provider, p_timeout_s)
 	
-	# 解析 URL
-	var url_parts: Dictionary = URLHelper.parse_url(p_url)
-	var protocol: String = String(url_parts.protocol)
-	var host: String = String(url_parts.host)
-	var port: int = int(url_parts.port)
-	var path: String = String(url_parts.path)
+	return response
+
+
+# 计算下一次重试的等待时长
+# [param p_attempt]: 当前是第几次重试（从 1 开始）
+# [param p_retry_after_s]: 服务端建议的等待秒数（-1 表示无建议）
+func _compute_retry_delay(p_attempt: int, p_retry_after_s: float) -> float:
+	var delay: float = p_retry_after_s
+	if delay <= 0.0:
+		delay = RETRY_BASE_DELAY_S * pow(2.0, p_attempt - 1)
+		# 抖动只向上加：负数抖动会让实际等待短于计算值，反而更容易再次撞上 429
+		delay *= 1.0 + randf_range(0.0, RETRY_JITTER_RATIO)
 	
-	# 连接服务器
-	var tls_opts: TLSOptions = TLSOptions.client() if protocol == "https" else null
-	var err: Error = client.connect_to_host(host, port, tls_opts)
-	if err != OK:
-		return {"error": "Connection failed: %s" % error_string(err)}
+	return clampf(delay, 1.0, RETRY_MAX_DELAY_S)
+
+
+# 重试前等待，并逐秒输出倒计时
+# [为什么用 WARN 而不是 DEBUG] 退避期间子代理看起来像「卡死了」，
+# 用户必须在默认日志通道下就能分辨"限流等待"与"死锁"。
+# [param p_seconds]: 本次等待总秒数
+# [param p_attempt]: 当前是第几次重试（从 1 开始）
+# [param p_status_code]: 触发重试的 HTTP 状态码
+func _wait_before_retry(p_seconds: float, p_attempt: int, p_status_code: int) -> void:
+	var total: int = int(roundf(p_seconds))
+	AIChatLogger.warn("[Sub Agent] HTTP %d — retry %d/%d in %ds." % [p_status_code, p_attempt, RETRY_MAX_ATTEMPTS, total])
 	
-	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
-		client.poll()
-		if tracker.check().timed_out:
-			client.close()
-			return {"error": "Connection timeout (%ds)" % [tracker.get_current_timeout_ms() / 1000]}
-		await get_tree().process_frame
+	var remaining: int = total
+	while remaining > 0:
+		await get_tree().create_timer(1.0).timeout
+		remaining -= 1
+		if remaining > 0:
+			AIChatLogger.warn("[Sub Agent] Retry countdown: %ds" % remaining)
+
+
+# 统一的流式网络请求（与主链路共用 StreamRequest 实现）
+# 网络 IO 在后台线程完成，数据块经 call_deferred 回到主线程：
+# 协议解析委托 provider.parse_stream_chunk，数据落地委托 StreamMessageAssembler，
+# 控制台输出随数据块实时打印。
+# [param p_url]: 请求 URL
+# [param p_headers]: 请求头
+# [param p_body]: 请求体字典（序列化推迟到后台线程执行）
+# [param p_provider]: 发起本次请求的 Provider 实例（流内状态必须始终是同一实例）
+# [param p_timeout_s]: 网络超时（秒）
+# [return]: 成功 {"content", "reasoning_content", "tool_calls", "thinking_signature"}；
+#           失败 {"error", "status_code", "retry_after"}
+func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dictionary, p_provider: BaseLLMProvider, p_timeout_s: int) -> Dictionary:
+	var request: StreamRequest = StreamRequest.new(
+		p_provider,
+		p_url,
+		p_headers,
+		p_body,
+		TimeoutTracker.from_network_timeout(p_timeout_s)
+	)
 	
-	if client.get_status() != HTTPClient.STATUS_CONNECTED:
-		client.close()
-		return {"error": "Connection failed. Status: %d" % client.get_status()}
-	
-	# 发送请求
-	err = client.request(HTTPClient.METHOD_POST, path, p_headers, p_body)
-	if err != OK:
-		client.close()
-		return {"error": "Request failed: %s" % error_string(err)}
-	
-	while client.get_status() == HTTPClient.STATUS_REQUESTING:
-		client.poll()
-		if tracker.check().timed_out:
-			client.close()
-			return {"error": "Request timeout (%ds)" % [tracker.get_current_timeout_ms() / 1000]}
-		await get_tree().process_frame
-	
-	if not client.has_response():
-		client.close()
-		return {"error": "No response from server."}
-	
-	var response_code: int = client.get_response_code()
-	if response_code != 200:
-		var error_body: PackedByteArray = PackedByteArray()
-		while client.get_status() == HTTPClient.STATUS_BODY:
-			client.poll()
-			var error_chunk: PackedByteArray = client.read_response_body_chunk()
-			if error_chunk.size() > 0:
-				error_body.append_array(error_chunk)
-			await get_tree().process_frame
-		client.close()
-		return {"error": "HTTP %d: %s" % [response_code, error_body.get_string_from_utf8()]}
-	
-	# 读取流式响应：每个 SSE 事件块转发给 provider.parse_stream_chunk，
-	# 让 OpenAI ChatCompletions / OpenAI Responses / Anthropic 三种 SSE 协议各自走自己的分派
-	# 而非硬编码 choices[0].delta 结构（保持与主 Agent 路径同源但实例/历史均隔离）
 	var assembler: StreamMessageAssembler = StreamMessageAssembler.new()
 	assembler.begin()
-	# 重置 Provider 流内状态（槽位记录、用量累计等）
+	
+	# 重置 Provider 流内状态（槽位映射、用量累计等），必须在请求发出前完成
 	p_provider.reset_stream_state()
 	
-	var byte_buffer: PackedByteArray = PackedByteArray()
+	# 结果容器：信号回调无法写回局部变量，故统一用 Dictionary 承载
+	var state: Dictionary = {"is_finished": false, "error": ""}
 	
-	_sse_text_buffer = ""
-	_sse_processed_pos = 0
-	_sse_current_event = ""
+	request.chunk_received.connect(func(p_chunk: Dictionary) -> void:
+		var delta: LLMStreamDelta = p_provider.parse_stream_chunk(p_chunk)
+		_console_print_delta(delta)
+		assembler.apply(delta)
+	)
 	
-	while client.get_status() == HTTPClient.STATUS_BODY:
-		client.poll()
-		var chunk: PackedByteArray = client.read_response_body_chunk()
-		
-		if chunk.size() > 0:
-			byte_buffer.append_array(chunk)
-			# 保留末尾可能不完整的 UTF-8 字符字节，避免跨 chunk 解码报错与数据损坏
-			var keep: int = Utf8Helper.incomplete_tail_bytes(byte_buffer)
-			var complete_size: int = byte_buffer.size() - keep
-			if complete_size > 0:
-				var complete: PackedByteArray = byte_buffer.slice(0, complete_size)
-				var text: String = complete.get_string_from_utf8()
-				byte_buffer = byte_buffer.slice(complete_size)  # 残留尾部留到下一 chunk
-				if not text.is_empty():
-					_sse_text_buffer += text
-					_process_complete_sse_lines(assembler, p_provider)
-					
-					# 首 token 判定：基于实际内容，而非原始 HTTP chunk
-					if not has_received_first_chunk:
-						var partial: ChatMessage = assembler.get_message()
-						if partial != null and (not partial.content.is_empty() or not partial.reasoning_content.is_empty()):
-							has_received_first_chunk = true
-							tracker.mark_first_token_received()
-					else:
-						tracker.mark_data_received()
-		else:
-			# 流中停顿检测（仅在已收到实质内容后启用）
-			if has_received_first_chunk and tracker.check().timed_out:
-				client.close()
-				return {"error": "Stream stalled: No data received for %ds" % [tracker.get_current_timeout_ms() / 1000]}
-		
+	request.failed.connect(func(p_error: String) -> void:
+		state["error"] = p_error
+		state["is_finished"] = true
+	, CONNECT_ONE_SHOT)
+	
+	request.finished.connect(func() -> void:
+		state["is_finished"] = true
+	, CONNECT_ONE_SHOT)
+	
+	request.start()
+	
+	# 等待请求结束（所有信号均已通过 call_deferred 投递回主线程）
+	while not bool(state["is_finished"]):
 		await get_tree().process_frame
 	
-	client.close()
+	# 非阻塞回收线程池任务槽位，避免 WorkerThreadPool 槽位泄漏
+	request.request_thread_cleanup()
 	
-	# 补刷 byte_buffer 中残留的不完整字符（流已结束，无更多 chunk 可拼接）
-	if byte_buffer.size() > 0:
-		var tail_text: String = byte_buffer.get_string_from_utf8()
-		if not tail_text.is_empty():
-			_sse_text_buffer += tail_text
+	# 收尾控制台流式段落，防止末尾输出未换行
+	_close_console_segment()
 	
-	# 流结束时刷出缓冲区中不完整的末行（防御性处理，保障数据不丢失）
-	if _sse_processed_pos < _sse_text_buffer.length():
-		var remaining: String = _sse_text_buffer.substr(_sse_processed_pos).strip_edges()
-		if not remaining.is_empty():
-			_parse_single_sse_line(remaining, assembler, p_provider)
+	var error_message: String = String(state["error"])
+	if not error_message.is_empty():
+		return {
+			"error": error_message,
+			"status_code": request.last_status_code,
+			"retry_after": request.last_retry_after_s,
+		}
 	
 	var result_msg: ChatMessage = assembler.take()
 	if result_msg == null:
@@ -356,64 +415,87 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Str
 			"content": "",
 			"reasoning_content": "",
 			"tool_calls": [],
-			"thinking_signature": ""
+			"thinking_signature": "",
 		}
 	
 	return {
 		"content": result_msg.content,
 		"reasoning_content": result_msg.reasoning_content,
 		"tool_calls": result_msg.tool_calls.duplicate(true),
-		"thinking_signature": String(result_msg.metadata.get(ChatMessage.META_THINKING_SIGNATURE, ""))
+		"thinking_signature": String(result_msg.metadata.get(ChatMessage.META_THINKING_SIGNATURE, "")),
 	}
 
 
-# 处理文本缓冲区中所有以 \n 结尾的完整 SSE 行
-# 按 rfind 找到最后一行换行，把这一批完整行一并分派
-func _process_complete_sse_lines(p_assembler: StreamMessageAssembler, p_provider: BaseLLMProvider) -> void:
+# 随流式数据块实时打印控制台输出
+# [param p_delta]: Provider 产出的协议无关增量
+func _console_print_delta(p_delta: LLMStreamDelta) -> void:
+	# 与 AIChatLogger 的 INFO 通道保持一致：关闭时不输出任何流式内容
+	if not (AIChatLogger.current_flags & AIChatLogger.FLAG_INFO):
+		return
+	
+	if not p_delta.reasoning_delta.is_empty():
+		_open_console_segment(CONSOLE_SEGMENT_THINKING)
+		_console_append(p_delta.reasoning_delta)
+	
+	if not p_delta.content_delta.is_empty():
+		_open_console_segment(CONSOLE_SEGMENT_CONTENT)
+		_console_append(p_delta.content_delta)
+	
+	# 工具调用开始即意味着本轮正文结束，及时刷新并收尾
+	if not p_delta.tool_call_deltas.is_empty():
+		_close_console_segment()
+
+
+# 追加文本到控制台行缓冲
+# [为什么按行输出] 编辑器 Output 面板按整行追加，printraw 的无换行输出不会形成行，
+# 因此改为「整行即时输出 + 超长未换行强制折行」，兼顾实时性与可读性。
+# [param p_text]: 待追加的流式增量文本
+func _console_append(p_text: String) -> void:
+	_console_line_buffer += p_text
+	
 	while true:
-		var new_part: String = _sse_text_buffer.substr(_sse_processed_pos)
-		var last_newline: int = new_part.rfind("\n")
-		if last_newline == -1:
+		var newline_pos: int = _console_line_buffer.find("\n")
+		if newline_pos == -1:
 			break
-		# 取出截至最后换行的整批完整行，推进处理位置
-		var complete_text: String = new_part.substr(0, last_newline + 1)
-		_sse_processed_pos += complete_text.length()
-		for line: String in complete_text.split("\n"):
-			var trimmed: String = line.strip_edges()
-			if not trimmed.is_empty():
-				_parse_single_sse_line(trimmed, p_assembler, p_provider)
+		var line: String = _console_line_buffer.substr(0, newline_pos)
+		_console_line_buffer = _console_line_buffer.substr(newline_pos + 1)
+		print(line.rstrip("\r"))
+	
+	if _console_line_buffer.length() >= CONSOLE_FLUSH_THRESHOLD:
+		# 阈值折行时优先在空格处断开，避免把单词/数字从中间切开
+		var break_pos: int = _console_line_buffer.rfind(" ")
+		if break_pos <= 0:
+			break_pos = _console_line_buffer.length()
+		
+		print(_console_line_buffer.substr(0, break_pos))
+		_console_line_buffer = _console_line_buffer.substr(break_pos).strip_edges(true, false)
 
 
-# 解析单行 SSE 内容：
-# - event 行更新事件状态（Anthropic / OpenAI Responses 使用）
-# - data 行注入 _event_type 后委托 provider.parse_stream_chunk 得到协议无关增量，
-#   再由装配器落地到消息数据
-#   OpenAI ChatCompletions 无 event 行，注入被跳过；其 provider 直接读 choices[0].delta
-func _parse_single_sse_line(p_line: String, p_assembler: StreamMessageAssembler, p_provider: BaseLLMProvider) -> void:
-	# 1. 捕获 event 类型
-	if p_line.begins_with("event:"):
-		_sse_current_event = p_line.substr(6).strip_edges()
+# 打开控制台输出段落：与当前段落不同时先收尾旧段落并打印标题
+# [param p_segment]: CONSOLE_SEGMENT_* 之一
+func _open_console_segment(p_segment: String) -> void:
+	if _console_segment == p_segment:
 		return
 	
-	# 2. 跳过非 data 行（如 heartbeat / 注释 / 控制字段）
-	if not p_line.begins_with("data:"):
+	_close_console_segment()
+	_console_segment = p_segment
+	
+	if p_segment == CONSOLE_SEGMENT_THINKING:
+		AIChatLogger.info("[Sub Agent Thinking]")
+	else:
+		AIChatLogger.info("[Sub Agent Output]")
+
+
+# 收尾当前控制台输出段落（先刷出缓冲残留，再重置段落状态）
+func _close_console_segment() -> void:
+	if not _console_line_buffer.is_empty():
+		print(_console_line_buffer)
+		_console_line_buffer = ""
+	
+	if _console_segment.is_empty():
 		return
 	
-	var json_str: String = p_line.substr(5).strip_edges()
-	if json_str == "[DONE]" or json_str.is_empty():
-		return
-	
-	var json: Variant = JSON.parse_string(json_str)
-	if json == null or not json is Dictionary:
-		return
-	
-	var chunk: Dictionary = json
-	# 注入 event 类型（OpenAI Responses 依赖此字段分派；Anthropic 仍走 JSON 内的 type 字段，两者并存兼容）
-	if not _sse_current_event.is_empty():
-		chunk["_event_type"] = _sse_current_event
-	
-	# 委托 provider 解析协议，由装配器落地数据（与主 Agent 路径同源但 provider 实例隔离）
-	p_assembler.apply(p_provider.parse_stream_chunk(chunk))
+	_console_segment = ""
 
 
 # 加载 Sub-Agent 自己的工具集
@@ -439,16 +521,17 @@ func _get_tool_definitions(p_requires_gemini_schema: bool) -> Array[Dictionary]:
 	return ToolRegistry.build_tool_definitions(_sub_agent_tools, p_requires_gemini_schema)
 
 
-# 从编辑器根节点上移除 Sub-Agent 节点
+# 释放自身（移出场景树并排队释放）
+# [为什么不再扫描同名节点] 本方法可能在多个 Sub-Agent 并发运行期间被调用：
+# 扫描并 remove_child() 其他实例会把它们变成孤儿节点（不会自动释放），
+# 且它们挂在树上的协程会因 get_tree() 变为 null 而中断，
+# 导致主 Agent 对应的 create_sub_agent 工具调用永远收不到返回。
 func _remove_sub_agent() -> void:
-	var root: Window = Engine.get_main_loop().root
-	for child: Node in root.get_children(false):
-		if "SubAgentOrchestrator" in child.name and child is AIChatSubAgentOrchestrator:
-			root.remove_child(child)
-			queue_free()
+	queue_free()
 
 
 func _clean_reference() -> void:
+	_close_console_segment()
 	_sub_agent_tools.clear()
 	if is_instance_valid(_history):
 		_history = null

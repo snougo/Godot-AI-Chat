@@ -1,10 +1,9 @@
 @tool
 extends FoldableContainer
 
-## 消息显示块
-##
-## 负责单条消息的 UI 渲染，支持 Markdown 解析、代码高亮、打字机效果和工具调用展示。
-## Markdown 解析逻辑已分离至 MarkdownStreamParser，本类仅负责 UI 渲染。
+# 消息显示块
+# 负责单条消息的 UI 渲染，支持 Markdown 解析、代码高亮、打字机效果和工具调用展示。
+# Markdown 解析逻辑已分离至 MarkdownStreamParser，本类仅负责 UI 渲染。
 
 
 # --- Constants ---
@@ -12,33 +11,33 @@ extends FoldableContainer
 const MarkdownSegment := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_segment.gd")
 const MarkdownToBBCode := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_to_bbcode.gd")
 const MarkdownStreamParser := preload("res://addons/godot_ai_chat/scripts/helper/markdown/markdown_stream_parser.gd")
-## 文本查看窗口（原生独立窗口，详见该脚本内说明）
+# 文本查看窗口（原生独立窗口，详见该脚本内说明）
 const TextViewerWindow := preload("res://addons/godot_ai_chat/scripts/ui/text_viewer_window.gd")
 
-## 预加载代码高亮主题
+# 预加载代码高亮主题
 const SYNTAX_HIGHLIGHTER_RES: CodeHighlighter = preload(PluginPaths.CODE_HIGHLIGHT_THEME)
 
 # 角色标题样式资源
 const TITLE_STYLE_ASSISTANT: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/assistant_title.tres")
 const TITLE_STYLE_USER: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/user_title.tres")
 const TITLE_STYLE_TOOL: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/tool_title.tres")
-## 统一背景样式资源
+# 统一背景样式资源
 const BG_STYLE: StyleBoxFlat = preload("res://addons/godot_ai_chat/assets/message_background.tres")
 
-## 行内代码颜色
+# 行内代码颜色
 const INLINE_CODE_COLOR: Color = Color("#d2cf95")
 
-## 思考内容单帧渲染上限（字符）
+# 思考内容单帧渲染上限（字符）
 const REASONING_RENDER_CHUNK_CHARS: int = 8192
-## 思考内容单帧渲染时间预算（微秒）；文档推荐 get_ticks_usec 做精确计时（单调、不受系统时钟影响）
+# 思考内容单帧渲染时间预算（微秒）；文档推荐 get_ticks_usec 做精确计时（单调、不受系统时钟影响）
 const REASONING_RENDER_BUDGET_USEC: int = 8000
-## 思考内容可视高度
+# 思考内容可视高度
 const REASONING_VIEW_HEIGHT: float = 200.0
-## 思考内容换行模式
-## LINE_WRAPPING_NONE 时 get_total_visible_line_count() 等价于 get_line_count()（无需逐行换行测量），
-## 是最省 CPU 的模式，代价是超长行需要横向滚动。若横向滚动体验不可接受，改为 LINE_WRAPPING_BOUNDARY。
+# 思考内容换行模式
+# LINE_WRAPPING_NONE 时 get_total_visible_line_count() 等价于 get_line_count()（无需逐行换行测量），
+# 是最省 CPU 的模式，代价是超长行需要横向滚动。若横向滚动体验不可接受，改为 LINE_WRAPPING_BOUNDARY。
 const REASONING_WRAP_MODE: TextEdit.LineWrappingMode = TextEdit.LINE_WRAPPING_BOUNDARY
-## [临时探针] 单次写入耗时告警阈值（微秒）：超过则打印，用于确认卡顿是否仍在写入路径
+# [临时探针] 单次写入耗时告警阈值（微秒）：超过则打印，用于确认卡顿是否仍在写入路径
 const REASONING_PROBE_WARN_USEC: int = 30000
 
 # 内联预览显示的工具参数最大字符数
@@ -47,14 +46,22 @@ const REASONING_PROBE_WARN_USEC: int = 30000
 # →（fit_content + 自动换行测量，对一整行超长文本做断行分析）。
 # 这些成本都与参数总长度成正比，且全部发生在主线程、中间没有任何 await 点，
 # 于是"一大段 chunk 冲进来"表现为编辑器卡死，历史加载表现为"停在某条消息几秒"。
-## 预览取小值是安全的：完整参数由查看窗口提供，预览只承担"一眼看出调用了什么工具"。
+#
+# 预览取小值是安全的：完整参数由查看窗口提供，预览只承担"一眼看出调用了什么工具"。
 const TOOL_ARGS_RENDER_LIMIT: int = 600
-## 参数长度不超过该值时，内联预览先做一次 JSON 美化（仅影响预览显示）
+# 参数长度不超过该值时，内联预览先做一次 JSON 美化（仅影响预览显示）
 const TOOL_ARGS_PARSE_LIMIT: int = 600
-## 查看窗口中尝试"可读化"渲染的长度上限；超过则直接显示原文，避免点开后长时间无响应
+# 查看窗口中尝试"可读化"渲染的长度上限；超过则直接显示原文，避免点开后长时间无响应
 const TOOL_ARGS_VIEWER_PARSE_LIMIT: int = 1048576
-## [临时探针] 单次参数渲染耗时告警阈值（微秒），用于验证封顶是否生效
+# [临时探针] 单次参数渲染耗时告警阈值（微秒），用于验证封顶是否生效
 const TOOL_ARGS_PROBE_WARN_USEC: int = 5000
+
+# 工具结果内联预览上限（字符）
+# [为什么封顶] 块内只用 Label 显示前 N 个字符：N 固定，则块内的排版成本恒定，
+# 与工具结果的实际长度完全解耦。完整内容由独立窗口按需渲染。
+const TOOL_OUTPUT_INLINE_LIMIT: int = 200
+# 工具结果独立窗口标题
+const TOOL_OUTPUT_TITLE: String = "Tool Output"
 
 
 # --- @onready Vars ---
@@ -94,6 +101,8 @@ var _reasoning_fill_active: bool = false
 
 # 消息块是否被挂起
 var _is_suspended: bool = false
+# 内容子树是否因折叠而脱离场景树（与视口剔除是两回事，必须分开记录）
+var _is_fold_detached: bool = false
 
 # 标记是否还在消息开头位置（用于跳过开头空白行）
 var _is_first_text: bool = true
@@ -120,14 +129,23 @@ var _table_row_index: int = 0
 var _palette: MarkdownPalette = MarkdownPalette.new()
 
 # 工具角色专用：单一 TextEdit，不走 Markdown 解析器
-var _tool_text_edit: TextEdit = null
+#var _tool_text_edit: TextEdit = null
+
+# 工具结果全文：块内只持有字符串，正文渲染改由「截断的 Label + 独立窗口」承担
+# [内存] String 是写时复制，此处与 ChatMessage.content 共享同一份缓冲，不产生额外拷贝。
+var _tool_output_text: String = ""
+# 内联预览标签（最多 TOOL_OUTPUT_INLINE_LIMIT 个字符）
+var _tool_output_label: Label = null
+# 全文查看按钮（仅在内容被截断时显示）
+var _tool_output_open_button: Button = null
 
 
 # --- Built-in Functions ---
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
-		if _is_suspended and is_instance_valid(_main_margin_container):
+		# 内容子树在「挂起」或「折叠」时会脱离场景树，不再随本节点释放，需显式清理
+		if is_instance_valid(_main_margin_container) and not _main_margin_container.is_inside_tree():
 			_main_margin_container.queue_free()
 
 
@@ -147,19 +165,32 @@ func _ready() -> void:
 	if not _content_container:
 		# 等待一帧以确保节点就绪 (主要用于 Tool 模式下的实例化)
 		await get_tree().process_frame
+	
+	# 折叠/展开时把内容子树摘出/挂回场景树（见 _sync_content_attachment）
+	if not folding_changed.is_connected(_on_folding_changed):
+		folding_changed.connect(_on_folding_changed)
+	
+	_is_fold_detached = is_folded()
+	_sync_content_attachment()
 
 
 # --- Public Functions ---
 
-## 设置消息内容（静态加载）
+# 设置消息内容（静态加载）
 func set_content(p_role: String, p_content: String, p_model_name: String = "", p_tool_calls: Array = [], p_reasoning: String = "") -> void:
 	_set_title(p_role, p_model_name)
 	_clear_content()
 	
 	# 工具角色：不走解析器，全部塞入单个 TextEdit
+	#if p_role == ChatMessage.ROLE_TOOL:
+	#	_create_tool_output_block()
+	#	_tool_text_edit.text = p_content
+	#	return
+	
+	# 工具角色：不建 TextEdit，只建「截断的 Label + 按需弹出的全文按钮」
 	if p_role == ChatMessage.ROLE_TOOL:
+		_tool_output_text = p_content
 		_create_tool_output_block()
-		_tool_text_edit.text = p_content
 		return
 	
 	if not p_reasoning.is_empty():
@@ -173,13 +204,19 @@ func set_content(p_role: String, p_content: String, p_model_name: String = "", p
 		show_tool_call(tc)
 
 
-## 开始流式接收消息
+# 开始流式接收消息
 func start_stream(p_role: String, p_model_name: String = "") -> void:
 	_set_title(p_role, p_model_name)
 	_clear_content()
 	
 	# 工具角色流式模式
+	#if p_role == ChatMessage.ROLE_TOOL:
+	#	_create_tool_output_block()
+	#	_streaming = true
+	#	return
+	
 	if p_role == ChatMessage.ROLE_TOOL:
+		_tool_output_text = ""
 		_create_tool_output_block()
 		_streaming = true
 		return
@@ -188,23 +225,30 @@ func start_stream(p_role: String, p_model_name: String = "") -> void:
 	visible = true
 
 
-## 追加流式文本块
-## [param p_text]: 新增的文本片段
+# 追加流式文本块
+# [param p_text]: 新增的文本片段
 func append_chunk(p_text: String) -> void:
 	if p_text.is_empty():
 		return
 	
 	# 工具模式：追加到 TextEdit，不走解析器
-	if is_instance_valid(_tool_text_edit):
-		_tool_text_edit.text += p_text
-		_tool_text_edit.scroll_vertical = _tool_text_edit.get_line_count() - 1
+	#if is_instance_valid(_tool_text_edit):
+	#	_tool_text_edit.text += p_text
+	#	_tool_text_edit.scroll_vertical = _tool_text_edit.get_line_count() - 1
+	#	return
+	
+	# 工具模式：累积文本并刷新预览。预览被截断封顶，刷新成本恒定；
+	# 工具结果实际是一次性入库，这里只是为将来可能的分段输出留口。
+	if is_instance_valid(_tool_output_label):
+		_tool_output_text += p_text
+		_update_tool_output_display()
 		return
 	
 	_parser.feed(p_text)
 
 
-## 追加流式思考内容
-## [param p_text]: 新增的思考内容片段
+# 追加流式思考内容
+# [param p_text]: 新增的思考内容片段
 func append_reasoning(p_text: String) -> void:
 	if p_text.is_empty():
 		return
@@ -220,10 +264,14 @@ func append_reasoning(p_text: String) -> void:
 		_start_reasoning_fill()
 
 
-## 结束流式接收，刷新解析器缓冲区
+# 结束流式接收，刷新解析器缓冲区
 func finish_stream() -> void:
 	# 工具模式：无需特殊处理
-	if is_instance_valid(_tool_text_edit):
+	#if is_instance_valid(_tool_text_edit):
+	#	return
+	
+	# 工具模式：正文已累积在 _tool_output_text 中，无需收尾
+	if is_instance_valid(_tool_output_label):
 		return
 	
 	# 思考内容收尾：仅展开状态下继续补帧，折叠状态下留到用户展开时再渲染
@@ -234,8 +282,8 @@ func finish_stream() -> void:
 	_finish_typing()
 
 
-## 设置错误信息显示
-## [param p_text]: 错误信息文本
+# 设置错误信息显示
+# [param p_text]: 错误信息文本
 func set_error(p_text: String) -> void:
 	title = "❌ Error"
 	_clear_content()
@@ -243,13 +291,13 @@ func set_error(p_text: String) -> void:
 	label.modulate = Color(1, 0.4, 0.4)
 
 
-## 获取当前消息的角色
+# 获取当前消息的角色
 func get_role() -> String:
 	return get_meta("role") if has_meta("role") else ""
 
 
-## 展示工具调用详情
-## [param p_tool_call]: 工具调用信息字典
+# 展示工具调用详情
+# [param p_tool_call]: 工具调用信息字典
 func show_tool_call(p_tool_call: Dictionary) -> void:
 	# 提取工具名称
 	var tool_name: String = ""
@@ -318,9 +366,12 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 	popout_args_button.text = "Popout"
 	popout_args_button.flat = true
 	popout_args_button.focus_mode = Control.FOCUS_NONE
-	popout_args_button.tooltip_text = "在独立窗口中查看完整工具参数（内联预览可能被截断）"
+	popout_args_button.tooltip_text = "Click Popout to view the full content."
+	#popout_args_button.pressed.connect(func():
+	#	_show_text_viewer(_build_args_viewer_text(String(args_label.get_meta("full_args", ""))), false)
+	#)
 	popout_args_button.pressed.connect(func():
-		_show_text_viewer(_build_args_viewer_text(String(args_label.get_meta("full_args", ""))), false)
+		_show_text_viewer(_build_args_viewer_text(String(args_label.get_meta("full_args", ""))), TextViewerWindow.ViewKind.ARGS)
 	)
 	header.add_child(popout_args_button)
 	
@@ -333,9 +384,9 @@ func show_tool_call(p_tool_call: Dictionary) -> void:
 	_last_ui_node = null
 
 
-## 显示图片内容
-## [param p_data]: 图片数据
-## [param p_mime]: 图片 MIME 类型
+# 显示图片内容
+# [param p_data]: 图片数据
+# [param p_mime]: 图片 MIME 类型
 func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 	if p_data.is_empty():
 		return
@@ -364,32 +415,25 @@ func display_image(p_data: PackedByteArray, p_mime: String) -> void:
 		AIChatLogger.error("Failed to load image buffer in ChatMessageBlock, error code: %d" % err)
 
 
-## 挂起内容渲染（用于视口外优化）
+# 挂起内容渲染（用于视口外优化）
 func suspend_content() -> void:
 	if _is_suspended or _typing_active:
 		return
 	
-	# 无论折叠与否，统一移除内容以彻底释放布局压力
-	custom_minimum_size.y = size.y
-	remove_child(_main_margin_container)
 	_is_suspended = true
+	_sync_content_attachment()
 
 
-## 恢复内容渲染（用于进入视口）
+# 恢复内容渲染（用于进入视口）
 func resume_content() -> void:
 	if not _is_suspended:
 		return
 	
-	add_child(_main_margin_container)
-	custom_minimum_size.y = 0
 	_is_suspended = false
-	
-	# 挂起期间控件离开场景树，分帧渲染会中断；恢复后接着把未渲染的内容补上
-	if is_instance_valid(_reasoning_container) and not _reasoning_container.is_folded():
-		_start_reasoning_fill()
+	_sync_content_attachment()
 
 
-## 查询是否处于挂起状态
+# 查询是否处于挂起状态
 func is_suspended() -> bool:
 	return _is_suspended
 
@@ -506,7 +550,7 @@ func _truncate_args_for_display(p_text: String) -> String:
 	if p_text.length() <= TOOL_ARGS_RENDER_LIMIT:
 		return p_text
 	
-	var suffix: String = "\n… [已截断显示，参数共 %d 字符，完整内容请点 Popout]" % p_text.length()
+	var suffix: String = "\n… [Display truncated — parameters total %d characters. Click Popout to view the full content.]" % p_text.length()
 	return p_text.substr(0, TOOL_ARGS_RENDER_LIMIT) + suffix
 
 
@@ -828,10 +872,9 @@ func _create_code_block(p_lang: String) -> void:
 	popup_code_window_button.text = "Popout"
 	popup_code_window_button.flat = true
 	popup_code_window_button.focus_mode = Control.FOCUS_NONE
+	
 	popup_code_window_button.pressed.connect(func():
-		# 直接传文本给查看窗口：旧实现走"写剪贴板 → 读剪贴板 → 打印全文日志"，
-		# 其中的全量日志在 DEBUG 开启时会把整段代码打印进 Output 面板，本身就是一次卡顿。
-		_show_text_viewer(code_edit.text, true)
+		_show_text_viewer(code_edit.text, TextViewerWindow.ViewKind.CODE)
 	)
 	
 	header.add_child(popup_code_window_button)
@@ -845,22 +888,49 @@ func _append_to_code(p_text: String) -> void:
 		_last_ui_node.insert_text_at_caret(p_text)
 
 
+# 创建工具结果内容区：内联预览 + 全文按钮
+# [为什么用 Label 而不是 TextEdit] Label 没有文本模型、没有行缓冲，只有排版与绘制；
+# 加上预览长度被 TOOL_OUTPUT_INLINE_LIMIT 死封顶，块内成本与结果实际长度完全解耦。
+# 旧实现用 TextEdit + scroll_fit_content_height，设置 text 就要一次性测量全文高度，
+# 而且折叠并不会跳过这次测量，历史加载就表现为逐条卡顿。
 func _create_tool_output_block() -> void:
-	_tool_text_edit = TextEdit.new()
-	# 注意：此处依赖 text 属性 setter（不受 editable 约束）写入内容。
-	# 若将来改用 insert_text() 增量写入，必须仿照 _insert_reasoning_text()
-	# 在调用前后临时放行 editable，否则 editable == false 时新增文本会被引擎静默丢弃。
-	_tool_text_edit.editable = false
-	_tool_text_edit.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_tool_text_edit.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_tool_text_edit.scroll_fit_content_height = true
-	_tool_text_edit.custom_maximum_size.y = 600
-	_tool_text_edit.caret_blink = false
-	_tool_text_edit.highlight_current_line = false
-	# 让鼠标滚轮穿透，避免不可编辑的文本框拦截滚动
-	_tool_text_edit.mouse_filter = Control.MOUSE_FILTER_PASS
-	_content_container.add_child(_tool_text_edit)
-	_last_ui_node = _tool_text_edit
+	var vbox: VBoxContainer = VBoxContainer.new()
+	
+	_tool_output_label = Label.new()
+	_tool_output_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(_tool_output_label)
+	
+	_tool_output_open_button = Button.new()
+	_tool_output_open_button.text = "Popout"
+	_tool_output_open_button.flat = false
+	_tool_output_open_button.focus_mode = Control.FOCUS_NONE
+	# 右对齐：预览可能是多行，按钮单独占一行更稳（同排会被长行挤压）
+	_tool_output_open_button.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_tool_output_open_button.tooltip_text = "Display truncated, Click Popout to view the full content."
+	_tool_output_open_button.pressed.connect(_show_tool_output)
+	vbox.add_child(_tool_output_open_button)
+	
+	_content_container.add_child(vbox)
+	_update_tool_output_display()
+	_last_ui_node = null
+
+
+# 刷新内联预览：不超过上限 → 整段显示且不显示按钮；超过 → 截断并露出按钮
+# [成本] substr() 最多拷贝 TOOL_OUTPUT_INLINE_LIMIT 个字符，与全文长度无关。
+func _update_tool_output_display() -> void:
+	if not is_instance_valid(_tool_output_label):
+		return
+	
+	var total: int = _tool_output_text.length()
+	var truncated: bool = total > TOOL_OUTPUT_INLINE_LIMIT
+	
+	_tool_output_label.text = _tool_output_text.substr(0, TOOL_OUTPUT_INLINE_LIMIT) + ("…" if truncated else "")
+	_tool_output_open_button.visible = truncated
+
+
+# 在独立窗口中打开工具结果全文
+func _show_tool_output() -> void:
+	_show_text_viewer(_tool_output_text, TextViewerWindow.ViewKind.TOOL_OUTPUT)
 
 
 # 触发打字机效果
@@ -916,7 +986,10 @@ func _typewriter_loop() -> void:
 # 打开文本查看窗口
 # [param p_text]: 待显示文本（完整内容，不做截断）
 # [param p_is_code_view]: true = 代码视图（语法高亮 + 行号）；false = 工具参数视图（纯文本）
-func _show_text_viewer(p_text: String, p_is_code_view: bool) -> void:
+# [param p_text]: 待显示文本（完整内容，不做截断）
+# [param p_view]: 视图类型，取 TextViewerWindow.ViewKind
+#func _show_text_viewer(p_text: String, p_is_code_view: bool) -> void:
+func _show_text_viewer(p_text: String, p_view: int) -> void:
 	# is_queued_for_deletion() 必须一起判：点 Close 后同一帧内又点 Popout 时，
 	# 旧窗口已经 queue_free 但尚未真正释放，is_instance_valid() 仍然返回 true，
 	# 此时复用会把内容写进一个即将消失的窗口。
@@ -925,7 +998,8 @@ func _show_text_viewer(p_text: String, p_is_code_view: bool) -> void:
 		add_child(_text_viewer_window)
 		AIChatLogger.debug("[ChatMessageBlock] Text viewer created")
 	
-	_text_viewer_window.show_content(p_text, p_is_code_view)
+	#_text_viewer_window.show_content(p_text, p_is_code_view)
+	_text_viewer_window.show_content(p_text, p_view)
 
 
 # 构造查看窗口显示的工具参数文本
@@ -1013,7 +1087,12 @@ func _render_segments(p_rtl: RichTextLabel, p_segments: Array[MarkdownSegment]) 
 # 清空所有内容
 func _clear_content() -> void:
 	# queue_free 后变量要清掉
-	_tool_text_edit = null
+	#_tool_text_edit = null
+	
+	# 工具结果：正文只存在本变量，块被复用/清理时必须一并重置
+	_tool_output_text = ""
+	_tool_output_label = null
+	_tool_output_open_button = null
 	
 	for c in _content_container.get_children():
 		c.queue_free()
@@ -1055,7 +1134,62 @@ func _ensure_text_block(p_instant: bool) -> void:
 		_last_ui_node = _create_text_block("", p_instant)
 
 
+# 同步内容子树的挂载状态：只有「未挂起」且「未折叠」时才挂在场景树上
+# [为什么折叠也要摘掉] FoldableContainer 折叠只是 set_visible(false)，隐藏控件仍持有
+# 文本缓冲、最小尺寸缓存与主题引用；长会话里这些静态占用会持续累积，摘出场景树才是真卸载。
+# [为什么查看窗口不受影响] Window 不是 Control，块的 Control 子节点才会被折叠隐藏/摘除，
+# _text_viewer_window 始终挂在块上。
+func _sync_content_attachment() -> void:
+	if not is_instance_valid(_main_margin_container):
+		return
+	
+	# 场景编辑器里的实例改动会把场景标记为已修改，直接跳过（运行时实例的 owner 为 null）
+	if owner != null:
+		return
+	
+	var should_attach: bool = not _is_suspended and not _is_fold_detached
+	var is_attached: bool = _main_margin_container.is_inside_tree()
+	
+	if should_attach:
+		if is_attached:
+			return
+		add_child(_main_margin_container)
+		# 挂起期间固定过高度，重新挂载要放开
+		custom_minimum_size.y = 0
+		# 挂起/折叠期间分帧渲染会中断，恢复后接着把未渲染的思考内容补上
+		if is_instance_valid(_reasoning_container) and not _reasoning_container.is_folded():
+			_start_reasoning_fill()
+		return
+	
+	if not is_attached:
+		# 已经离树：折叠时必须把占位高度清掉，否则折叠块会留下一大块空白
+		# （custom_minimum_size 会参与 get_combined_minimum_size()，折叠也压不下去）
+		if _is_fold_detached:
+			custom_minimum_size.y = 0
+		return
+	
+	# 视口剔除要给一个同高的空壳占位，避免列表整体跳动导致剔除结果抖动；
+	# 折叠不需要占位 —— 折叠块的高度本来就只剩标题行
+	custom_minimum_size.y = 0 if _is_fold_detached else size.y
+	remove_child(_main_margin_container)
+
+
 # --- Signal Callbacks ---
+
+# 折叠/展开回调
+func _on_folding_changed(p_is_folded: bool) -> void:
+	# 折叠后打字机没有意义，先收尾，避免计时器继续作用在即将离树的节点上
+	_finish_typing()
+	_is_fold_detached = p_is_folded
+	
+	if not p_is_folded:
+		# 展开必须重新挂载内容：折叠期间占位高度被清零，此时的 size.y 已经不是"完整高度"，
+		# 不能拿来当占位值。这里先解除挂起让内容真正回到树上，若块仍在视口外，
+		# 交给下一轮 _update_visibility_culling()（≤0.2s）按新高度重新挂起与占位。
+		_is_suspended = false
+	
+	_sync_content_attachment()
+
 
 # 普通段落行
 func _on_parser_text_line(p_line: String) -> void:

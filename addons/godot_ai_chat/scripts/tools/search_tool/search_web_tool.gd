@@ -1,9 +1,9 @@
 extends AiTool
 
-## 执行在线搜索（Tavily Search API）。
-##
-## 使用 HTTPClient 实现，无需节点挂载，无场景依赖。
-## 具备分阶段超时、响应体大小上限、有限重试与短期结果缓存。
+# 执行在线搜索（Tavily Search API）。
+#
+# 使用 HTTPClient 实现，无需节点挂载，无场景依赖。
+# 具备分阶段超时、响应体大小上限、有限重试与短期结果缓存。
 
 
 # --- Constants ---
@@ -12,7 +12,7 @@ const SEARCH_HOST: String = "api.tavily.com"
 const SEARCH_PORT: int = 443
 const SEARCH_PATH: String = "/search"
 
-## 分阶段超时（秒）：避免单一超时被某一阶段耗尽
+# 分阶段超时（秒）：避免单一超时被某一阶段耗尽
 const CONNECT_TIMEOUT: float = 10.0
 const HEADER_TIMEOUT: float = 20.0
 const BODY_TIMEOUT: float = 20.0
@@ -20,37 +20,37 @@ const BODY_TIMEOUT: float = 20.0
 const MAX_RETRIES: int = 1
 const RETRY_BASE_DELAY: float = 0.4
 
-## 响应体大小上限（字节）
+# 响应体大小上限（字节）
 const MAX_RESPONSE_BYTES: int = 2 * 1024 * 1024
 
-## 错误详情与单条结果摘要的最大字符数
+# 错误详情与单条结果摘要的最大字符数
 const MAX_ERROR_DETAIL_CHARS: int = 500
 const MAX_RESULT_CONTENT_CHARS: int = 600
 
-## 错误响应体中优先取用的消息键（按优先级）
+# 错误响应体中优先取用的消息键（按优先级）
 const ERROR_MESSAGE_KEYS: Array[String] = ["detail", "error", "message", "msg"]
 
-## 错误消息中最多聚合的数组项数（Tavily 422 会返回多条校验错误）
+# 错误消息中最多聚合的数组项数（Tavily 422 会返回多条校验错误）
 const MAX_ERROR_ITEMS: int = 3
 
 const DEFAULT_MAX_RESULTS: int = 6
 const MAX_RESULTS_LIMIT: int = 20
 
-## 搜索深度白名单与默认值
-## basic = 1 credit/次，advanced = 2 credits/次（更深的抓取与更强的结果召回）
-## 默认取 basic 以节省额度：免费账户 1000 credits/月 ≈ 1000 次 basic 或 500 次 advanced
+# 搜索深度白名单与默认值
+# basic = 1 credit/次，advanced = 2 credits/次（更深的抓取与更强的结果召回）
+# 默认取 basic 以节省额度：免费账户 1000 credits/月 ≈ 1000 次 basic 或 500 次 advanced
 const SEARCH_DEPTHS: Array[String] = ["basic", "advanced"]
 const DEFAULT_SEARCH_DEPTH: String = "basic"
 
-## 相同查询的结果缓存时长（秒）与条目上限
-## 注意：Tavily 的 advanced 深度单次消耗 2 credits，缓存可显著省额度
+# 相同查询的结果缓存时长（秒）与条目上限
+# 注意：Tavily 的 advanced 深度单次消耗 2 credits，缓存可显著省额度
 const CACHE_TTL_SEC: float = 300.0
 const CACHE_MAX_ENTRIES: int = 8
 
 
 # --- Private Vars ---
 
-## 搜索结果缓存：{ "max_results|query": {"time": float, "data": String} }
+# 搜索结果缓存：{ "max_results|query": {"time": float, "data": String} }
 static var _search_cache: Dictionary = {}
 
 
@@ -74,7 +74,7 @@ func get_parameters_schema() -> Dictionary:
 			"search_depth": {
 				"type": "string",
 				"enum": SEARCH_DEPTHS,
-				"description": "Search depth. 'basic' (default) costs 1 API credit and handles most queries well. 'advanced' costs 2 credits but digs deeper and returns richer snippets — use it for research-style or ambiguous queries.",
+				"description": "Search depth. 'basic' (default) handles most queries well. 'advanced' digs deeper and returns richer snippets — use it for research-style or ambiguous queries.",
 				"default": DEFAULT_SEARCH_DEPTH
 			},
 			"max_results": {

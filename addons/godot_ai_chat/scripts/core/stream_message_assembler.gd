@@ -1,11 +1,9 @@
-@tool
 extends RefCounted
 
-## 流式消息装配器
-##
-## 持有「正在构建的助手消息」，把 LLMStreamDelta 落地到 ChatMessage。
-## 它是「数据落地」的唯一入口：Provider 只产出协议无关增量，
-## 视图只消费增量，双方都不需要理解对方的格式。
+# 流式消息装配器
+# 持有「正在构建的助手消息」，把 LLMStreamDelta 落地到 ChatMessage。
+# 它是「数据落地」的唯一入口：Provider 只产出协议无关增量，
+# 视图只消费增量，双方都不需要理解对方的格式。
 
 
 # --- Private Vars ---
@@ -19,19 +17,19 @@ var _slot_index_by_key: Dictionary = {}
 
 # --- Public Functions ---
 
-## 开始装配一条新的助手消息，清空上一次的流内状态
+# 开始装配一条新的助手消息，清空上一次的流内状态
 func begin() -> void:
 	_message = ChatMessage.new(ChatMessage.ROLE_ASSISTANT, "")
 	_slot_index_by_key.clear()
 
 
-## 当前正在装配的消息引用（可能为 null）
+# 当前正在装配的消息引用（可能为 null）
 func get_message() -> ChatMessage:
 	return _message
 
 
-## 将一条增量落地到当前消息
-## [param p_delta]: Provider 产出的协议无关增量
+# 将一条增量落地到当前消息
+# [param p_delta]: Provider 产出的协议无关增量
 func apply(p_delta: LLMStreamDelta) -> void:
 	if _message == null:
 		begin()
@@ -49,7 +47,7 @@ func apply(p_delta: LLMStreamDelta) -> void:
 		_apply_tool_call_delta(raw_delta)
 
 
-## 是否存在可落库的装配结果
+# 是否存在可落库的装配结果
 func has_content() -> bool:
 	if _message == null:
 		return false
@@ -60,8 +58,8 @@ func has_content() -> bool:
 	)
 
 
-## 取出装配完成的消息并重置装配器
-## [return]: 装配结果；无任何内容时返回 null
+# 取出装配完成的消息并重置装配器
+# [return]: 装配结果；无任何内容时返回 null
 func take() -> ChatMessage:
 	var result: ChatMessage = null
 	if has_content():

@@ -21,7 +21,7 @@ const SUPPORTED_EXTENSIONS: Dictionary = {
 
 func _init() -> void:
 	tool_name = "open_file"
-	tool_description = "Opens a file in the Godot editor. Support: `.tscn/.scn` (Scene), `.gd/.gdshader` (Script)."
+	tool_description = "Opens a file in the Godot editor. Support: tscn, scn, gd, gdshader."
 
 
 # --- Public Functions ---

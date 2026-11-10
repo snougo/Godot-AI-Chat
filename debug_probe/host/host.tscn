@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://buma5nguif8sw"]
+
+[ext_resource type="Script" uid="uid://cjr06esswlj8k" path="res://debug_probe/host/host.gd" id="1_kv27d"]
+
+[node name="ProbeHost" type="Node" unique_id=1070993592]
+script = ExtResource("1_kv27d")
+game_scene_path = "res://test/debug_error_test.tscn"
+auto_release_seconds = 6.0

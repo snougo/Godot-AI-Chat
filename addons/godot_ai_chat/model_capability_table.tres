@@ -20,11 +20,6 @@ script = ExtResource("1_3ymue")
 model_name = "kimi-k3"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
-[sub_resource type="Resource" id="Resource_qok1m"]
-script = ExtResource("1_3ymue")
-model_name = "kimi-k2.6"
-metadata/_custom_type_script = "uid://bhoku2teaugtk"
-
 [sub_resource type="Resource" id="Resource_aw0p1"]
 script = ExtResource("1_3ymue")
 model_name = "qwen3.8-max"
@@ -47,18 +42,7 @@ metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [sub_resource type="Resource" id="Resource_0jqhl"]
 script = ExtResource("1_3ymue")
-model_name = "hy4-preview"
-supports_image = false
-metadata/_custom_type_script = "uid://bhoku2teaugtk"
-
-[sub_resource type="Resource" id="Resource_pnwkj"]
-script = ExtResource("1_3ymue")
-model_name = "grok-4.6"
-metadata/_custom_type_script = "uid://bhoku2teaugtk"
-
-[sub_resource type="Resource" id="Resource_lsv3y"]
-script = ExtResource("1_3ymue")
-model_name = "gpt-5.6-luna"
+model_name = "hy4"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [sub_resource type="Resource" id="Resource_nb5fw"]
@@ -88,7 +72,7 @@ metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [sub_resource type="Resource" id="Resource_tr745"]
 script = ExtResource("1_3ymue")
-model_name = "gemini-4-argon-contributor"
+model_name = "gemini-4-argon"
 metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [sub_resource type="Resource" id="Resource_143ib"]
@@ -108,5 +92,5 @@ metadata/_custom_type_script = "uid://bhoku2teaugtk"
 
 [resource]
 script = ExtResource("1_q1pwk")
-entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_qok1m"), SubResource("Resource_aw0p1"), SubResource("Resource_e0s22"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_pnwkj"), SubResource("Resource_lsv3y"), SubResource("Resource_nb5fw"), SubResource("Resource_wuow4"), SubResource("Resource_4h3nd"), SubResource("Resource_h6y6f"), SubResource("Resource_eqaw8"), SubResource("Resource_tr745"), SubResource("Resource_143ib"), SubResource("Resource_3gyi1"), SubResource("Resource_6y17e")])
+entries = Array[ExtResource("1_3ymue")]([SubResource("Resource_k5mj3"), SubResource("Resource_ypble"), SubResource("Resource_ph8tt"), SubResource("Resource_aw0p1"), SubResource("Resource_e0s22"), SubResource("Resource_3ymue"), SubResource("Resource_55nqm"), SubResource("Resource_0jqhl"), SubResource("Resource_nb5fw"), SubResource("Resource_wuow4"), SubResource("Resource_4h3nd"), SubResource("Resource_h6y6f"), SubResource("Resource_eqaw8"), SubResource("Resource_tr745"), SubResource("Resource_143ib"), SubResource("Resource_3gyi1"), SubResource("Resource_6y17e")])
 metadata/_custom_type_script = "uid://dtmqixbcgp0g2"

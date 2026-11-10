@@ -1,23 +1,27 @@
 extends AiTool
 
-## 通用脚本文件创建工具。
-## 支持创建 GDScript(.gd)、Godot Shader(.gdshader) 与 GLSL(.glsl) 文件。
-## 文件类型由 file_name 的扩展名决定。
-## 注意：目标文件夹必须已存在，不会自动创建。
-## 说明：本类为 RefCounted 工具，仅通过 new() 实例化，故无需 @tool。
+# 通用脚本文件创建工具。
+# 支持创建 GDScript(.gd)、Godot Shader(.gdshader) 与 GLSL(.glsl) 文件。
+# 文件类型由 file_name 的扩展名决定。
+# 注意：目标文件夹必须已存在，不会自动创建。
+# .gd 内容会在写盘前做静态编译检查：存在编译错误时不创建文件（可用 skip_compile_check 跳过）。
+# 说明：本类为 RefCounted 工具，仅通过 new() 实例化，故无需 @tool。
 
 
 # --- Constants ---
 
-## 允许创建的脚本扩展名
+# 允许创建的脚本扩展名
 const SCRIPT_EXTENSIONS: Array[String] = ["gd", "gdshader", "glsl"]
+
+# GDScript 静态编译检查器（仅对 .gd 生效）
+const GDScriptCompileChecker := preload("res://addons/godot_ai_chat/scripts/helper/gdscript_compile_checker.gd")
 
 
 # --- Built-in Functions ---
 
 func _init() -> void:
 	tool_name = "create_script_file"
-	tool_description = "Creates a new script file. Support: gd, gdshader, glsl."
+	tool_description = "Creates a new script file. Support: gd, gdshader, glsl. `.gd` content is compile-checked before writing — on compile errors the file is not created."
 
 
 # --- Public Functions ---
@@ -37,6 +41,10 @@ func get_parameters_schema() -> Dictionary:
 			"content": {
 				"type": "string",
 				"description": "Initial file content."
+			},
+			"skip_compile_check": {
+				"type": "boolean",
+				"description": "Optional. Set true to skip the GDScript compile check for `.gd` content (e.g. the script preloads a file that does not exist yet, or you intentionally create an incomplete script). Default false."
 			}
 		},
 		"required": ["path", "file_name", "content"]
@@ -47,6 +55,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	var folder_path: String = p_args.get("path", "")
 	var file_name: String = p_args.get("file_name", "")
 	var content: String = p_args.get("content", "")
+	var skip_compile_check: bool = bool(p_args.get("skip_compile_check", false))
 	
 	if folder_path.is_empty() or file_name.is_empty() or content.is_empty():
 		return ToolResult.fail("Error: 'path', 'file_name', and 'content' are required.")
@@ -75,6 +84,17 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if ext not in SCRIPT_EXTENSIONS:
 		return ToolResult.fail("Error: Invalid extension '.%s'. Script files must use one of: .gd, .gdshader, .glsl." % ext)
 	
+	# .gd 静态编译检查：在写盘之前做，失败则不留任何文件
+	var compile_note: String = ""
+	if ext == "gd":
+		if skip_compile_check:
+			compile_note = "\nCompile check: skipped by request (`skip_compile_check = true`)."
+		else:
+			var outcome: GDScriptCompileChecker.Outcome = GDScriptCompileChecker.check(content, full_path)
+			if not outcome.is_passed:
+				return ToolResult.fail(GDScriptCompileChecker.format_failure(outcome, full_path, "created"))
+			compile_note = "\n" + GDScriptCompileChecker.format_pass_note(outcome)
+	
 	var file := FileAccess.open(full_path, FileAccess.WRITE)
 	if not file:
 		return ToolResult.fail("Failed to create script file: " + str(FileAccess.get_open_error()))
@@ -92,4 +112,4 @@ func execute(p_args: Dictionary) -> ToolResult:
 	else:
 		ToolBox.update_editor_filesystem(full_path)
 	
-	return ToolResult.ok("Script created: %s" % full_path)
+	return ToolResult.ok("Script created: %s%s" % [full_path, compile_note])

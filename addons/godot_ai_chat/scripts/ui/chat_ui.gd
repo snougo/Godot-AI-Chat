@@ -1,36 +1,35 @@
 @tool
 extends Control
 
-## 主 UI 控制器
-##
-## 负责管理插件的主要 UI 交互，包括状态切换、模型选择、存档管理等。
-## 作为 UI 层与业务逻辑层的桥梁，转发信号并更新界面状态。
-## Token 计数的累计逻辑由 TokenUsageTracker 承担，本类只负责渲染。
+# 主 UI 控制器
+# 负责管理插件的主要 UI 交互，包括状态切换、模型选择、存档管理等。
+# 作为 UI 层与业务逻辑层的桥梁，转发信号并更新界面状态。
+# Token 计数的累计逻辑由 TokenUsageTracker 承担，本类只负责渲染。
 
 
 # --- Signals ---
 
-## 当用户点击发送按钮时发出
+# 当用户点击发送按钮时发出
 signal send_button_pressed(user_prompt: String)
-## 当用户点击停止按钮时发出
+# 当用户点击停止按钮时发出
 signal stop_button_pressed
-## 当用户点击新聊天按钮时发出
+# 当用户点击新聊天按钮时发出
 signal new_chat_button_pressed
-## 当用户点击压缩按钮时发出
+# 当用户点击压缩按钮时发出
 signal compress_button_pressed
-## 当用户在设置页面点击保存按钮时发出
+# 当用户在设置页面点击保存按钮时发出
 signal settings_save_button_pressed
-## 当用户点击重新连接按钮时发出
+# 当用户点击重新连接按钮时发出
 signal reconnect_button_pressed
-## 当用户在下拉菜单中选择了不同的 AI 模型时发出
+# 当用户在下拉菜单中选择了不同的 AI 模型时发出
 signal model_selection_changed(model_name: String)
-## 当用户选择文件路径以保存为 .md 格式后发出
+# 当用户选择文件路径以保存为 .md 格式后发出
 signal save_as_markdown_button_pressed(file_path: String)
-## 当用户选择一个聊天存档并点击加载按钮时发出
+# 当用户选择一个聊天存档并点击加载按钮时发出
 signal load_chat_button_pressed(session_name: String)
-## 当用户点击删除按钮时发出
+# 当用户点击删除按钮时发出
 signal delete_chat_button_pressed(session_name: String)
-## 当用户通过 UI 切换工作区时发出
+# 当用户通过 UI 切换工作区时发出
 signal workspace_changed(new_path: String)
 
 
@@ -43,7 +42,7 @@ const TokenUsageTracker := preload("res://addons/godot_ai_chat/scripts/helper/to
 
 # --- Enums ---
 
-## UI 状态定义
+# UI 状态定义
 enum UIState {
 	IDLE,                ## 空闲状态
 	CONNECTING,          ## 正在连接服务器
@@ -63,7 +62,6 @@ enum UIState {
 
 @onready var _workspace_label: Label = $TabContainer/Chat/VBoxContainer/WorkspaceLabel
 @onready var _workspace_select_button: Button = $TabContainer/Chat/VBoxContainer/HBoxContainer/WorkspaceSelectButton
-#@onready var _workspace_file_dialog: FileDialog = $WorkspaceFileDialog
 
 @onready var _session_selector: OptionButton = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/SessionSelector
 @onready var _delete_chat_button: Button = $TabContainer/Chat/VBoxContainer/ChatArchiveContainer/DeleteButton
@@ -93,17 +91,17 @@ enum UIState {
 
 # --- Public Vars ---
 
-## 当前 UI 状态
+# 当前 UI 状态
 var current_state: UIState = UIState.IDLE
-## 缓存的模型列表
+# 缓存的模型列表
 var model_list: Array[String] = []
-## 用于判断是否为首次运行或初始化阶段
+# 用于判断是否为首次运行或初始化阶段
 var is_first_init: bool = false
 
 
 # --- Private Vars ---
 
-## Token 用量累计器
+# Token 用量累计器
 var _token_tracker: TokenUsageTracker = TokenUsageTracker.new()
 # 标记当前是否在等待删除确认
 var _pending_delete_session_name: String = ""
@@ -157,13 +155,13 @@ func get_settings_panel() -> SettingsPanel:
 	return _settings_panel_node
 
 
-## 初始化编辑器依赖
+# 初始化编辑器依赖
 func initialize_editor_dependencies(p_editor_filesystem: EditorFileSystem) -> void:
 	if not p_editor_filesystem.filesystem_changed.is_connected(_on_filesystem_changed):
 		p_editor_filesystem.filesystem_changed.connect(_on_filesystem_changed)
 
 
-## 更新 UI 的整体状态
+# 更新 UI 的整体状态
 func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 	current_state = p_new_state
 	_status_label.text = p_payload if not p_payload.is_empty() else _get_default_status_text(p_new_state)
@@ -207,7 +205,7 @@ func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
 				_show_error_dialog(p_payload)
 
 
-## 更新模型下拉列表的内容
+# 更新模型下拉列表的内容
 func update_model_list(p_model_names: Array[String]) -> void:
 	var current_msg: String = _status_label.text
 	if not ("No Chat" in current_msg):
@@ -217,7 +215,7 @@ func update_model_list(p_model_names: Array[String]) -> void:
 	_apply_model_filter()
 
 
-## 当获取模型列表请求失败时调用
+# 当获取模型列表请求失败时调用
 func get_model_list_request_failed(p_error_message: String) -> void:
 	if is_first_init:
 		update_ui_state(UIState.ERROR, p_error_message)
@@ -228,7 +226,7 @@ func get_model_list_request_failed(p_error_message: String) -> void:
 		is_first_init = true
 
 
-## 根据文件名同步下拉选择框
+# 根据文件名同步下拉选择框
 func select_session_by_name(p_session_name: String) -> void:
 	# 记录当前会话文件名
 	_current_session_name = p_session_name
@@ -265,12 +263,12 @@ func update_session_selector() -> void:
 			_session_selector.select(new_selection_index)
 
 
-## 清空用户输入框
+# 清空用户输入框
 func clear_user_input() -> void:
 	_user_input.clear()
 
 
-## 更新对话轮数显示
+# 更新对话轮数显示
 func update_turn_display(p_current_turns: int, p_max_turns: int) -> void:
 	if _chat_turn_display:
 		_chat_turn_display.text = "Turns: %d / %d" % [p_current_turns, p_max_turns]
@@ -281,37 +279,37 @@ func update_turn_display(p_current_turns: int, p_max_turns: int) -> void:
 			_chat_turn_display.modulate = Color.WHITE
 
 
-## 准备开始新的请求：结算上一轮
+# 准备开始新的请求：结算上一轮
 func prepare_for_new_request() -> void:
 	_token_tracker.archive_current()
 	_refresh_token_display()
 
 
-## 载入会话时恢复其存档中的累计用量
-## [param p_archived]: 存档中的累计用量；新建会话时应传全零
+# 载入会话时恢复其存档中的累计用量
+# [param p_archived]: 存档中的累计用量；新建会话时应传全零
 func restore_token_usage(p_archived: Dictionary) -> void:
 	_token_tracker.load_archived(p_archived)
 	_refresh_token_display()
 
 
-## 获取当前累计用量的快照，供调用方落库到会话存档
+# 获取当前累计用量的快照，供调用方落库到会话存档
 func get_token_usage_snapshot() -> Dictionary:
 	return _token_tracker.get_total_usage()
 
 
-## 更新 UI 界面的 Token 数据
+# 更新 UI 界面的 Token 数据
 func update_token_usage_display(p_usage: Dictionary) -> void:
 	_token_tracker.update_current(p_usage)
 	_refresh_token_display()
 
 
-## 重置 Token 显示
+# 重置 Token 显示
 func reset_token_usage_display() -> void:
 	_token_tracker.reset()
 	_refresh_token_display()
 
 
-## 显示一个确认/成功对话框
+# 显示一个确认/成功对话框
 func show_confirmation(p_message: String) -> void:
 	_error_dialog.title = "Notification"
 	_error_dialog.dialog_text = p_message
@@ -469,7 +467,7 @@ func _on_delete_chat_button_pressed() -> void:
 	var archive_name: String = _session_selector.get_item_text(selected_index)
 	
 	_error_dialog.title = "Confirm Delete"
-	_error_dialog.dialog_text = "Are you sure you want to delete '%s'?\n\nThis action cannot be undone." % archive_name
+	_error_dialog.dialog_text = "Move '%s' to the system Recycle Bin?\n\nIt can be restored from the Recycle Bin if needed." % archive_name
 	
 	_pending_delete_session_name = archive_name
 	

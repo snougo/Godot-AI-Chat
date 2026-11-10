@@ -1,26 +1,13 @@
-extends AiTool
+@tool
+extends BaseResourceTool
 
-## 资源文件创建工具。
-## 通过引擎 API 合法创建 Resource 资源文件(.tres/.res)。
-## 使用 ClassDB.instantiate() 实例化后，通过 ResourceSaver.save() 保存。
-## 注意：目标文件夹必须已存在，不会自动创建。
-## 务必指定 resource_type 为具体的资源子类（如 StyleBoxFlat），避免使用基类 Resource。
-
-
-# --- Constants ---
-
-## 允许的资源文件扩展名
-const RESOURCE_EXTENSIONS: Array[String] = ["tres", "res"]
-
-
-# --- Built-in Functions ---
+## 新建资源文件。可以一次带上初始属性——省掉"先 create 再 edit"的两步。
+## 只接受可实例化的具体类型；基类会被拒绝，因为存出来是空文件。
 
 func _init() -> void:
 	tool_name = "create_resource"
-	tool_description = "Creates a new Resource file."
+	tool_description = "Creates a new .tres/.res resource, optionally with initial properties."
 
-
-# --- Public Functions ---
 
 func get_parameters_schema() -> Dictionary:
 	return {
@@ -28,15 +15,19 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"path": {
 				"type": "string",
-				"description": "Target folder path. The folder must already exist."
+				"description": "Target folder. It must already exist."
 			},
 			"file_name": {
 				"type": "string",
-				"description": "File name with `.tres` extension."
+				"description": "Bare file name with .tres or .res, e.g. 'stone.tres'. A directory here is rejected."
 			},
 			"resource_type": {
 				"type": "string",
-				"description": "Concrete Resource subclass name to instantiate."
+				"description": "Concrete Resource class or a project script class name. Base types (Resource) are rejected."
+			},
+			"properties": {
+				"type": "object",
+				"description": "Optional initial properties. Nothing is created unless every value is valid."
 			}
 		},
 		"required": ["path", "file_name", "resource_type"]
@@ -44,61 +35,91 @@ func get_parameters_schema() -> Dictionary:
 
 
 func execute(p_args: Dictionary) -> ToolResult:
-	var folder_path: String = p_args.get("path", "")
-	var file_name: String = p_args.get("file_name", "")
+	var unknown: String = check_params(p_args, ["path", "file_name", "resource_type", "properties"])
+	if not unknown.is_empty():
+		return ToolResult.fail(unknown)
 	
-	if folder_path.is_empty() or file_name.is_empty():
-		return ToolResult.fail("Error: 'path' and 'file_name' are required.")
+	var folder: String = text_of(p_args, "path")
+	var file_name: String = text_of(p_args, "file_name")
+	var type_name: String = text_of(p_args, "resource_type")
 	
-	# 确保文件夹路径以 / 结尾
-	if not folder_path.ends_with("/"):
-		folder_path += "/"
+	if folder.is_empty() or file_name.is_empty() or type_name.is_empty():
+		return ToolResult.fail("'path', 'file_name' and 'resource_type' are required.")
+	if not folder.begins_with("res://"):
+		return ToolResult.fail("'path' must start with res://.")
+	if not folder.ends_with("/"):
+		folder += "/"
 	
-	var full_path: String = folder_path + file_name
+	if file_name.contains("/"):
+		return ToolResult.fail("'file_name' must be a bare file name — put the directory in 'path'.")
 	
-	# 安全校验
-	var safety_err: String = validate_path_safety(full_path)
-	if not safety_err.is_empty():
-		return ToolResult.fail(safety_err)
+	if not DirAccess.dir_exists_absolute(folder):
+		return ToolResult.fail("Folder does not exist: %s. Create it first." % folder)
 	
-	# 检查文件是否已存在
+	var full_path: String = folder + file_name
+	if full_path.get_extension().to_lower() not in RESOURCE_EXTENSIONS:
+		return ToolResult.fail("'%s' must end with .tres or .res." % file_name)
+	
+	var safety: String = validate_path_safety(full_path)
+	if not safety.is_empty():
+		return ToolResult.fail(safety)
+	
 	if FileAccess.file_exists(full_path):
-		return ToolResult.fail("Error: File already exists at %s. Overwriting is not allowed." % full_path)
-	
-	# 检查目标文件夹是否存在（禁止越权创建文件夹）
-	if not DirAccess.dir_exists_absolute(folder_path):
-		return ToolResult.fail("Error: Target folder '%s' does not exist. Use `create_folder` to create it first." % folder_path)
-	
-	# 强制校验扩展名
-	var ext: String = full_path.get_extension().to_lower()
-	if ext not in RESOURCE_EXTENSIONS:
-		return ToolResult.fail("Error: Invalid extension '.%s'. Resource files must use: .tres (text) or .res (binary)." % ext)
-	
-	# 创建资源
-	var type: String = p_args.get("resource_type", "Resource")
-	
-	var resource: Resource = _instantiate_resource(type)
-	if not resource:
-		return ToolResult.fail("Error: Invalid resource type '%s'. Must be a Resource subclass." % type)
-	
-	var err: Error = ResourceSaver.save(resource, full_path)
-	
-	if err == OK:
-		ToolBox.update_editor_filesystem(full_path)
-		return ToolResult.ok("Resource created: %s (type: %s). Use `open_file` to open it." % [full_path, type])
-	
-	return ToolResult.fail("Error: failed to save resource. Error code: %d" % err)
+		return ToolResult.fail("File already exists: %s. Use edit_resource instead of overwriting." % full_path)
 
-
-# --- Private Functions ---
-
-# 根据类型字符串实例化资源
-# 通过 ClassDB 动态创建指定类型的 Resource 实例
-func _instantiate_resource(p_type_str: String) -> Resource:
-	if ClassDB.class_exists(p_type_str):
-		if not ClassDB.is_parent_class(p_type_str, "Resource"):
-			return null
-		var instance = ClassDB.instantiate(p_type_str)
-		if instance is Resource:
-			return instance
-	return null
+	if type_name in BASE_RESOURCE_TYPES:
+		return ToolResult.fail("'%s' is a base type — a file created from it would contain nothing. Pick a concrete subclass.%s" % [type_name, candidate_suffix(resource_candidates(type_name))])
+	
+	var resource: Resource = instantiate_resource_by_class(type_name)
+	if resource == null:
+		return ToolResult.fail("'%s' is not an instantiable Resource class.%s" % [type_name, candidate_suffix(resource_candidates(type_name))])
+	
+	var rows: Array[Dictionary] = []
+	var props_raw: Variant = p_args.get("properties")
+	
+	if props_raw != null:
+		if not (props_raw is Dictionary):
+			return ToolResult.fail("'properties' must be an object mapping property names to values.")
+		var props: Dictionary = props_raw
+		var writes: Array[Dictionary] = []
+		var problems: Array[String] = []
+		
+		for raw_key in props.keys():
+			var key: String = str(raw_key)
+			var split: Dictionary = split_property_key(key)
+			if not bool(split.get("ok", false)):
+				problems.append(str(split.get("error", "")))
+				continue
+			
+			var sub: Array = split.get("sub_path", [])
+			var write: Dictionary = resolve_property_write(resource, str(split.get("property", "")), sub, props[raw_key])
+			if not bool(write.get("ok", false)):
+				problems.append("'%s': %s" % [key, str(write.get("error", ""))])
+				continue
+			
+			write["key"] = key
+			writes.append(write)
+		
+		if not problems.is_empty():
+			return ToolResult.fail("Nothing was created — invalid property value(s):\n%s" % "\n".join(PackedStringArray(problems)))
+		
+		for write: Dictionary in writes:
+			var indexed: String = str(write.get("indexed"))
+			resource.set_indexed(indexed, write.get("value"))
+			rows.append({"property": indexed, "value": json_safe(resource.get_indexed(indexed))})
+	
+	# 让内存实例与这个路径绑定，再写盘
+	resource.take_over_path(full_path)
+	var save_error: String = save_resource_file(resource, full_path)
+	if not save_error.is_empty():
+		return ToolResult.fail(save_error)
+	
+	var summary: Dictionary = {
+		"ok": true,
+		"path": full_path,
+		"resource_type": resource.get_class(),
+		"script": script_path_of(resource),
+		"properties": rows,
+	}
+	
+	return ToolResult.ok(JSON.stringify(summary, "\t") + "\n\nOpen it with `open_file`, or keep editing with `edit_resource`.")
