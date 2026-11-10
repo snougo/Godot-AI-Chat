@@ -1,0 +1,2 @@
+*.gd linguist-language=GDScript
+*.gdshader linguist-language=GDShader
