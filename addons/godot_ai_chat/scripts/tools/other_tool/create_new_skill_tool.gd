@@ -94,7 +94,7 @@ func _create_skill_structure(p_target_folder: String, p_skill_md_content: String
 	if write_md_result.is_fail():
 		return write_md_result
 	
-	var create_config_result: ToolResult = _create_sub_agent_config(p_target_folder)
+	var create_config_result: ToolResult = _create_skill_agent_config(p_target_folder)
 	if create_config_result.is_fail():
 		return create_config_result
 	
@@ -139,18 +139,18 @@ func _write_skill_md(p_target_folder: String, p_skill_md_content: String) -> Too
 	return ToolResult.ok("Successfully created Skill.md at " + file_path)
 
 
-# 创建 SubAgentConfig 资源文件
+# 创建 SkillAgentConfig 资源文件
 # [param p_target_folder]: 技能文件夹路径
 # [return]: 操作结果字典
-func _create_sub_agent_config(p_target_folder: String) -> ToolResult:
-	var config := SubAgentConfig.new()
+func _create_skill_agent_config(p_target_folder: String) -> ToolResult:
+	var config := SkillAgentConfig.new()
 	# 设置一些合理默认值
 	config.api_provider = "OpenAI-ChatCompletions"
 	
 	var config_path: String = p_target_folder.path_join(PluginPaths.SKILL_CONFIG_FILE_NAME)
 	var err: Error = ResourceSaver.save(config, config_path)
 	if err != OK:
-		return ToolResult.fail("Error: saving sub_agent_config: " + str(err))
+		return ToolResult.fail("Error: saving skill_agent_config: " + str(err))
 	
 	return ToolResult.ok("")
 
@@ -183,7 +183,7 @@ func _create_skill_resource(p_target_folder: String, p_skill_md_content: String)
 	
 	var config_path: String = p_target_folder.path_join(PluginPaths.SKILL_CONFIG_FILE_NAME)
 	if FileAccess.file_exists(config_path):
-		resource.sub_agent_config = load(config_path)
+		resource.skill_agent_config = load(config_path)
 	
 	var folder_name: String = p_target_folder.get_file()
 	var resource_path: String = p_target_folder.path_join(folder_name + ".tres")

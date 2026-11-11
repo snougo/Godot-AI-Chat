@@ -172,18 +172,11 @@ static func read_script_content(p_path: String, p_start_line: int = 1, p_line_co
 	if not FileAccess.file_exists(p_path):
 		return {"success": false, "data": "Error: File not found: " + p_path}
 	
-	var resource: Resource = load(p_path)
 	var source_code: String = ""
-	
-	if resource is Script:
-		if not resource.has_source_code():
-			return {"success": false, "data": "Error: Script has no source code: " + p_path}
-		source_code = resource.source_code
-	elif resource is Shader:
-		source_code = resource.get_code()
-		if source_code.is_empty():
-			return {"success": false, "data": "Error: Shader has no source code: " + p_path}
-	else:
+	if p_path.get_extension().to_lower() in ["gd", "gdshader"]:
+		# .gd / .gdshader 一律直读磁盘：编辑器环境下 load() 会命中 ResourceCache 的旧资源实例
+		# （文件被外部改写后不会自动重载），source_code 是过期内容。
+		# 读文件必须反映磁盘真相，否则写工具的"成功"永远无法被验证。
 		var file: FileAccess = FileAccess.open(p_path, FileAccess.READ)
 		if not is_instance_valid(file):
 			return {"success": false, "data": "Error: Failed to open file: " + p_path}
@@ -191,6 +184,25 @@ static func read_script_content(p_path: String, p_start_line: int = 1, p_line_co
 		file.close()
 		if source_code.is_empty():
 			return {"success": false, "data": "Error: File is empty: " + p_path}
+	else:
+		var resource: Resource = load(p_path)
+		
+		if resource is Script:
+			if not resource.has_source_code():
+				return {"success": false, "data": "Error: Script has no source code: " + p_path}
+			source_code = resource.source_code
+		elif resource is Shader:
+			source_code = resource.get_code()
+			if source_code.is_empty():
+				return {"success": false, "data": "Error: Shader has no source code: " + p_path}
+		else:
+			var file2: FileAccess = FileAccess.open(p_path, FileAccess.READ)
+			if not is_instance_valid(file2):
+				return {"success": false, "data": "Error: Failed to open file: " + p_path}
+			source_code = file2.get_as_text()
+			file2.close()
+			if source_code.is_empty():
+				return {"success": false, "data": "Error: File is empty: " + p_path}
 	
 	var extension: String = p_path.get_extension().to_lower()
 	var lang_tag: String = "gdscript"
@@ -202,7 +214,7 @@ static func read_script_content(p_path: String, p_start_line: int = 1, p_line_co
 	var compacted: Dictionary = _prepare_body(window["text"], window, true)
 	
 	var md: String = "Content for Script: `%s`" % p_path.get_file()
-	#md += _add_line_numbers(source_code)
+	# md += _add_line_numbers(source_code)
 	# 现在可以通过工具 ge_code_line_number 来精确获取代码行号了
 	return {"success": true, "data": _build_output(md, compacted, lang_tag)}
 

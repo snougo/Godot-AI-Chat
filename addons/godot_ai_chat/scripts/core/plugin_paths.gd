@@ -19,8 +19,8 @@ const CONFIGS_DIR: String = PLUGIN_DIR + "configs/"
 ## 插件设置资源文件路径
 const SETTINGS_PATH: String = CONFIGS_DIR + "plugin_settings_config.tres"
 
-## SubAgent 全局配置资源文件路径
-const SUB_AGENT_CONFIG_PATH: String = CONFIGS_DIR + "sub_agent_config.tres"
+## Skill Agent 全局配置资源文件路径
+const SKILL_AGENT_CONFIG_PATH: String = CONFIGS_DIR + "skill_agent_config.tres"
 
 ## 上下文压缩配置资源文件路径
 const COMPRESSION_CONFIG_PATH: String = CONFIGS_DIR + "context_compression_config.tres"
@@ -43,7 +43,7 @@ const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 ## 工具脚本根目录
 const TOOL_DIR: String = PLUGIN_DIR + "scripts/tools/"
 
-## Main-Agent 工具配置资源文件路径
+## Main Agent 工具配置资源文件路径
 const MAIN_AGENT_TOOL_CONFIG_PATH: String = PLUGIN_DIR + "main_agent_tool_config.tres"
 
 
@@ -67,8 +67,8 @@ const MEMORY_STORE_PATH: String = PLUGIN_DIR + "memory_store.tres"
 ## 技能目录
 const SKILLS_DIR: String = PLUGIN_DIR + "skills/"
 
-## 技能文件夹内的 SubAgent 配置文件固定文件名（每技能一个）
-const SKILL_CONFIG_FILE_NAME: String = "skill_sub_agent_config.tres"
+## 技能文件夹内的 Skill Agent 配置文件固定文件名（每技能一个）
+const SKILL_CONFIG_FILE_NAME: String = "skill_agent_config.tres"
 
 
 # --- Assets ---

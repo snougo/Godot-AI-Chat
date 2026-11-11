@@ -1,11 +1,11 @@
 @tool
-class_name AIChatSubAgentOrchestrator
+class_name AIChatSkillAgentOrchestrator
 extends Node
 
-# Sub-Agent 编排器
+# Skill Agent 编排器
 # 使用技能（Skill）声明的工具集独立完成一个任务，并回报结果。
-# 与主 Agent 完全隔离：独立历史、独立工具集、独立 Provider 实例。
-# 网络层与主 Agent 共用同一套 StreamRequest 实现，隔离性由「独立实例」而非「独立实现」保证。
+# 与 Main Agent 完全隔离：独立历史、独立工具集、独立 Provider 实例。
+# 网络层与 Main Agent 共用同一套 StreamRequest 实现，隔离性由「独立实例」而非「独立实现」保证。
 
 
 # --- Constants ---
@@ -15,7 +15,7 @@ const StreamMessageAssembler := preload("res://addons/godot_ai_chat/scripts/core
 const StreamRequest := preload("res://addons/godot_ai_chat/scripts/network/stream_request.gd")
 const JSONRepairHelper := preload("res://addons/godot_ai_chat/scripts/helper/json_repair_helper.gd")
 
-const REPORT_TASK_TOOL_SCRIPT: Resource = preload("res://addons/godot_ai_chat/scripts/tools/sub_agent_tool/report_task_result_tool.gd")
+const REPORT_TASK_TOOL_SCRIPT: Resource = preload("res://addons/godot_ai_chat/scripts/tools/skill_agent_tool/report_task_result_tool.gd")
 
 # 控制台流式输出段落标识（空串表示当前没有打开的段落）
 const CONSOLE_SEGMENT_THINKING: String = "thinking"
@@ -49,9 +49,9 @@ var task_description: String = ""
 
 # --- Private Vars ---
 
-var _config: SubAgentConfig
+var _config: SkillAgentConfig
 var _history: ChatMessageHistory
-var _sub_agent_tools: Dictionary = {}
+var _skill_agent_tools: Dictionary = {}
 
 # 控制台流式输出：当前打开的段落
 # [为什么需要状态] 流式增量是碎片化的，段落标题只能在首块打印一次；
@@ -62,7 +62,7 @@ var _console_segment: String = ""
 var _console_line_buffer: String = ""
 
 # 活动实例登记表（供插件停用时统一释放）
-static var _active_instances: Array[AIChatSubAgentOrchestrator] = []
+static var _active_instances: Array[AIChatSkillAgentOrchestrator] = []
 
 
 # --- Built-in Functions ---
@@ -70,7 +70,7 @@ static var _active_instances: Array[AIChatSubAgentOrchestrator] = []
 func _exit_tree() -> void:
 	_active_instances.erase(self)
 	_clean_reference()
-	AIChatLogger.info("[SubAgent] Removed from scene tree and ready to free.")
+	AIChatLogger.info("[Skill Agent] Removed from scene tree and ready to free.")
 
 
 func _ready() -> void:
@@ -83,20 +83,20 @@ func _ready() -> void:
 func run_task() -> String:
 	# 优先使用技能级配置，若无则回退到全局配置
 	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
-	if skill_res and skill_res.get("sub_agent_config") != null:
-		_config = skill_res.sub_agent_config
+	if skill_res and skill_res.get("skill_agent_config") != null:
+		_config = skill_res.skill_agent_config
 	else:
-		_config = SubAgentConfig.get_config()
+		_config = SkillAgentConfig.get_config()
 	
 	_history = ChatMessageHistory.new()
 	
-	AIChatLogger.info("[Sub Agent] Starting task with skill: '%s'" % skill_name)
+	AIChatLogger.info("[Skill Agent] Starting task with skill: '%s'" % skill_name)
 	
 	# 1. 加载工具
 	_load_isolated_tools()
 	
 	# 2. 组装上下文（委托给 ContextBuilder）
-	var context_messages: Array[ChatMessage] = ContextBuilder.build_sub_agent_context(
+	var context_messages: Array[ChatMessage] = ContextBuilder.build_skill_agent_context(
 		_config.base_system_prompt,
 		skill_name,
 		task_description
@@ -107,15 +107,15 @@ func run_task() -> String:
 	
 	# 3. 准备 Provider
 	if _config.model_name.is_empty():
-		var err: String = "Error: Sub-Agent startup failed: model name is empty. Please configure it before invoking."
+		var err: String = "Error: Skill Agent startup failed: model name is empty. Please configure it before invoking."
 		AIChatLogger.error(err)
-		_remove_sub_agent()
+		_remove_skill_agent()
 		return err
 	
 	var provider: BaseLLMProvider = ProviderFactory.create_provider(_config.api_provider)
 	if not provider:
-		_remove_sub_agent()
-		return "Error: failed to initialize Sub Agent API Provider."
+		_remove_skill_agent()
+		return "Error: failed to initialize Skill Agent API Provider."
 	
 	# 告知 Provider 目标模型与端点：下方能力查询（schema 方言 / inline 图片）
 	# 发生在 build_request_body() 之前，无法通过请求参数传入
@@ -142,7 +142,7 @@ func run_task() -> String:
 		
 		# 轮次分隔：流式输出需要明确的上下文边界，否则多轮内容在控制台里首尾相连
 		_close_console_segment()
-		AIChatLogger.info("[Sub Agent] --- Turn %d ---" % turns_taken)
+		AIChatLogger.info("[Skill Agent] --- Turn %d ---" % turns_taken)
 		
 		# 构建流式请求
 		var tool_defs: Array[Dictionary] = _get_tool_definitions(requires_gemini_schema)
@@ -156,7 +156,7 @@ func run_task() -> String:
 		if _config.max_chat_turns - used_steps <= step_warn_threshold:
 			if not step_notice_logged:
 				step_notice_logged = true
-				AIChatLogger.info("[Sub Agent] Step budget running low: %d / %d consumed." % [used_steps, _config.max_chat_turns])
+				AIChatLogger.info("[Skill Agent] Step budget running low: %d / %d consumed." % [used_steps, _config.max_chat_turns])
 			request_messages = ContextBuilder.append_step_counter(_history.messages, used_steps, _config.max_chat_turns)
 		
 		var body: Dictionary = provider.build_request_body(_config.model_name, request_messages, _config.temperature, true, tool_defs)
@@ -168,8 +168,8 @@ func run_task() -> String:
 		var response: Dictionary = await _do_stream_request_with_retry(url, headers, body, provider, _config.network_timeout)
 		
 		if response.has("error"):
-			AIChatLogger.error("[Sub Agent] " + String(response.error))
-			_remove_sub_agent()
+			AIChatLogger.error("[Skill Agent] " + String(response.error))
+			_remove_skill_agent()
 			return String(response.error)
 		
 		var content: String = String(response.get("content", ""))
@@ -192,15 +192,15 @@ func run_task() -> String:
 			assistant_msg.metadata[ChatMessage.META_THINKING_SIGNATURE] = thinking_signature
 		
 		# 清洗工具调用：剔除伪调用（XML 包裹等），将被误判的文本抢救回 content
-		ToolBox.salvage_and_clean_tool_calls(assistant_msg, _sub_agent_tools)
+		ToolBox.salvage_and_clean_tool_calls(assistant_msg, _skill_agent_tools)
 		_history.add_message(assistant_msg)
 		
 		var clean_tool_calls: Array = assistant_msg.tool_calls
 		
 		if clean_tool_calls.is_empty():
-			_remove_sub_agent()
-			AIChatLogger.warn("[Sub Agent] Stopped without reporting.")
-			return "Sub Agent stopped without reporting a result. Please check the status of the relevant files."
+			_remove_skill_agent()
+			AIChatLogger.warn("[Skill Agent] Stopped without reporting.")
+			return "Skill Agent stopped without reporting a result. Please check the status of the relevant files."
 		
 		# 收集本轮工具返回的图片附件
 		var pending_images: Array[Dictionary] = []
@@ -220,14 +220,14 @@ func run_task() -> String:
 			if t_args == null:
 				t_args = {}
 			
-			AIChatLogger.info("[Sub Agent] Executing Tool: " + t_name)
+			AIChatLogger.info("[Skill Agent] Executing Tool: " + t_name)
 			
 			if t_name == "report_task_result":
 				final_report = "Status: %s\nSummary: %s" % [t_args.get("status", "unknown"), t_args.get("summary", "")]
 				has_reported = true
 				break
 			
-			var tool_inst: AiTool = _sub_agent_tools.get(t_name)
+			var tool_inst: AiTool = _skill_agent_tools.get(t_name)
 			
 			var t_result: String = ""
 			if tool_inst:
@@ -236,7 +236,7 @@ func run_task() -> String:
 				# 先获取结果文本
 				t_result = res.get_data()
 				
-				AIChatLogger.debug("[Sub Agent] Tool Result: " + t_result)
+				AIChatLogger.debug("[Skill Agent] Tool Result: " + t_result)
 				
 				if res.has_image():
 					if supports_inline:
@@ -267,20 +267,20 @@ func run_task() -> String:
 			_history.add_message(img_msg)
 		
 		if has_reported:
-			_remove_sub_agent()
-			AIChatLogger.info("[Sub Agent] Task Finished.")
+			_remove_skill_agent()
+			AIChatLogger.info("[Skill Agent] Task Finished.")
 			return final_report
 	
-	_remove_sub_agent()
-	AIChatLogger.warn("[Sub Agent] Exceeded max turns.")
-	return "Sub Agent reached the maximum execution step limit and was forcibly terminated." \
+	_remove_skill_agent()
+	AIChatLogger.warn("[Skill Agent] Exceeded max turns.")
+	return "Skill Agent reached the maximum execution step limit and was forcibly terminated." \
 	+ "Its task has been partially completed." \
-	+ "Please re-invoke the Sub Agent to continue from where it left off."
+	+ "Please re-invoke the Skill Agent to continue from where it left off."
 
 
-# 释放全部活动 Sub-Agent（插件停用时调用）
+# 释放全部活动 Skill Agent（插件停用时调用）
 static func cancel_all() -> void:
-	for instance: AIChatSubAgentOrchestrator in _active_instances.duplicate():
+	for instance: AIChatSkillAgentOrchestrator in _active_instances.duplicate():
 		if is_instance_valid(instance):
 			instance.queue_free()
 	_active_instances.clear()
@@ -328,21 +328,21 @@ func _compute_retry_delay(p_attempt: int, p_retry_after_s: float) -> float:
 
 
 # 重试前等待，并逐秒输出倒计时
-# [为什么用 WARN 而不是 DEBUG] 退避期间子代理看起来像「卡死了」，
+# [为什么用 WARN 而不是 DEBUG] 退避期间 Skill Agent 看起来像「卡死了」，
 # 用户必须在默认日志通道下就能分辨"限流等待"与"死锁"。
 # [param p_seconds]: 本次等待总秒数
 # [param p_attempt]: 当前是第几次重试（从 1 开始）
 # [param p_status_code]: 触发重试的 HTTP 状态码
 func _wait_before_retry(p_seconds: float, p_attempt: int, p_status_code: int) -> void:
 	var total: int = int(roundf(p_seconds))
-	AIChatLogger.warn("[Sub Agent] HTTP %d — retry %d/%d in %ds." % [p_status_code, p_attempt, RETRY_MAX_ATTEMPTS, total])
+	AIChatLogger.warn("[Skill Agent] HTTP %d — retry %d/%d in %ds." % [p_status_code, p_attempt, RETRY_MAX_ATTEMPTS, total])
 	
 	var remaining: int = total
 	while remaining > 0:
 		await get_tree().create_timer(1.0).timeout
 		remaining -= 1
 		if remaining > 0:
-			AIChatLogger.warn("[Sub Agent] Retry countdown: %ds" % remaining)
+			AIChatLogger.warn("[Skill Agent] Retry countdown: %ds" % remaining)
 
 
 # 统一的流式网络请求（与主链路共用 StreamRequest 实现）
@@ -481,9 +481,9 @@ func _open_console_segment(p_segment: String) -> void:
 	_console_segment = p_segment
 	
 	if p_segment == CONSOLE_SEGMENT_THINKING:
-		AIChatLogger.info("[Sub Agent Thinking]")
+		AIChatLogger.info("[Skill Agent Thinking]")
 	else:
-		AIChatLogger.info("[Sub Agent Output]")
+		AIChatLogger.info("[Skill Agent Output]")
 
 
 # 收尾当前控制台输出段落（先刷出缓冲残留，再重置段落状态）
@@ -498,12 +498,12 @@ func _close_console_segment() -> void:
 	_console_segment = ""
 
 
-# 加载 Sub-Agent 自己的工具集
+# 加载 Skill Agent 自己的工具集
 func _load_isolated_tools() -> void:
-	_sub_agent_tools.clear()
+	_skill_agent_tools.clear()
 	if REPORT_TASK_TOOL_SCRIPT:
 		var inst: AiTool = REPORT_TASK_TOOL_SCRIPT.new()
-		_sub_agent_tools[inst.tool_name] = inst
+		_skill_agent_tools[inst.tool_name] = inst
 	
 	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
 	if skill_res and "tools" in skill_res:
@@ -513,25 +513,25 @@ func _load_isolated_tools() -> void:
 				if script and script is GDScript:
 					var inst: AiTool = script.new()
 					if inst.has_method("execute"):
-						_sub_agent_tools[inst.tool_name] = inst
+						_skill_agent_tools[inst.tool_name] = inst
 
 
 # 获取工具定义
 func _get_tool_definitions(p_requires_gemini_schema: bool) -> Array[Dictionary]:
-	return ToolRegistry.build_tool_definitions(_sub_agent_tools, p_requires_gemini_schema)
+	return ToolRegistry.build_tool_definitions(_skill_agent_tools, p_requires_gemini_schema)
 
 
 # 释放自身（移出场景树并排队释放）
-# [为什么不再扫描同名节点] 本方法可能在多个 Sub-Agent 并发运行期间被调用：
+# [为什么不再扫描同名节点] 本方法可能在多个 Skill Agent 并发运行期间被调用：
 # 扫描并 remove_child() 其他实例会把它们变成孤儿节点（不会自动释放），
 # 且它们挂在树上的协程会因 get_tree() 变为 null 而中断，
-# 导致主 Agent 对应的 create_sub_agent 工具调用永远收不到返回。
-func _remove_sub_agent() -> void:
+# 导致 Main Agent 对应的 create_skill_agent 工具调用永远收不到返回。
+func _remove_skill_agent() -> void:
 	queue_free()
 
 
 func _clean_reference() -> void:
 	_close_console_segment()
-	_sub_agent_tools.clear()
+	_skill_agent_tools.clear()
 	if is_instance_valid(_history):
 		_history = null

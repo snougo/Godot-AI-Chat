@@ -4,5 +4,5 @@
 
 [resource]
 script = ExtResource("1_4h3nd")
-tool_scripts = Array[String](["uid://vt4ggs62k5lq", "uid://ce65c8ddvraw1", "uid://cw5xgoi1irsaw", "uid://bo7ajh38nhnsc", "uid://dg6qbnpcuk2g3", "uid://bveh71vt8erps", "uid://qpajvkxkg2r0", "uid://ctq7o6yli47nb", "uid://c3hoeabvdc50e", "uid://bceuw80jx3op4", "uid://4ywcvyomhkfq", "uid://drgkihr2tfy50", "uid://bmwxtw1o3sogr", "uid://dcts6y3ial37l", "uid://hc2soecvst7f", "uid://covvbrv2p0jyr", "uid://mbca75kncnxx", "uid://co3h6u6uwcqk2", "uid://dns8i66hmyevf", "uid://daja6fpo1jfm1"])
+tool_scripts = Array[String](["uid://vt4ggs62k5lq", "uid://ce65c8ddvraw1", "uid://bo7ajh38nhnsc", "uid://cw5xgoi1irsaw", "uid://dg6qbnpcuk2g3", "uid://bveh71vt8erps", "uid://qpajvkxkg2r0", "uid://ctq7o6yli47nb", "uid://c3hoeabvdc50e", "uid://bceuw80jx3op4", "uid://4ywcvyomhkfq", "uid://drgkihr2tfy50", "uid://bmwxtw1o3sogr", "uid://covvbrv2p0jyr", "uid://mbca75kncnxx"])
 metadata/_custom_type_script = "uid://b8w3xqvojloej"

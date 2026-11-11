@@ -3,13 +3,13 @@ extends RefCounted
 
 ## 工具注册表
 ##
-## 负责管理 Main-Agent 的核心工具集，并为 Sub-Agent 提供技能列表查询。
-## Main-Agent 不挂载技能，只拥有固定核心工具集。
+## 负责管理 Main Agent 的核心工具集，并为 Skill Agent 提供技能列表查询。
+## Main Agent 不挂载技能，只拥有固定核心工具集。
 
 
 # --- Public Vars ---
 
-## 存储 Main-Agent 的核心工具实例 { "tool_name": tool_instance }
+## 存储 Main Agent 的核心工具实例 { "tool_name": tool_instance }
 static var main_agent_tools: Dictionary = {}
 
 ## 缓存可用技能资源 { "skill_name": skill_resource }
@@ -153,7 +153,7 @@ static func _load_skill_from_folder(p_folder_path: String) -> void:
 						AIChatLogger.debug("[ToolRegistry] -> SUCCESS: Loaded ", skill.skill_name)
 					else:
 						AIChatLogger.warn("[ToolRegistry] -> AiSkill resource has empty skill_name: ", file_name)
-				# 非 AiSkill 的资源（如 SubAgentConfig）静默跳过，不再报错
+				# 非 AiSkill 的资源（如 SkillAgentConfig）静默跳过，不再报错
 			file_name = dir.get_next()
 		
 		dir.list_dir_end()

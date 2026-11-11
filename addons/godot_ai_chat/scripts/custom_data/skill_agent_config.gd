@@ -1,8 +1,8 @@
 @tool
-class_name SubAgentConfig
+class_name SkillAgentConfig
 extends Resource
 
-## Sub Agent 独立配置文件
+## Skill Agent 独立配置文件
 
 
 @export_enum("OpenAI-ChatCompletions", "OpenAI-Responses", "Anthropic-Compatible", "OpenCode Go") var api_provider: String = "OpenAI-ChatCompletions"
@@ -17,10 +17,10 @@ extends Resource
 @export_range(0.0, 1.0, 0.1) var temperature: float = 0.6
 
 @export_multiline var base_system_prompt: String = """##设定
-你是一个技能专精的**Sub-Agent**，用于执行特定目的的任务。
+你是一个技能专精的**Skill Agent**，用于执行特定目的的任务。
 
 ##职责
-完成**Main-Agent**分配的任务
+完成**Main Agent**分配的任务
 
 ## 核心原则
 - 请严格遵守**SKILL INSTRUCTION**中的指令。
@@ -35,13 +35,13 @@ extends Resource
 
 
 ## 获取单例配置（如果不存在则自动创建）
-static func get_config() -> SubAgentConfig:
-	var path: String = PluginPaths.SUB_AGENT_CONFIG_PATH
+static func get_config() -> SkillAgentConfig:
+	var path: String = PluginPaths.SKILL_AGENT_CONFIG_PATH
 	
 	if ResourceLoader.exists(path):
 		return ResourceLoader.load(path, "", ResourceLoader.CacheMode.CACHE_MODE_IGNORE)
 	else:
-		var config := SubAgentConfig.new()
+		var config := SkillAgentConfig.new()
 		ResourceSaver.save(config, path)
 		ToolBox.update_editor_filesystem(path)
 		return config

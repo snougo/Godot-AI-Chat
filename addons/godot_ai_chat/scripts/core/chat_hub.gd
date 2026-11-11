@@ -10,7 +10,7 @@ extends Control
 
 const AIChatCurrentChatWindow = preload("res://addons/godot_ai_chat/scripts/ui/current_chat_window.gd")
 const AIChatNetworkManager = preload("res://addons/godot_ai_chat/scripts/network/network_manager.gd")
-const AIChatAgentOrchestrator = preload("res://addons/godot_ai_chat/scripts/core/agent_orchestrator.gd")
+const AIChatAgentOrchestrator = preload("res://addons/godot_ai_chat/scripts/core/main_agent_orchestrator.gd")
 const AttachmentProcessor := preload("res://addons/godot_ai_chat/scripts/helper/attachment_processor.gd")
 const ContextCompressor := preload("res://addons/godot_ai_chat/scripts/core/context_compressor.gd")
 const AIChatController = preload("res://addons/godot_ai_chat/scripts/core/chat_controller.gd")
@@ -229,7 +229,7 @@ func _on_user_send_message(p_text: String) -> void:
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	
 	# 同时确保 Sub-Agent 配置文件存在（与压缩配置同一时机创建）
-	SubAgentConfig.get_config()
+	SkillAgentConfig.get_config()
 	
 	# 只有轮次达到阈值时才读取压缩配置：
 	# 未达标时完全不触碰配置，避免一个损坏的 .tres 把正常对话也卡住

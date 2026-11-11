@@ -6,7 +6,7 @@ extends RefCounted
 
 # --- Public Functions ---
 
-# 构建 Main-Agent 的上下文
+# 构建 Main Agent 的上下文
 # [param p_history]: 对话历史
 # [param p_settings]: 插件设置
 # [return]: 可直接发送给 Provider 的消息数组
@@ -140,12 +140,12 @@ static func build_context(p_history: ChatMessageHistory, p_settings: PluginSetti
 	return context_messages
 
 
-# 构建 Sub-Agent 的上下文
-# [param p_base_system_prompt]: SubAgentConfig.base_system_prompt
+# 构建 Skill Agent 的上下文
+# [param p_base_system_prompt]: SkillAgentConfig.base_system_prompt
 # [param p_skill_name]: 技能名称（用于加载对应的 SKILL.md）
 # [param p_task_description]: 任务描述文本
 # [return]: [SYSTEM, USER] 两条消息组成的数组
-static func build_sub_agent_context(p_base_system_prompt: String, p_skill_name: String, p_task_description: String) -> Array[ChatMessage]:
+static func build_skill_agent_context(p_base_system_prompt: String, p_skill_name: String, p_task_description: String) -> Array[ChatMessage]:
 	var messages: Array[ChatMessage] = []
 	
 	# 1. 加载技能指令（SKILL.md）
@@ -187,7 +187,7 @@ static func _normalize_path(p_path: String) -> String:
 
 
 # 计算步骤提醒阈值：总步数的 10%（向上取整，至少为 1）
-# [param p_max_steps]: Sub-Agent 的最大步数（max_chat_turns）
+# [param p_max_steps]: Skill Agent 的最大步数（max_chat_turns）
 # [return]: 剩余步数小于等于该值时开始提醒
 static func get_step_warn_threshold(p_max_steps: int) -> int:
 	return maxi(1, int(ceil(float(p_max_steps) * 0.1)))

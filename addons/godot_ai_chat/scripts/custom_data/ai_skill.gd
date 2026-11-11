@@ -21,6 +21,6 @@ extends Resource
 ## 构成此技能的工具脚本路径列表
 @export_file("*.gd") var tools: Array[String] = []
 
-## 此技能的 Sub-Agent 独立配置（可选）
-## 如果为空，则使用全局 SubAgentConfig
-@export var sub_agent_config: SubAgentConfig
+## 此技能的 Skill Agent 独立配置（可选）
+## 如果为空，则使用全局 SkillAgentConfig
+@export var skill_agent_config: SkillAgentConfig

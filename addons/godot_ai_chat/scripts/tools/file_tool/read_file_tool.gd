@@ -86,7 +86,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	# 安全拦截：禁止读取指定的敏感资源文件
 	if file_type == "resource" and (
 		path == PluginPaths.SETTINGS_PATH or
-		path == PluginPaths.SUB_AGENT_CONFIG_PATH or
+		path == PluginPaths.SKILL_AGENT_CONFIG_PATH or
 		path == PluginPaths.COMPRESSION_CONFIG_PATH
 	):
 		return ToolResult.fail("Error: Due to security reasons, reading this file is prohibited. Please do not attempt again.")

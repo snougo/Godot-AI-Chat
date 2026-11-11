@@ -215,6 +215,10 @@ func execute(p_args: Dictionary) -> ToolResult:
 		ToolBox.reimport_editor_file(path)
 	else:
 		ToolBox.update_editor_filesystem(path)
+		if extension == "gd":
+			ToolBox.sync_open_scripts_after_disk_write(path)
+		if extension == "gdshader":
+			ToolBox.sync_shader_after_disk_write(path)
 	
 	return ToolResult.ok(
 		"Edited %s\n%s\nLine count: %d -> %d%s"

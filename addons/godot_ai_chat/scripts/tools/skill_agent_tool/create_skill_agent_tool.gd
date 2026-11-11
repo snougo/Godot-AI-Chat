@@ -1,12 +1,12 @@
 @tool
 extends AiTool
 
-## Main Agent 用于创建 Sub Agent 的工具
+# Main Agent 用于创建 Skill Agent 的工具
 
 
 func _init() -> void:
-	tool_name = "create_sub_agent"
-	tool_description = "Creates a background Sub Agent equipped with a specific Skill to accomplish a sub-task. You will wait for its final report."
+	tool_name = "create_skill_agent"
+	tool_description = "Creates a Skill Agent equipped with a specific Skill to accomplish a sub-task. It runs synchronously: you will block until it reports its final result."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -15,11 +15,11 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"skill_name": {
 				"type": "string",
-				"description": "The exact name of the Skill to assign to the Sub Agent(case-sensitivity)."
+				"description": "The exact name of the Skill to assign to the Skill Agent (case-sensitive)."
 			},
 			"task_description": {
 				"type": "string",
-				"description": "detailed instructions on what you want the Sub Agent to do."
+				"description": "Detailed instructions on what you want the Skill Agent to do."
 			}
 		},
 		"required": ["skill_name", "task_description"]
@@ -35,14 +35,14 @@ func execute(args: Dictionary) -> ToolResult:
 		var available = ", ".join(ToolRegistry.available_skills.keys())
 		return ToolResult.fail("Error: Skill '%s' not found. Available skills are: [%s]" % [skill_name, available])
 	
-	var sub_agent_orchestrator: AIChatSubAgentOrchestrator = AIChatSubAgentOrchestrator.new()
-	sub_agent_orchestrator.name = "SubAgentOrchestrator"
-	sub_agent_orchestrator.skill_name = skill_name
-	sub_agent_orchestrator.task_description = task_desc
+	var skill_agent_orchestrator: AIChatSkillAgentOrchestrator = AIChatSkillAgentOrchestrator.new()
+	skill_agent_orchestrator.name = "SkillAgentOrchestrator"
+	skill_agent_orchestrator.skill_name = skill_name
+	skill_agent_orchestrator.task_description = task_desc
 	
 	var root: Window = Engine.get_main_loop().root # 找到编辑器的根节点
-	root.add_child(sub_agent_orchestrator)
+	root.add_child(skill_agent_orchestrator)
 	
-	# 阻塞等待 Sub-Agent 后台循环结束
-	var result_summary = await sub_agent_orchestrator.run_task()
+	# 阻塞等待 Skill Agent 任务循环结束
+	var result_summary = await skill_agent_orchestrator.run_task()
 	return ToolResult.ok(result_summary)

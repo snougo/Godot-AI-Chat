@@ -94,6 +94,57 @@ static func update_editor_filesystem(p_path: String) -> void:
 			editor_filesystem.update_file(p_path)
 
 
+## 外部工具写盘后，同步内存中的脚本资源与已打开的编辑器 buffer。
+## EditorFileSystem.update_file() 只刷新文件系统元数据，不会重载脚本资源，
+## 也不会刷新 buffer；不补这一步，读回（load() 缓存）与编辑器显示都是旧内容。
+static func sync_open_scripts_after_disk_write(p_path: String) -> void:
+	if not Engine.is_editor_hint():
+		return
+	
+	# 先把磁盘最新内容读出来
+	var disk_text: String = ""
+	var file: FileAccess = FileAccess.open(p_path, FileAccess.READ)
+	if file != null:
+		disk_text = file.get_as_text()
+		file.close()
+	if disk_text.is_empty():
+		return
+	
+	# 正在脚本编辑器中打开的脚本：set_source_code + reload（与引擎自身的外部重载流程一致）
+	for script: Script in EditorInterface.get_script_editor().get_open_scripts():
+		if script.resource_path != p_path:
+			continue
+		script.set_source_code(disk_text)
+		script.reload()
+	
+	# 关闭标签后仍留在 ResourceCache 里的脚本实例：用 CACHE_MODE_REPLACE 替换缓存项，
+	# 否则之后任何 load() 都会一直返回旧对象
+	ResourceLoader.load(p_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+
+
+## 外部工具写盘后，同步内存中已加载的 Shader 资源实例。
+## 与脚本不同：Shader 被 Inspector / 材质直接引用，必须用 CACHE_MODE_REUSE 取
+## 共享实例并原地改 code —— 换新实例会让已绑定的材质看到旧代码
+## （见本文件顶部 load 缓存模式注释）。
+## Shader Editor 的 CodeEdit buffer 与 shader.get_code() 实时同步，
+## 原地改 code 后编辑器显示会跟着更新。
+static func sync_shader_after_disk_write(p_path: String) -> void:
+	if not Engine.is_editor_hint():
+		return
+	
+	var file: FileAccess = FileAccess.open(p_path, FileAccess.READ)
+	if file == null:
+		return
+	var disk_code: String = file.get_as_text()
+	file.close()
+	if disk_code.is_empty():
+		return
+	
+	var cached: Resource = ResourceLoader.load(p_path, "", ResourceLoader.CACHE_MODE_REUSE)
+	if cached is Shader:
+		cached.set_code(disk_code)
+
+
 ## 触发编辑器文件系统的完全扫描（延迟+节流，防崩溃）
 static func refresh_editor_filesystem() -> void:
 	if not Engine.is_editor_hint():
@@ -184,7 +235,7 @@ static func is_valid_tool_name(p_name: String) -> bool:
 
 ## 清洗、过滤工具调用，并将被服务端误判的纯文本"抢救"回消息内容中
 ## [param p_msg]: 待清洗的助手消息（会被原地修改）
-## [param p_valid_tools]: 可选的合法工具表；为空时使用 Main-Agent 核心工具集校验
+## [param p_valid_tools]: 可选的合法工具表；为空时使用 Main Agent 核心工具集校验
 static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dictionary = {}) -> void:
 	# 防御：确保 ToolRegistry 已初始化
 	if ToolRegistry.main_agent_tools.is_empty():
@@ -207,8 +258,8 @@ static func salvage_and_clean_tool_calls(p_msg: ChatMessage, p_valid_tools: Dict
 		var clean_name: String = String(extract_result.clean_name)
 		
 		# Step 2: 判断工具合法性
-		#   子Agent路径 → 使用自己的 _sub_agent_tools 字典精确校验
-		#   主Agent路径 → 使用核心工具集校验
+		#   Skill Agent 路径 → 使用自己的 _skill_agent_tools 字典精确校验
+		#   Main Agent 路径 → 使用核心工具集校验
 		var is_valid: bool = false
 		if not clean_name.is_empty():
 			if not p_valid_tools.is_empty():

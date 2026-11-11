@@ -91,8 +91,8 @@ func _exit_tree() -> void:
 		if is_instance_valid(_godot_ai_chat_dock):
 			remove_dock(_godot_ai_chat_dock)
 			_godot_ai_chat_dock.queue_free()
-			# 统一释放仍在运行的 Sub-Agent（它们挂在编辑器 root 上，不随 Dock 释放）
-			AIChatSubAgentOrchestrator.cancel_all()
+			# 统一释放仍在运行的 Skill Agent（它们挂在编辑器 root 上，不随 Dock 释放）
+			AIChatSkillAgentOrchestrator.cancel_all()
 			_godot_ai_chat_dock = null
 	
 	# 注意：ToolRegistry 是静态的，不需要显式清理，
