@@ -1,19 +1,17 @@
 @tool
 extends AiTool
 
-## 在编辑器中打开指定文件。
-## 根据文件扩展名自动选择打开方式（场景或脚本编辑器）。
+# 在编辑器中打开指定文件。
+# 根据文件扩展名自动选择打开方式（场景或脚本编辑器）。
 
 
 # --- Enums / Constants ---
 
-## 支持的文件类型映射
-## key: 扩展名（小写）, value: 文件类别，用于路由打开方式
+# 支持的文件类型映射
+# key: 扩展名（小写）, value: 文件类别，用于路由打开方式
 const SUPPORTED_EXTENSIONS: Dictionary = {
 	"tscn": "scene",
 	"scn": "scene",
-	"gd": "script",
-	"gdshader": "shader"
 }
 
 
@@ -21,7 +19,7 @@ const SUPPORTED_EXTENSIONS: Dictionary = {
 
 func _init() -> void:
 	tool_name = "open_file"
-	tool_description = "Opens a file in the Godot editor. Support: tscn, scn, gd, gdshader."
+	tool_description = "Opens a file in the Godot Editor. Only Support: tscn, scn."
 
 
 # --- Public Functions ---
@@ -61,8 +59,6 @@ func execute(p_args: Dictionary) -> ToolResult:
 	match file_type:
 		"scene":
 			return _open_scene(file_path)
-		"script", "shader":
-			return _open_script(file_path)
 		_:
 			return ToolResult.fail("Error: Unknown file type '%s'." % file_type)
 
@@ -72,7 +68,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 # 在场景编辑器中打开场景文件
 func _open_scene(p_path: String) -> ToolResult:
 	EditorInterface.open_scene_from_path(p_path)
-	return ToolResult.ok("Opened/Switched to scene: %s" % p_path)
+	return ToolResult.ok("Scene opened successfully in Scene Tab: %s" % p_path)
 
 
 # 在脚本/着色器编辑器中打开脚本或着色器文件
@@ -81,7 +77,7 @@ func _open_script(p_path: String) -> ToolResult:
 	if res is Script:
 		EditorInterface.edit_script(res)
 		EditorInterface.set_main_screen_editor("Script")
-		return ToolResult.ok("Script opened successfully: %s" % p_path)
+		return ToolResult.ok("Script opened successfully in Script Editor: %s" % p_path)
 	elif res is Shader:
 		# 精确在 Shader Editor 中打开。
 		# 注意：不调用 set_main_screen_editor("Script")，

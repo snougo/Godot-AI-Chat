@@ -16,7 +16,7 @@ const PLUGIN_DIR: String = "res://addons/godot_ai_chat/"
 ## 插件配置文件夹
 const CONFIGS_DIR: String = PLUGIN_DIR + "configs/"
 
-## 插件设置资源文件路径
+## 插件配置资源文件路径
 const SETTINGS_PATH: String = CONFIGS_DIR + "plugin_settings_config.tres"
 
 ## Skill Agent 全局配置资源文件路径
@@ -25,11 +25,14 @@ const SKILL_AGENT_CONFIG_PATH: String = CONFIGS_DIR + "skill_agent_config.tres"
 ## 上下文压缩配置资源文件路径
 const COMPRESSION_CONFIG_PATH: String = CONFIGS_DIR + "context_compression_config.tres"
 
+## 写入管控配置资源文件路径
+const READONLY_ZONE_CONFIG_PATH: String = CONFIGS_DIR + "readonly_zone_config.tres"
+
 
 # --- Model Capability ---
 
 ## 模型能力表资源文件路径
-const MODEL_CAPABILITY_TABLE_PATH: String = PLUGIN_DIR + "model_capability_table.tres"
+const MODEL_CAPABILITY_TABLE_PATH: String = CONFIGS_DIR + "model_capability_table.tres"
 
 
 # --- Workspace ---
@@ -44,7 +47,7 @@ const DEFAULT_WORKSPACE: String = PLUGIN_DIR
 const TOOL_DIR: String = PLUGIN_DIR + "scripts/tools/"
 
 ## Main Agent 工具配置资源文件路径
-const MAIN_AGENT_TOOL_CONFIG_PATH: String = PLUGIN_DIR + "main_agent_tool_config.tres"
+const MAIN_AGENT_TOOL_CONFIG_PATH: String = CONFIGS_DIR + "main_agent_tool_config.tres"
 
 
 # --- Data Storage ---

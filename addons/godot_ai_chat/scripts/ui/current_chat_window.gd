@@ -270,6 +270,14 @@ func _on_history_message_added(p_msg: ChatMessage) -> void:
 		_stream_rendered_ids.erase(msg_id)
 		return
 	
+	# 全量分帧重绘进行中时，禁止单条消息插队渲染：
+	# refresh_display() 会遍历 chat_history.messages，此时新消息本来就会被渲染到，
+	# 这里若再渲染一次，会造成同一条消息在 UI 中出现两次且顺序错乱。
+	# 置位 _refresh_pending 交由当前重绘收尾时统一补刷。
+	if _is_loading:
+		_refresh_pending = true
+		return
+	
 	_render_message(p_msg)
 	_scroll_to_bottom()
 

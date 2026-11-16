@@ -107,7 +107,7 @@ func get_parameters_schema() -> Dictionary:
 			},
 			"path": {
 				"type": "string",
-				"description": "The full path of the folder to search. Scanned recursively. Required when mode=\"text\". Defaults to `res://godot_doc` when mode=\"doc\"."
+				"description": "The full path of target folder to search. Scanned recursively. Required when mode=\"text\". Defaults to `res://godot_doc` when mode=\"doc\"."
 			},
 			"mode": {
 				"type": "string",

@@ -1,0 +1,7 @@
+[gd_resource type="Resource" script_class="ReadonlyZoneConfig" format=3 uid="uid://dg7d0njd0go8e"]
+
+[ext_resource type="Script" uid="uid://dr6tly004uj2l" path="res://addons/godot_ai_chat/scripts/custom_data/readonly_zone_config.gd" id="1_yhn3r"]
+
+[resource]
+script = ExtResource("1_yhn3r")
+metadata/_custom_type_script = "uid://dr6tly004uj2l"

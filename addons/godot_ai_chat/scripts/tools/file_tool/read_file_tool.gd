@@ -1,6 +1,6 @@
 extends AiTool
 
-# 读取指定文件的内容（支持场景、脚本、资源、文本、图片元数据等）。
+# 读取指定文件的内容（支持脚本、资源、文本、图片元数据等）。
 # 文件类型根据扩展名自动推断，无需手动指定。
 # 单次输出受字符预算限制：超出后原位省略数值块 / 截断尾部，并可用 start_line、line_count 分段续读。
 # 不包含文件夹结构读取功能（该功能已移至 manage_folder_tool）。
@@ -12,7 +12,6 @@ const FileContentReader := preload("res://addons/godot_ai_chat/scripts/helper/fi
 
 # 上下文类型与允许的扩展名映射
 const EXTENSION_MAP: Dictionary = {
-	"scene":      ["tscn", "scn"],
 	"script":     ["gd", "gdshader", "glsl"],
 	"text":       ["md", "json", "cfg", "txt", "godot", "uid", "import"],
 	"resource":   ["tres", "res"],
@@ -21,7 +20,6 @@ const EXTENSION_MAP: Dictionary = {
 
 # 支持按行续读的文件类型（其余类型返回的是结构摘要，没有文件行概念）
 const LINE_WINDOW_FILE_TYPES: Dictionary = {
-	"scene":    ["tscn"],
 	"script":   ["gd", "gdshader", "glsl"],
 	"text":     ["md", "json", "cfg", "txt", "godot", "uid", "import"],
 	"resource": ["tres"]
@@ -32,7 +30,7 @@ const LINE_WINDOW_FILE_TYPES: Dictionary = {
 
 func _init() -> void:
 	tool_name = "read_file"
-	tool_description = "Reads a file. Support: tscn, scn, gd, gdshader, glsl, md, json, cfg, txt, godot, uid, import, tres, res, and image_meta(jpg/jpeg/png)."
+	tool_description = "Reads a file. Support: gd, gdshader, glsl, md, json, cfg, txt, godot, uid, import, tres, res, and image_meta(jpg/jpeg/png)."
 
 
 # --- Public Functions ---
@@ -144,8 +142,6 @@ func _read_file_content(p_file_type: String, p_path: String, p_start_line: int, 
 		return ToolResult.fail("Error: File not found: " + p_path)
 	
 	match p_file_type:
-		"scene":
-			return _wrap_reader_result(FileContentReader.read_scene_content(p_path, p_start_line, p_line_count))
 		"script":
 			return _wrap_reader_result(FileContentReader.read_script_content(p_path, p_start_line, p_line_count))
 		"text":

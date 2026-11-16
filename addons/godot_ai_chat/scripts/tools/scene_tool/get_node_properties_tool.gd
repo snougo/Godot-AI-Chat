@@ -1,12 +1,12 @@
 @tool
 extends BaseSceneTool
 
-## 读一个节点的属性。默认只给"字符串值 + 类型"：更省 token，也避免 JSON 把原生值退化成重复文本。
+# 读一个节点的属性。默认只给"字符串值 + 类型"：更省 token，也避免 JSON 把原生值退化成重复文本。
 
 
 func _init() -> void:
-	tool_name = "get_scene_node_properties"
-	tool_description = "Lists the editor-visible properties of a node: value, type, and the resource it points to."
+	tool_name = "get_node_properties"
+	tool_description = "Lists properties of a node from the currently opened scene in Editor."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -15,7 +15,7 @@ func get_parameters_schema() -> Dictionary:
 		"properties": {
 			"node_path": {
 				"type": "string",
-				"description": "Target node, e.g. 'xxx/xxxx' or '.' for the root."
+				"description": "Target node, e.g. 'ParentNode/ChildNode' or '.' for the root."
 			},
 			"include_raw": {
 				"type": "boolean",
@@ -24,6 +24,10 @@ func get_parameters_schema() -> Dictionary:
 			"include_resources": {
 				"type": "boolean",
 				"description": "Also list the editable properties of each attached resource. Default false."
+			},
+			"only_overridden": {
+				"type": "boolean",
+				"description": "Only return properties whose value differs from the class/script default. Default true — pass false to dump every editor-visible property."
 			}
 		},
 		"required": ["node_path"]
@@ -35,7 +39,7 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if root == null:
 		return ToolResult.fail("No active scene in the editor. Open one with `open_file` first.")
 	
-	var unknown: String = check_params(p_args, ["node_path", "include_raw", "include_resources"])
+	var unknown: String = check_params(p_args, ["node_path", "include_raw", "include_resources", "only_overridden"])
 	if not unknown.is_empty():
 		return ToolResult.fail(unknown)
 	
@@ -51,7 +55,11 @@ func execute(p_args: Dictionary) -> ToolResult:
 		"scene": scene_path_of(root),
 		"node_path": node_path_of(root, node),
 		"class": node.get_class(),
-		"properties": get_all_node_properties(node, flag_of(p_args, "include_raw"), flag_of(p_args, "include_resources")),
+		"properties": get_all_node_properties(
+			node,
+			flag_of(p_args, "include_raw"),
+			flag_of(p_args, "include_resources"),
+			flag_with_default(p_args, "only_overridden", true)),
 	}
 	
 	return ToolResult.ok(JSON.stringify(output, "\t"))

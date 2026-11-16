@@ -16,12 +16,6 @@ signal message_added(p_msg: ChatMessage)
 signal turn_rolled_back
 
 
-# --- Constants ---
-
-## 回滚扫描上限：防御性护栏，避免异常数据导致死循环
-const MAX_ROLLBACK_SCAN: int = 10
-
-
 # --- @export Vars ---
 
 ## 核心数据存储：强类型的消息列表
@@ -106,40 +100,48 @@ func get_last_message() -> ChatMessage:
 
 ## 回滚末尾未闭环的轮次
 ##
-## 「未闭环」指：末尾存在 Assistant 消息（无论是否附带工具调用），
-## 其后的连续 Tool 消息都属于该次 Assistant 回复的产物。
-## 本方法删除这些残留消息，使历史回到「最后一次用户输入之后」的干净状态。
+## 「未闭环」的判定基于末尾那一步的配对完整性，而非简单的角色序列：
+## 末尾若是完整闭合的 `Assistant(tool_calls: N) + N × Tool`，说明该步已执行完毕，
+## 予以保留（安全停止不丢弃已完成的工作）；否则删除该步的全部残留。
 ##
 ## 这是数据层操作，视图刷新由 turn_rolled_back 信号驱动。
 ## [return]: 实际删除的消息条数
 func rollback_incomplete_turn() -> int:
-	var removed_count: int = 0
-	var safety_count: int = 0
+	if messages.is_empty():
+		return 0
 	
-	# 纯数据回滚循环
-	while not messages.is_empty() and safety_count < MAX_ROLLBACK_SCAN:
-		var last_msg: ChatMessage = messages.back()
-		
-		# Tool 输出：删除并继续向上回滚
-		if last_msg.role == ChatMessage.ROLE_TOOL:
-			messages.pop_back()
-			removed_count += 1
-		# Assistant 消息（无论有无工具调用）：删除并停止
-		elif last_msg.role == ChatMessage.ROLE_ASSISTANT:
-			messages.pop_back()
-			removed_count += 1
-			break
-		# User / System：停止
-		else:
-			break
-		
-		safety_count += 1
+	var last_msg: ChatMessage = messages.back()
 	
-	if removed_count > 0:
-		emit_changed()
-		turn_rolled_back.emit()
+	# 末尾为 User / System：没有未完成的步骤
+	if last_msg.role != ChatMessage.ROLE_TOOL and last_msg.role != ChatMessage.ROLE_ASSISTANT:
+		return 0
 	
-	return removed_count
+	# 统计末尾连续的 Tool 消息数量
+	var trailing_tool_count: int = 0
+	var probe_index: int = messages.size() - 1
+	while probe_index >= 0 and messages[probe_index].role == ChatMessage.ROLE_TOOL:
+		trailing_tool_count += 1
+		probe_index -= 1
+	
+	# 末尾整段都是 Tool（前方没有 Assistant）：异常数据，仅清除这些孤立响应
+	if probe_index < 0:
+		return _remove_messages_from(0)
+	
+	var boundary_msg: ChatMessage = messages[probe_index]
+	
+	# Tool 序列前方不是 Assistant：同样视为异常数据，仅清除孤立响应
+	if boundary_msg.role != ChatMessage.ROLE_ASSISTANT:
+		return _remove_messages_from(probe_index + 1)
+	
+	# 闭环判定：末尾 Tool 数量与 Assistant 声明的 tool_calls 数量一致
+	# [为什么要求 trailing_tool_count > 0] 末尾是 Assistant 本身时（流式中断产生的
+	# 半截消息、或工具尚未执行），不存在可保留的完整步骤，必须删除
+	var expected_count: int = boundary_msg.tool_calls.size()
+	if trailing_tool_count > 0 and trailing_tool_count == expected_count:
+		return 0
+	
+	# 未闭环：删除 Tool 序列与该 Assistant
+	return _remove_messages_from(probe_index)
 
 
 ## 获取当前对话轮数
@@ -247,3 +249,19 @@ func _group_messages_into_turns() -> Array[Array]:
 		turns.append(current_turn)
 	
 	return turns
+
+
+# 删除指定索引及其之后的全部消息
+# [param p_from_index]: 起始索引（含）
+# [return]: 实际删除条数
+func _remove_messages_from(p_from_index: int) -> int:
+	if p_from_index < 0 or p_from_index >= messages.size():
+		return 0
+	
+	var removed_count: int = messages.size() - p_from_index
+	messages.resize(p_from_index)
+	
+	emit_changed()
+	turn_rolled_back.emit()
+	
+	return removed_count

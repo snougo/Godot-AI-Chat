@@ -26,6 +26,17 @@ const SAVE_HINT: String = "Changes are in the editor only — call save_edited_f
 ## 视为"场景根"的路径写法
 const ROOT_ALIASES: Array[String] = ["", ".", "/"]
 
+## 单个附属资源最多返回多少条属性（防止 StandardMaterial3D 这类把上下文冲爆）
+const MAX_RESOURCE_PROPERTIES: int = 24
+
+## 附属资源摘要里这些元属性没有信息量，直接跳过
+const SKIPPED_RESOURCE_PROPERTIES: Array[String] = [
+	"resource_local_to_scene",
+	"resource_path",
+	"resource_name",
+	"script",
+]
+
 
 # --- Public Functions：场景与路径 ---
 
@@ -551,10 +562,19 @@ func save_if_requested(p_root: Node, p_args: Dictionary) -> String:
 # --- Public Functions：属性读取与转换 ---
 
 ## 列出一个对象（Node 或 Resource）的编辑器可见属性。
-func get_all_object_properties(p_object: Object, p_include_raw: bool = false, p_include_resources: bool = false) -> Dictionary:
+## [param p_only_overridden]: 为 true 时与"默认值参照物"逐个对比，只保留被改过的属性。
+##   参照物优先取挂载脚本 new() 出来的实例（能反映 @export 默认值），否则取 ClassDB 的类默认实例。
+##   拿不到参照物时保守处理：全部保留。
+func get_all_object_properties(p_object: Object, p_include_raw: bool = false, p_include_resources: bool = false, p_only_overridden: bool = false) -> Dictionary:
 	var properties: Dictionary = {}
 	if p_object == null:
 		return properties
+	
+	var defaults: Dictionary = {}
+	var reference: Object = null
+	if p_only_overridden:
+		reference = _default_of(p_object, defaults)
+	
 	for p in p_object.get_property_list():
 		var usage: int = p.usage
 		if not (usage & PROPERTY_USAGE_EDITOR):
@@ -562,22 +582,58 @@ func get_all_object_properties(p_object: Object, p_include_raw: bool = false, p_
 		# 组 / 分类条目不是属性，别列出来
 		if usage & (PROPERTY_USAGE_GROUP | PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_SUBGROUP):
 			continue
+		
 		var prop_name: String = str(p.name)
-		var value: Variant = p_object.get(prop_name)
-		var entry: Dictionary = {"value": str(value), "type": type_label(p.type)}
-		if p_include_raw:
-			entry["raw"] = json_safe(value)
-		if value is Resource:
-			entry["resource"] = _resource_summary(value)
-			if p_include_resources:
-				entry["properties"] = _resource_properties(value)
-		properties[prop_name] = entry
+		if reference != null and values_equal(p_object.get(prop_name), reference.get(prop_name)):
+			continue
+		
+		properties[prop_name] = _property_entry(p_object, prop_name, p.type, p_include_raw, p_include_resources)
+	
+	_free_defaults(defaults)
 	return properties
 
 
-## 兼容旧名（场景工具仍在用）。
-func get_all_node_properties(p_node: Node, p_include_raw: bool = false, p_include_resources: bool = false) -> Dictionary:
-	return get_all_object_properties(p_node, p_include_raw, p_include_resources)
+## 列出一个节点的编辑器可见属性。
+## 额外补一行完整的 transform：Node3D / Node2D 的 transform 不是 EDITOR 属性，
+## 默认不会出现在属性列表里，而斜置的碰撞体、带扭曲的骨骼挂点只能靠它看清。
+func get_all_node_properties(p_node: Node, p_include_raw: bool = false, p_include_resources: bool = false, p_only_overridden: bool = false) -> Dictionary:
+	var properties: Dictionary = get_all_object_properties(p_node, p_include_raw, p_include_resources, p_only_overridden)
+	
+	if p_node != null and has_property(p_node, "transform"):
+		properties["transform"] = _property_entry(
+			p_node,
+			"transform",
+			property_type(p_node, "transform"),
+			p_include_raw,
+			p_include_resources)
+	
+	return properties
+
+
+## 属性值的可读展示：对象一律给"稳定标识"（资源路径 / 节点名字 / 内联资源类名）。
+## 不用 str()：那会把 ObjectID 带出来（例如 <CapsuleShape3D#-9223245639523929399>），
+## 每次加载都不同——既费 token，又会让调用方误以为数据发生了变化。
+func display_value(p_value: Variant) -> String:
+	match typeof(p_value):
+		TYPE_NIL:
+			return "<null>"
+		TYPE_FLOAT:
+			return String.num(p_value, 4)
+		TYPE_OBJECT:
+			var obj: Object = p_value
+			if obj == null:
+				return "<null>"
+			if obj is Resource:
+				var resource: Resource = obj
+				if not resource.resource_path.is_empty():
+					return "%s [%s]" % [resource.resource_path, resource.get_class()]
+				return "<inline %s>" % resource.get_class()
+			if obj is Node:
+				var node: Node = obj
+				return "%s [%s]" % [node.name, node.get_class()]
+			return "<%s>" % obj.get_class()
+		_:
+			return str(p_value)
 
 
 func convert_value(p_value: Variant, p_target_type: int) -> Dictionary:
@@ -1243,13 +1299,92 @@ func _resource_summary(p_resource: Resource) -> Dictionary:
 	return {"class": p_resource.get_class(), "inline": true}
 
 
+# 附属资源的属性摘要：跳过元属性、只保留与类默认值不同的项、限制条数。
+# 旧实现把全部 EDITOR 属性 str() 直出，StandardMaterial3D 会吐上百行且带实例 ID。
 func _resource_properties(p_resource: Object) -> Dictionary:
 	var properties: Dictionary = {}
 	if p_resource == null:
 		return properties
 	
+	var defaults: Dictionary = {}
+	var reference: Object = _default_of(p_resource, defaults)
+	var truncated: bool = false
+	
 	for p in p_resource.get_property_list():
-		if p.usage & PROPERTY_USAGE_EDITOR:
-			properties[str(p.name)] = str(p_resource.get(p.name))
+		var usage: int = p.usage
+		if not (usage & PROPERTY_USAGE_EDITOR):
+			continue
+		if usage & (PROPERTY_USAGE_GROUP | PROPERTY_USAGE_CATEGORY | PROPERTY_USAGE_SUBGROUP):
+			continue
+		
+		var prop_name: String = str(p.name)
+		if prop_name in SKIPPED_RESOURCE_PROPERTIES:
+			continue
+		if reference != null and values_equal(p_resource.get(prop_name), reference.get(prop_name)):
+			continue
+		
+		if properties.size() >= MAX_RESOURCE_PROPERTIES:
+			truncated = true
+			break
+		
+		properties[prop_name] = display_value(p_resource.get(prop_name))
+	
+	_free_defaults(defaults)
+	
+	if truncated:
+		properties["_truncated"] = "more properties omitted (limit %d)" % MAX_RESOURCE_PROPERTIES
 	
 	return properties
+
+
+# 单条属性的输出条目：value 用稳定展示，raw 供结构化消费，resource 标注附属资源。
+func _property_entry(p_object: Object, p_prop_name: String, p_prop_type: int, p_include_raw: bool, p_include_resources: bool) -> Dictionary:
+	var value: Variant = p_object.get(p_prop_name)
+	var entry: Dictionary = {
+		"value": display_value(value),
+		"type": type_label(p_prop_type),
+	}
+	
+	if p_include_raw:
+		entry["raw"] = json_safe(value)
+	
+	if value is Resource:
+		entry["resource"] = _resource_summary(value)
+		if p_include_resources:
+			entry["properties"] = _resource_properties(value)
+	
+	return entry
+
+
+# 取"默认值参照物"：优先用挂载脚本 new() 出来的实例（反映 @export 默认值），
+# 否则用 ClassDB 的类默认实例（反映引擎默认值）。返回 null 表示无法构造，调用方需保守保留。
+func _default_of(p_object: Object, p_cache: Dictionary) -> Object:
+	if p_object == null:
+		return null
+	
+	var script: Script = p_object.get_script() as Script
+	var key: String = p_object.get_class()
+	if script != null:
+		key = "%s|%s" % [key, script.resource_path]
+	
+	if p_cache.has(key):
+		return p_cache[key]
+	
+	var instance: Object = null
+	if script != null and script.can_instantiate():
+		instance = script.new()
+	elif ClassDB.can_instantiate(p_object.get_class()):
+		instance = ClassDB.instantiate(p_object.get_class())
+	
+	p_cache[key] = instance
+	return instance
+
+
+# 回收参照物：Node 必须 free()，Resource 是 RefCounted，清引用即可。
+func _free_defaults(p_cache: Dictionary) -> void:
+	for key in p_cache:
+		var cached: Variant = p_cache[key]
+		if is_instance_valid(cached) and cached is Node:
+			(cached as Node).free()
+	
+	p_cache.clear()

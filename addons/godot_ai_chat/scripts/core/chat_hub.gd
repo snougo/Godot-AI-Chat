@@ -3,7 +3,7 @@ extends Control
 
 # 聊天中心控制器
 # 插件的主入口，作为组合根负责依赖注入，并协调聊天循环。
-# 会话管理逻辑已抽取至 AIChatController。
+# 会话管理逻辑已抽取至 AIChatController，运行状态由 AIChatAgentOrchestrator 唯一维护。
 
 
 # --- Constants ---
@@ -15,6 +15,8 @@ const AttachmentProcessor := preload("res://addons/godot_ai_chat/scripts/helper/
 const ContextCompressor := preload("res://addons/godot_ai_chat/scripts/core/context_compressor.gd")
 const AIChatController = preload("res://addons/godot_ai_chat/scripts/core/chat_controller.gd")
 const AIChatUI = preload("res://addons/godot_ai_chat/scripts/ui/chat_ui.gd")
+
+const AgentState = AIChatAgentOrchestrator.AgentState
 
 
 # --- @onready Vars ---
@@ -28,7 +30,6 @@ const AIChatUI = preload("res://addons/godot_ai_chat/scripts/ui/chat_ui.gd")
 # --- Private Vars ---
 
 var _chat_controller: AIChatController
-var _is_performing_cleanup: bool = false
 var _is_plugin_init: bool = false
 var _compression_config: ContextCompressionConfig = null
 
@@ -44,7 +45,6 @@ func _ready() -> void:
 	
 	_agent_orchestrator.network_manager = _network_manager
 	_agent_orchestrator.current_chat_window = _current_chat_window
-	_agent_orchestrator.chat_ui = _chat_ui
 	
 	_current_chat_window.chat_list_container = _chat_ui.get_chat_list_container()
 	_current_chat_window.chat_scroll_container = _chat_ui.get_chat_scroll_container()
@@ -71,6 +71,7 @@ func _bind_ui_signals() -> void:
 	_chat_ui.save_as_markdown_button_pressed.connect(_on_export_markdown_requested)
 	
 	_chat_ui.send_button_pressed.connect(_on_user_send_message)
+	_chat_ui.queue_input_requested.connect(_on_user_queue_input)
 	_chat_ui.stop_button_pressed.connect(_on_stop_requested)
 	
 	_chat_ui.workspace_changed.connect(_on_workspace_changed)
@@ -79,7 +80,12 @@ func _bind_ui_signals() -> void:
 	_chat_ui.settings_save_button_pressed.connect(_on_settings_save_requested)
 	_chat_ui.model_selection_changed.connect(_on_model_selection_changed)
 	
-	_network_manager.get_model_list_request_started.connect(_chat_ui.update_ui_state.bind(AIChatUI.UIState.CONNECTING))
+	# Agent Runtime 状态机信号驱动 UI 视图投影
+	_agent_orchestrator.state_changed.connect(_chat_ui.apply_agent_state)
+	_agent_orchestrator.pending_input_count_changed.connect(_chat_ui.update_pending_input_count)
+	
+	# 模型列表拉取属于外围独立网络状态，直接交由 UI 独立展示
+	_network_manager.get_model_list_request_started.connect(_chat_ui.on_model_list_request_started)
 	_network_manager.get_model_list_request_succeeded.connect(_chat_ui.update_model_list)
 	_network_manager.get_model_list_request_failed.connect(_chat_ui.get_model_list_request_failed)
 	
@@ -88,7 +94,8 @@ func _bind_ui_signals() -> void:
 
 
 func _run_chat_loop() -> void:
-	_chat_ui.update_ui_state(AIChatUI.UIState.WAITING_RESPONSE)
+	if not _agent_orchestrator.is_idle():
+		return
 	
 	# 每次聊天循环开始前仅重载核心工具（不重扫技能），确保修改 main_agent_tool_config.tres 后立即生效
 	ToolRegistry.reload_core_tools_only()
@@ -97,45 +104,62 @@ func _run_chat_loop() -> void:
 		_network_manager.new_stream_chunk_received.connect(_on_stream_chunk)
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
+	# 绑定本次循环使用的历史记录：后续回滚与用量落库都必须作用于它，
+	# 而非 await 期间可能已被切换的 _current_chat_window.chat_history
+	var cycle_history: ChatMessageHistory = _current_chat_window.chat_history
 	
-	await _agent_orchestrator.run_chat_cycle(_current_chat_window.chat_history, settings)
+	await _agent_orchestrator.run_chat_cycle(cycle_history, settings)
 	
 	if _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
 		_network_manager.new_stream_chunk_received.disconnect(_on_stream_chunk)
 	
-	if _agent_orchestrator.is_cancelled:
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Stopped")
-		_rollback_incomplete_turn()
+	# 循环退出：未注入的排队输入一律回填输入框，绝不静默丢弃
+	var leftover: String = _agent_orchestrator.take_pending_input()
+	var was_stopped: bool = _agent_orchestrator.is_stopping()
+	
+	if was_stopped:
+		_agent_orchestrator.transition_to(AgentState.IDLE, "Stopped.")
+		_rollback_incomplete_turn(cycle_history)
+		if not leftover.is_empty():
+			_chat_ui.restore_user_input(leftover)
 	else:
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
+		_agent_orchestrator.transition_to(AgentState.IDLE)
+		if not leftover.is_empty():
+			# 非取消路径下仍有残留，说明循环异常退出（请求失败 / 会话切换）
+			_chat_ui.show_confirmation(
+				"Queued message(s) were not delivered because the chat cycle ended early.\n\n"
+				+ "They have been restored to the input box.")
+			_chat_ui.restore_user_input(leftover)
 	
 	# 回合结束：把累计用量落库。
 	# 中间各轮已在「每轮请求发起前」落库，此处补齐最后一个请求的用量，
 	# 避免用户不发起下一轮就直接切换会话时丢掉末轮消耗。
-	_sync_token_usage_to_history()
+	_sync_token_usage_to_history(cycle_history)
 	
-	if _current_chat_window.chat_history:
-		_current_chat_window.chat_history.emit_changed()
+	if cycle_history:
+		cycle_history.emit_changed()
 
 
 # 停止生成后的清理：先丢弃未落库的流式消息，再由数据层回滚未闭环的轮次
 # 视图刷新由 ChatMessageHistory.turn_rolled_back 信号驱动
-func _rollback_incomplete_turn() -> void:
+# [param p_history]: 本次循环绑定的历史记录；为空时回退到当前窗口的历史
+func _rollback_incomplete_turn(p_history: ChatMessageHistory = null) -> void:
 	_current_chat_window.discard_streaming_message()
 	
-	var history: ChatMessageHistory = _current_chat_window.chat_history
-	if history != null:
-		history.rollback_incomplete_turn()
+	var target_history: ChatMessageHistory = p_history if p_history != null else _current_chat_window.chat_history
+	if target_history != null:
+		target_history.rollback_incomplete_turn()
 
 
 # 把当前累计用量覆盖式同步到会话存档
 # 覆盖语义天然幂等：多次调用不会重复累加，因此可以放心地在
 # 「每轮请求发起前」与「整个回合结束后」两个时机都调用，互为兜底。
-func _sync_token_usage_to_history() -> void:
-	var history: ChatMessageHistory = _current_chat_window.chat_history
-	if history == null:
+# [param p_history]: 目标历史记录；为空时回退到当前窗口的历史
+func _sync_token_usage_to_history(p_history: ChatMessageHistory = null) -> void:
+	var target_history: ChatMessageHistory = p_history if p_history != null else _current_chat_window.chat_history
+	if target_history == null:
 		return
-	history.set_token_usage(_chat_ui.get_token_usage_snapshot())
+	target_history.set_token_usage(_chat_ui.get_token_usage_snapshot())
 
 
 func _get_compression_config() -> ContextCompressionConfig:
@@ -163,7 +187,8 @@ func _try_compress_context() -> Dictionary:
 		_compression_config = null
 		return {"success": false, "error": config_error, "error_kind": "config"}
 	
-	_chat_ui.update_ui_state(AIChatUI.UIState.COMPRESSING)
+	if not _agent_orchestrator.transition_to(AgentState.COMPRESSING):
+		return {"success": false, "error": "Agent is currently busy.", "error_kind": "other"}
 	
 	var compressor: ContextCompressor = ContextCompressor.new()
 	var result: Dictionary = await compressor.compress_context(history, _network_manager, config)
@@ -172,7 +197,7 @@ func _try_compress_context() -> Dictionary:
 		AIChatLogger.error("[AIChatHub] Context compression failed: " + String(result.error))
 		# 失败后丢弃缓存：用户修正 .tres 后下一次即可生效，无需重开面板
 		_compression_config = null
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
+		_agent_orchestrator.transition_to(AgentState.IDLE)
 		return {
 			"success": false,
 			"error": String(result.get("error", "Unknown")),
@@ -185,7 +210,7 @@ func _try_compress_context() -> Dictionary:
 		AIChatLogger.info("[AIChatHub] Context compressed. New session loaded.")
 		return {"success": true}
 	
-	_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
+	_agent_orchestrator.transition_to(AgentState.IDLE)
 	return {"success": false, "error": "Failed to save compressed session.", "error_kind": "other"}
 
 
@@ -222,6 +247,9 @@ func _build_compression_failure_message(p_error: String, p_kind: String, p_block
 # --- Signal Callbacks ---
 
 func _on_user_send_message(p_text: String) -> void:
+	if not _agent_orchestrator.is_idle():
+		return
+	
 	if not _chat_controller.has_active_session() or not _current_chat_window.chat_history:
 		_chat_ui.show_confirmation("No chat active. Please click 'New Chat' or 'Load Chat' to start.")
 		return
@@ -261,7 +289,7 @@ func _on_user_send_message(p_text: String) -> void:
 				return
 			
 			# 压缩成功：新会话已加载，输入内容保留在输入框中，由用户决定是否继续发送
-			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Context compressed. Ready for new input.")
+			_agent_orchestrator.transition_to(AgentState.IDLE, "Context compressed. Ready for new input.")
 			return
 	
 	# 真正发送时才清空输入框
@@ -271,9 +299,22 @@ func _on_user_send_message(p_text: String) -> void:
 	_run_chat_loop()
 
 
+func _on_user_queue_input(p_text: String) -> void:
+	var count: int = _agent_orchestrator.queue_user_input(p_text)
+	if count <= 0:
+		# 队列未接受（已不在可排队状态）：输入框内容保持原样，不做任何处理
+		# [不要调用 restore_user_input] 此刻输入框里仍是 p_text，
+		# 再回填一次会把它拼成「p_text + 空行 + p_text」，内容翻倍
+		return
+	
+	_chat_ui.clear_user_input()
+
+
 func _on_stream_chunk(p_chunk: Dictionary) -> void:
-	if _chat_ui.current_state != AIChatUI.UIState.RESPONSE_GENERATING:
-		_chat_ui.update_ui_state(AIChatUI.UIState.RESPONSE_GENERATING)
+	# 由状态机守卫统一裁决：
+	# WAITING_RESPONSE 会自动跃迁到 STREAMING；STOPPING 等状态下直接返回 false 丢弃残留 chunk
+	if not _agent_orchestrator.notify_stream_chunk_received():
+		return
 	
 	# 必须使用发起本轮流式请求的那个 Provider 实例，而非可能已被重建的 current_provider
 	var provider: BaseLLMProvider = _network_manager.streaming_provider
@@ -291,21 +332,19 @@ func _on_new_chat_request_sending() -> void:
 
 
 func _on_stop_requested() -> void:
-	if _is_performing_cleanup:
-		return
-	
-	_is_performing_cleanup = true
 	_agent_orchestrator.cancel_workflow()
-	_is_performing_cleanup = false
 
 
 func _on_new_chat_requested() -> void:
-	_on_stop_requested()
+	# 非空闲态（含 STOPPING 与 COMPRESSING）严禁切换或新建会话
+	if not _agent_orchestrator.is_idle():
+		return
 	_chat_controller.create_new_chat()
 
 
 func _on_compress_requested() -> void:
-	_on_stop_requested()
+	if not _agent_orchestrator.is_idle():
+		return
 	
 	var config: ContextCompressionConfig = _get_compression_config()
 	if config != null and not config.enabled:
@@ -319,10 +358,10 @@ func _on_compress_requested() -> void:
 	var compress_result: Dictionary = await _try_compress_context()
 	if compress_result.success:
 		# 压缩成功：已创建新会话并加载，恢复空闲状态
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Context compressed. New session loaded.")
+		_agent_orchestrator.transition_to(AgentState.IDLE, "Context compressed. New session loaded.")
 		return
 	
-	_chat_ui.update_ui_state(AIChatUI.UIState.IDLE)
+	_agent_orchestrator.transition_to(AgentState.IDLE)
 	_chat_ui.show_confirmation(_build_compression_failure_message(
 		String(compress_result.get("error", "Unknown")),
 		String(compress_result.get("error_kind", "other")),
@@ -331,11 +370,16 @@ func _on_compress_requested() -> void:
 
 
 func _on_load_chat_requested(p_session_name: String) -> void:
-	_on_stop_requested()
+	# 非空闲态严禁加载其他会话
+	if not _agent_orchestrator.is_idle():
+		return
 	_chat_controller.load_chat(p_session_name)
 
 
 func _on_delete_chat_requested(p_session_name: String) -> void:
+	# 非空闲态严禁删除会话
+	if not _agent_orchestrator.is_idle():
+		return
 	_chat_controller.delete_chat(p_session_name)
 
 

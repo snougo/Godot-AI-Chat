@@ -11,8 +11,10 @@ extends AiTool
 # 用于区分「缩进 / tab 与空格不符」与「文件内容已变」——两者的补救方式完全不同。
 #
 # 路径安全：
-# - 受统一黑名单管控（/.git/、/.import/、/.godot/、/android/、/addons/）
-# - EXTRA_WRITE_ALLOWLIST 可显式追加允许写入的目录前缀（默认空 = 不追加）
+# 路径关卡：ReadonlyZoneConfig.readonly_patterns 命中的管控区一律禁写
+#   （默认 /.git/、/.import/、/.godot/、/android/、/addons/）
+# - 豁免前缀：ReadonlyZoneConfig.extra_write_allowlist 可显式放开指定目录（默认空 = 不放开）
+# - 格式关卡：ReadonlyZoneConfig.editable_text_extensions 决定哪些扩展名可改写
 #
 # 换行与 BOM：内部统一按 LF 匹配，写回时恢复原文件的行尾风格与 BOM，
 # 因此不必关心目标文件是 LF 还是 CRLF。
@@ -26,20 +28,11 @@ extends AiTool
 
 # --- Constants ---
 
-# 允许编辑的文本类扩展名（二进制资源如 .scn/.res/.png 不在列）
-const EDITABLE_EXTENSIONS: Array[String] = ["md", "txt", "json", "cfg", "csv", "glsl", "gdshader", "gd"]
-
 # 未命中诊断：探针行的最小长度。过短的行（如 "}"、"pass"）会命中大量无关位置，没有诊断价值
 const MIN_PROBE_CHARS: int = 8
 
 # 未命中诊断：最多返回的候选行数
 const MAX_MISS_HINTS: int = 3
-
-# 额外允许写入的路径前缀（默认空 = 完全遵循黑名单）。
-# 默认黑名单禁止写入 /addons/。若确实需要让 AI 修改某个插件，可在此显式列出该插件目录，
-# 例如 ["res://addons/poly_model/"]。
-# 只有[人类编辑本文件]才能放宽该限制 —— AI 无法自行修改自己运行所依赖的这份脚本。
-const EXTRA_WRITE_ALLOWLIST: Array[String] = []
 
 # GDScript 静态编译检查器（仅对 .gd 生效）
 const GDScriptCompileChecker := preload("res://addons/godot_ai_chat/scripts/helper/gdscript_compile_checker.gd")
@@ -49,7 +42,7 @@ const GDScriptCompileChecker := preload("res://addons/godot_ai_chat/scripts/help
 
 func _init() -> void:
 	tool_name = "edit_file"
-	tool_description = "Edits an existing file on disk. Support: md, txt, json, cfg, csv, glsl, gdshader, gd. Put every related change into a single `edits` call: edits apply in order and nothing is written if any of them fails. `.gd` content is compile-checked before writing — on compile errors nothing is written."
+	tool_description = "Edits an existing file on disk. Support: %s. Put every related change into a single `edits` call: edits apply in order and nothing is written if any of them fails. `.gd` content is compile-checked before writing — on compile errors nothing is written." % ReadonlyZoneConfig.get_config().get_editable_extensions_text()
 
 
 # --- Public Functions ---
@@ -105,16 +98,12 @@ func execute(p_args: Dictionary) -> ToolResult:
 	if not FileAccess.file_exists(path):
 		return ToolResult.fail("Error: file not found: %s (this tool only edits existing files)." % path)
 	
-	var blacklist_error: String = _validate_path_safety_with_allowlist(path)
-	if not blacklist_error.is_empty():
-		return ToolResult.fail(blacklist_error)
+	# 路径关卡（管控区 + 豁免前缀）与格式关卡（可写扩展名）统一由配置资源驱动
+	var safety_err: String = validate_editable_path(path)
+	if not safety_err.is_empty():
+		return ToolResult.fail(safety_err)
 	
 	var extension: String = path.get_extension().to_lower()
-	if not EDITABLE_EXTENSIONS.has(extension):
-		return ToolResult.fail(
-			"Error: '.%s' is not an editable text extension. Supported: %s"
-			% [extension, ", ".join(EDITABLE_EXTENSIONS)]
-		)
 	
 	# --- 读取原始内容 ---
 	var read_file: FileAccess = FileAccess.open(path, FileAccess.READ)
@@ -227,15 +216,6 @@ func execute(p_args: Dictionary) -> ToolResult:
 
 
 # --- Private Functions ---
-
-# 黑名单校验；EXTRA_WRITE_ALLOWLIST 中的前缀可豁免。
-func _validate_path_safety_with_allowlist(p_path: String) -> String:
-	var normalized: String = p_path.replace("\\", "/")
-	for prefix: String in EXTRA_WRITE_ALLOWLIST:
-		if normalized.begins_with(prefix.replace("\\", "/")):
-			return ""
-	return validate_path_safety(p_path)
-
 
 # 构建未命中诊断：用 target_string 的首个有效行做探针，忽略缩进逐行比对，
 # 用于区分「缩进 / tab 与空格不符」与「文件内容已变」这两种完全不同的补救方式

@@ -2,8 +2,7 @@
 extends Control
 
 # 主 UI 控制器
-# 负责管理插件的主要 UI 交互，包括状态切换、模型选择、存档管理等。
-# 作为 UI 层与业务逻辑层的桥梁，转发信号并更新界面状态。
+# 作为纯响应式视图层，投影 Agent Runtime 的状态（AgentState），管理模型选择与存档交互信号。
 # Token 计数的累计逻辑由 TokenUsageTracker 承担，本类只负责渲染。
 
 
@@ -11,6 +10,8 @@ extends Control
 
 # 当用户点击发送按钮时发出
 signal send_button_pressed(user_prompt: String)
+# 当用户在 AI 处理过程中点击排队按钮时发出
+signal queue_input_requested(user_prompt: String)
 # 当用户点击停止按钮时发出
 signal stop_button_pressed
 # 当用户点击新聊天按钮时发出
@@ -38,20 +39,9 @@ signal workspace_changed(new_path: String)
 const SettingsPanel := preload("res://addons/godot_ai_chat/scripts/ui/settings_panel.gd")
 const SessionStorage := preload("res://addons/godot_ai_chat/scripts/helper/session_storage.gd")
 const TokenUsageTracker := preload("res://addons/godot_ai_chat/scripts/helper/token_usage_tracker.gd")
+const AIChatAgentOrchestrator = preload("res://addons/godot_ai_chat/scripts/core/main_agent_orchestrator.gd")
 
-
-# --- Enums ---
-
-# UI 状态定义
-enum UIState {
-	IDLE,                ## 空闲状态
-	CONNECTING,          ## 正在连接服务器
-	WAITING_RESPONSE,    ## 等待 AI 响应
-	RESPONSE_GENERATING, ## 正在生成响应
-	TOOLCALLING,         ## 正在执行工具调用
-	COMPRESSING,         ## 正在压缩上下文
-	ERROR                ## 发生错误
-}
+const AgentState = AIChatAgentOrchestrator.AgentState
 
 
 # --- @onready Vars ---
@@ -91,12 +81,14 @@ enum UIState {
 
 # --- Public Vars ---
 
-# 当前 UI 状态
-var current_state: UIState = UIState.IDLE
+# 当前投影的 Agent 状态
+var current_state: AgentState = AgentState.IDLE
 # 缓存的模型列表
 var model_list: Array[String] = []
 # 用于判断是否为首次运行或初始化阶段
 var is_first_init: bool = false
+# 当前排队的用户输入条数（用于状态栏提示）
+var pending_input_count: int = 0
 
 
 # --- Private Vars ---
@@ -106,6 +98,15 @@ var _token_tracker: TokenUsageTracker = TokenUsageTracker.new()
 # 标记当前是否在等待删除确认
 var _pending_delete_session_name: String = ""
 var _current_session_name: String = ""
+
+# 状态栏当前的自定义文案缓存
+# [用途] 排队数量变化时重建状态栏文本，必须沿用调用方传入的 payload，
+# 否则会被重置为该状态的默认文案，造成文案跳变
+var _status_payload: String = ""
+
+# 外围独立状态：当前是否正在拉取模型列表 / 最近一次模型列表连接是否出错
+var _is_connecting_models: bool = false
+var _has_connection_error: bool = false
 
 
 # --- Built-in Functions ---
@@ -125,6 +126,10 @@ func _ready() -> void:
 	
 	_save_as_markdown_button.pressed.connect(_on_save_as_markdown_button_pressed)
 	_send_button.pressed.connect(_on_send_button_pressed)
+	_user_input.text_changed.connect(_on_user_input_text_changed)
+	# [必须] TextEdit.clear() / 直接赋值 text 走的是 text_set 而非 text_changed，
+	# 只连 text_changed 会导致程序化清空输入框后按钮文案滞后（显示 Queue 而实际已是 Stop）
+	_user_input.text_set.connect(_on_user_input_text_changed)
 	
 	_workspace_select_button.pressed.connect(_on_workspace_select_button_pressed)
 	_file_dialog.dir_selected.connect(_on_workspace_dir_selected)
@@ -135,7 +140,7 @@ func _ready() -> void:
 	
 	update_session_selector()
 	reset_token_usage_display()
-	update_ui_state(UIState.IDLE)
+	apply_agent_state(AgentState.IDLE)
 	
 	# 初始化工作区显示
 	_update_workspace_display(settings.workspace_path)
@@ -161,68 +166,62 @@ func initialize_editor_dependencies(p_editor_filesystem: EditorFileSystem) -> vo
 		p_editor_filesystem.filesystem_changed.connect(_on_filesystem_changed)
 
 
-# 更新 UI 的整体状态
-func update_ui_state(p_new_state: UIState, p_payload: String = "") -> void:
+# 投影 Agent Runtime 的运行状态到 UI 控件
+func apply_agent_state(p_new_state: AgentState, p_payload: String = "") -> void:
 	current_state = p_new_state
-	_status_label.text = p_payload if not p_payload.is_empty() else _get_default_status_text(p_new_state)
+	_status_payload = p_payload
+	if current_state != AgentState.IDLE:
+		_has_connection_error = false
 	
-	# --- 公共控件状态（按状态规律统一设置）---
-	var is_idle: bool = (current_state == UIState.IDLE)
-	var archive_enabled: bool = (current_state == UIState.IDLE or current_state == UIState.ERROR)
-	
-	_user_input.editable = is_idle
-	_user_input.caret_blink = is_idle
-	_delete_chat_button.disabled = not archive_enabled
-	_load_chat_button.disabled = not archive_enabled
-	_save_as_markdown_button.disabled = not archive_enabled
-	_new_chat_button.disabled = not archive_enabled
-	_compress_button.disabled = not archive_enabled
-	_reconnect_button.disabled = not archive_enabled
-	
-	_status_label.modulate = _get_status_color(current_state)
-	
-	# --- Send 按钮（per-state 文案与禁用状态）---
-	match current_state:
-		UIState.IDLE:
-			_send_button.text = "Send"
-			_send_button.disabled = false
-		UIState.CONNECTING:
-			_send_button.text = "Send"
-			_send_button.disabled = true
-		UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING:
-			_send_button.text = "Stop"
-			_send_button.disabled = false
-		UIState.TOOLCALLING:
-			_send_button.text = "Stop"
-			_send_button.disabled = true
-		UIState.COMPRESSING:
-			_send_button.text = "..."
-			_send_button.disabled = true
-		UIState.ERROR:
-			_send_button.text = "Send"
-			_send_button.disabled = true
-			if not p_payload.is_empty():
-				_show_error_dialog(p_payload)
+	_refresh_ui_controls()
 
 
-# 更新模型下拉列表的内容
+# 在空闲态下仅更新状态栏提示文案（供会话新建/加载/删除等操作反馈使用）
+func set_idle_status_text(p_text: String) -> void:
+	if current_state != AgentState.IDLE:
+		return
+	_status_payload = p_text
+	_has_connection_error = false
+	_refresh_status_bar()
+
+
+# 当开始拉取模型列表时调用（外围独立状态，不改变 AgentState）
+func on_model_list_request_started() -> void:
+	_is_connecting_models = true
+	_has_connection_error = false
+	_refresh_ui_controls()
+
+
+# 更新模型下拉列表的内容（拉取模型列表成功）
 func update_model_list(p_model_names: Array[String]) -> void:
-	var current_msg: String = _status_label.text
-	if not ("No Chat" in current_msg):
-		update_ui_state(UIState.IDLE, "Ready")
+	_is_connecting_models = false
+	_has_connection_error = false
+	
+	if current_state == AgentState.IDLE and not ("No Chat" in _status_payload):
+		_status_payload = "Ready"
 	
 	model_list = p_model_names
 	_apply_model_filter()
+	_refresh_ui_controls()
 
 
 # 当获取模型列表请求失败时调用
 func get_model_list_request_failed(p_error_message: String) -> void:
+	_is_connecting_models = false
+	
+	# 循环进行中不打断主界面状态栏，仅记录日志
+	if current_state != AgentState.IDLE:
+		AIChatLogger.warn("[ChatUI] Model list request failed during an active cycle: " + p_error_message)
+		_refresh_ui_controls()
+		return
+	
+	_has_connection_error = true
+	_status_payload = p_error_message
+	_refresh_ui_controls()
+	
 	if is_first_init:
-		update_ui_state(UIState.ERROR, p_error_message)
+		_show_error_dialog(p_error_message)
 	else:
-		update_ui_state(UIState.ERROR, "")
-		_status_label.text = p_error_message
-		_status_label.modulate = Color.RED
 		is_first_init = true
 
 
@@ -266,6 +265,30 @@ func update_session_selector() -> void:
 # 清空用户输入框
 func clear_user_input() -> void:
 	_user_input.clear()
+	# [显式刷新] 不依赖 text_set 信号，避免信号连接缺失时按钮文案滞后
+	_refresh_send_button()
+
+
+# 更新排队中的用户输入条数，同步刷新状态栏提示
+# [param p_count]: 排队条数
+func update_pending_input_count(p_count: int) -> void:
+	pending_input_count = p_count
+	_refresh_status_bar()
+
+
+# 把文本回填到用户输入框（用于未能注入的排队消息）
+# [param p_text]: 待回填文本
+func restore_user_input(p_text: String) -> void:
+	if p_text.strip_edges().is_empty():
+		return
+	
+	# 输入框已有内容时前置拼接，避免覆盖用户新敲的字
+	if _user_input.text.strip_edges().is_empty():
+		_user_input.text = p_text
+	else:
+		_user_input.text = p_text + "\n\n" + _user_input.text
+	
+	_refresh_send_button()
 
 
 # 更新对话轮数显示
@@ -323,6 +346,38 @@ func show_confirmation(p_message: String) -> void:
 
 # --- Private Functions ---
 
+# 统一刷新所有受状态控制的 UI 控件
+func _refresh_ui_controls() -> void:
+	var is_idle: bool = (current_state == AgentState.IDLE)
+	# 循环进行中仍允许编辑输入框，用户可中途补充消息并排队
+	var input_editable: bool = is_idle or current_state in [
+		AgentState.WAITING_RESPONSE,
+		AgentState.STREAMING,
+		AgentState.EXECUTING_TOOLS
+	]
+	
+	_user_input.editable = input_editable
+	_user_input.caret_blink = input_editable
+	
+	# 严守单会话规则：只要不处于 IDLE（含 STOPPING 与 COMPRESSING），严禁操作会话存档
+	_delete_chat_button.disabled = not is_idle
+	_load_chat_button.disabled = not is_idle
+	_save_as_markdown_button.disabled = not is_idle
+	_new_chat_button.disabled = not is_idle
+	_compress_button.disabled = not is_idle
+	_session_selector.disabled = (not is_idle) or (_session_selector.get_item_count() == 0)
+	_reconnect_button.disabled = (not is_idle) or _is_connecting_models
+	
+	_refresh_status_bar()
+	_refresh_send_button()
+
+
+# 刷新状态栏文本与颜色
+func _refresh_status_bar() -> void:
+	_status_label.text = _compose_status_text(_status_payload)
+	_status_label.modulate = _get_status_color()
+
+
 # 把 TokenUsageTracker 的数据渲染到 UI 控件
 func _refresh_token_display() -> void:
 	var display: Dictionary = _token_tracker.get_display_usage()
@@ -346,32 +401,77 @@ func _refresh_token_display() -> void:
 	]
 
 
-func _get_default_status_text(p_state: UIState) -> String:
+func _get_default_status_text(p_state: AgentState) -> String:
 	match p_state:
-		UIState.IDLE: return "Ready"
-		UIState.CONNECTING: return "Connecting..."
-		UIState.WAITING_RESPONSE: return "Waiting for LLM response..."
-		UIState.RESPONSE_GENERATING: return "LLM is generating..."
-		UIState.TOOLCALLING: return "Executing Tools..."
-		UIState.COMPRESSING: return "Compressing context..."
-		UIState.ERROR: return "Error"
+		AgentState.IDLE:
+			if _is_connecting_models:
+				return "Connecting..."
+			return "Ready"
+		AgentState.WAITING_RESPONSE: return "Waiting for LLM response..."
+		AgentState.STREAMING: return "LLM is generating..."
+		AgentState.EXECUTING_TOOLS: return "Executing Tools..."
+		AgentState.COMPRESSING: return "Compressing context..."
+		AgentState.STOPPING: return "Stopping... waiting for the running tool to return."
 	return ""
 
 
-func _get_status_color(p_state: UIState) -> Color:
-	match p_state:
-		UIState.IDLE:
+# 组合状态栏文本：默认/自定义文案 + 排队提示
+# [param p_payload]: 自定义文案，为空则使用当前状态的默认文案
+func _compose_status_text(p_payload: String) -> String:
+	var text: String = ""
+	if current_state == AgentState.IDLE and _is_connecting_models:
+		text = "Connecting..."
+	elif not p_payload.is_empty():
+		text = p_payload
+	else:
+		text = _get_default_status_text(current_state)
+	
+	if pending_input_count > 0:
+		text += "  [%d queued]" % pending_input_count
+	return text
+
+
+# 输入框是否有可排队的非空内容
+func _has_queueable_text() -> bool:
+	return not _user_input.text.strip_edges().is_empty()
+
+
+# 根据当前状态与输入框内容刷新发送按钮的文案与可用性
+# 循环进行中：有输入 → Queue，无输入 → Stop（同一按钮承担两种意图）
+func _refresh_send_button() -> void:
+	var has_input: bool = _has_queueable_text()
+	
+	match current_state:
+		AgentState.IDLE:
+			_send_button.text = "Send"
+			_send_button.disabled = _is_connecting_models or _has_connection_error
+		AgentState.WAITING_RESPONSE, AgentState.STREAMING, AgentState.EXECUTING_TOOLS:
+			_send_button.text = "Queue" if has_input else "Stop"
+			_send_button.disabled = false
+		AgentState.STOPPING:
+			_send_button.text = "Stop"
+			_send_button.disabled = true
+		AgentState.COMPRESSING:
+			_send_button.text = "..."
+			_send_button.disabled = true
+
+
+func _get_status_color() -> Color:
+	match current_state:
+		AgentState.IDLE:
+			if _is_connecting_models:
+				return Color.WHITE
+			if _has_connection_error:
+				return Color.RED
 			if "No Chat" in _status_label.text:
 				return Color.GOLD
 			return Color.WHITE
-		UIState.CONNECTING:
-			return Color.WHITE
-		UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING:
+		AgentState.WAITING_RESPONSE, AgentState.STREAMING:
 			return Color.AQUAMARINE
-		UIState.TOOLCALLING, UIState.COMPRESSING:
+		AgentState.EXECUTING_TOOLS, AgentState.COMPRESSING:
 			return Color.GOLD
-		UIState.ERROR:
-			return Color.RED
+		AgentState.STOPPING:
+			return Color.ORANGE_RED
 	return Color.WHITE
 
 
@@ -537,12 +637,21 @@ func _on_save_as_markdown_button_pressed() -> void:
 
 
 func _on_send_button_pressed() -> void:
-	if current_state in [UIState.WAITING_RESPONSE, UIState.RESPONSE_GENERATING, UIState.TOOLCALLING]:
-		stop_button_pressed.emit()
-	elif current_state == UIState.IDLE or current_state == UIState.ERROR:
+	if current_state in [AgentState.WAITING_RESPONSE, AgentState.STREAMING, AgentState.EXECUTING_TOOLS]:
+		# 循环进行中：有输入则排队，无输入则请求停止
+		var queued_prompt: String = _user_input.text.strip_edges()
+		if queued_prompt.is_empty():
+			stop_button_pressed.emit()
+		else:
+			queue_input_requested.emit(queued_prompt)
+	elif current_state == AgentState.IDLE:
 		var user_prompt: String = _user_input.text.strip_edges()
 		if not user_prompt.is_empty():
 			send_button_pressed.emit(user_prompt)
+
+
+func _on_user_input_text_changed() -> void:
+	_refresh_send_button()
 
 
 func _on_file_selected(p_path: String) -> void:

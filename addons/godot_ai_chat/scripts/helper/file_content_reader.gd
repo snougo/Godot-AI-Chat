@@ -66,106 +66,6 @@ const PACKED_ARRAY_TYPES: Array[int] = [
 ]
 
 
-#  --- 场景树读取 ---
-
-static func read_scene_content(p_path: String, p_start_line: int = 1, p_line_count: int = 0) -> Dictionary:
-	if not FileAccess.file_exists(p_path):
-		return {"success": false, "data": "Error: File not found: " + p_path}
-	
-	# .tscn 是文本格式场景，复用文本读取逻辑直接返回文件内容
-	if p_path.get_extension().to_lower() == "tscn":
-		return read_text_content(p_path, p_start_line, p_line_count)
-	
-	# .scn 二进制场景：基于 SceneState 读取元信息（无需实例化，无副作用）
-	var scene_resource: PackedScene = load(p_path)
-	if not scene_resource:
-		return {"success": false, "data": "Error: Failed to load scene: " + p_path}
-	
-	var state: SceneState = scene_resource.get_state() as SceneState
-	if not state:
-		return {"success": false, "data": "Error: Failed to get scene state: " + p_path}
-	
-	# [性能] 节点/连接数量可达数千，旧实现用 md += ... 逐个拼接，
-	# GDScript 的 String += 会复制整个已累积字符串（O(n²)）。改为收集后一次 join。
-	var parts: PackedStringArray = PackedStringArray()
-	parts.append("- **Type**: %s" % scene_resource.get_class())
-	parts.append("- **Path**: `%s`" % scene_resource.resource_path)
-	parts.append("- **Can Instantiate**: %s" % str(scene_resource.can_instantiate()))
-	
-	# 继承的基场景
-	var base_state: SceneState = state.get_base_scene_state()
-	if base_state:
-		parts.append("- **Base Scene**: `%s`" % base_state.get_path())
-	
-	# 节点列表
-	var node_count: int = state.get_node_count()
-	parts.append("")
-	parts.append("**Nodes:** (%d)" % node_count)
-	for i in range(node_count):
-		parts.append(_format_scene_state_node(state, i))
-	
-	# 信号连接
-	var conn_count: int = state.get_connection_count()
-	parts.append("")
-	parts.append("**Connections:** (%d)" % conn_count)
-	for i in range(conn_count):
-		parts.append(_format_scene_state_connection(state, i))
-	
-	var compacted: Dictionary = _compact_summary_body("".join(parts))
-	return {"success": true, "data": _build_output("Content for Scene: `%s`" % p_path.get_file(), compacted, "")}
-
-
-# 格式化 SceneState 中的单个节点：路径、类型、子场景实例、组、导出/覆写属性
-# [param p_state]: 场景状态
-# [param p_idx]: 节点索引
-# [return]: Markdown 格式的节点信息
-static func _format_scene_state_node(p_state: SceneState, p_idx: int) -> String:
-	var md: String = "- `%s` [%s]" % [p_state.get_node_path(p_idx), p_state.get_node_type(p_idx)]
-	
-	var instance: PackedScene = p_state.get_node_instance(p_idx)
-	if instance:
-		md += " [instance: `%s`]" % instance.resource_path
-	elif p_state.is_node_instance_placeholder(p_idx):
-		md += " [placeholder: `%s`]" % p_state.get_node_instance_placeholder(p_idx)
-	
-	var groups: PackedStringArray = p_state.get_node_groups(p_idx)
-	if not groups.is_empty():
-		md += " [groups: %s]" % ", ".join(groups)
-	
-	md += "\n"
-	
-	var prop_count: int = p_state.get_node_property_count(p_idx)
-	for pi in range(prop_count):
-		var pname: StringName = p_state.get_node_property_name(p_idx, pi)
-		var pvalue: Variant = p_state.get_node_property_value(p_idx, pi)
-		md += "  - **%s**: %s\n" % [pname, _format_property_value(pvalue)]
-	
-	return md
-
-
-# 格式化 SceneState 中的单个信号连接：源/信号/目标/方法，附 flags 与 binds
-# [param p_state]: 场景状态
-# [param p_idx]: 连接索引
-# [return]: Markdown 格式的连接信息
-static func _format_scene_state_connection(p_state: SceneState, p_idx: int) -> String:
-	var md: String = "- `%s.%s` -> `%s.%s`" % [
-		p_state.get_connection_source(p_idx),
-		p_state.get_connection_signal(p_idx),
-		p_state.get_connection_target(p_idx),
-		p_state.get_connection_method(p_idx)
-	]
-	var extras: Array[String] = []
-	var flags: int = p_state.get_connection_flags(p_idx)
-	if flags != 0:
-		extras.append("flags=%d" % flags)
-	var binds: Array = p_state.get_connection_binds(p_idx)
-	if not binds.is_empty():
-		extras.append("binds=%s" % binds)
-	if not extras.is_empty():
-		md += " (%s)" % ", ".join(extras)
-	return md + "\n"
-
-
 #  --- 脚本读取 ---
 
 static func read_script_content(p_path: String, p_start_line: int = 1, p_line_count: int = 0) -> Dictionary:
@@ -340,7 +240,7 @@ static func read_image_metadata(p_path: String) -> Dictionary:
 #  --- 输出装配与压缩 ---
 
 # 组装最终输出：首行标题 +（可选）[PARTIAL] 说明 + 正文（可选代码围栏）
-# [param p_header]: 首行标题（如 "Content for File: `x.tscn`"）
+# [param p_header]: 首行标题（如 "Content for File: `x.tres`"）
 # [param p_compacted]: _prepare_body() / _compact_summary_body() 的返回值
 # [param p_fence]: 代码围栏语言标签，空字符串表示不加围栏
 static func _build_output(p_header: String, p_compacted: Dictionary, p_fence: String) -> String:

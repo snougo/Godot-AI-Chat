@@ -3,20 +3,11 @@ extends RefCounted
 
 ## AI 工具的基类
 ##
-## 定义了 AI 工具必须实现的接口以及通用的安全检查逻辑。
-
-
-# --- Constants ---
-
-## 统一的安全路径黑名单
-## 这些目录包含 Godot 内部文件、插件源码或版本控制文件，禁止 AI 修改以免破坏项目结构
-const PATH_BLACKLIST: Array[String] = [
-	"/.git/", 
-	"/.import/", 
-	"/.godot/",
-	"/android/", 
-	"/addons/" 
-]
+## 定义了 AI 工具必须实现的接口以及通用的写入安全检查逻辑。
+##
+## 写入检查分两道关卡，均由 ReadonlyZoneConfig 资源驱动（不再硬编码）：
+## 1. 路径关卡：validate_path_safety() —— 管控区禁写，可配置豁免前缀
+## 2. 格式关卡：validate_editable_path() —— 改写已有文件时，扩展名须在白名单内
 
 
 # --- Public Vars ---
@@ -43,7 +34,7 @@ func execute(_p_args: Dictionary) -> ToolResult:
 	return ToolResult.fail("Not implemented")
 
 
-## 统一的路径安全检查函数
+## 统一的路径安全检查函数（第一道关卡：管控区）
 ## 返回空字符串表示安全，返回错误信息表示违规
 func validate_path_safety(p_path: String) -> String:
 	if p_path.is_empty():
@@ -52,19 +43,33 @@ func validate_path_safety(p_path: String) -> String:
 	if not p_path.begins_with("res://"):
 		return "Path must start with 'res://'."
 	
-	# 标准化路径：移除 res:// 前缀，统一使用正斜杠
-	# 例如: "res://my_folder\script.gd" -> "/my_folder/script.gd"
-	var check_path: String = p_path.replace("res://", "/").replace("\\", "/")
+	# 片断匹配与豁免前缀判断已迁至 ReadonlyZoneConfig：
+	# 原实现在此处做路径标准化（把 res:// 换成 / 并补齐首尾斜杠，防止
+	# "res://addons_test" 被误判为 "/addons/"），该逻辑现位于
+	# ReadonlyZoneConfig._normalize_for_match()，语义保持不变。
+	var config: ReadonlyZoneConfig = ReadonlyZoneConfig.get_config()
+	var blocked_pattern: String = config.get_blocked_pattern(p_path)
+	if not blocked_pattern.is_empty():
+		return "**Security Error**: Operation denied on path '%s'. Because this path is read-only, write operations are prohibited. " % blocked_pattern
 	
-	# 确保路径以斜杠结尾，以便精确匹配目录
-	# 这能防止 "res://addons_test" (预期通过) 被误判为 "/addons/" (黑名单)
-	# 同时也能拦截 "res://addons" (预期拦截) 这种未带斜杠的目录创建请求
-	if not check_path.ends_with("/"):
-		check_path += "/"
+	return ""
+
+
+## 统一的改写安全检查函数（路径关卡 + 格式关卡）
+## 适用于「改写已有文本文件」这类工具（如 edit_file）
+## [param p_path]: 目标文件路径
+## 返回空字符串表示安全，返回错误信息表示违规
+func validate_editable_path(p_path: String) -> String:
+	var safety_err: String = validate_path_safety(p_path)
+	if not safety_err.is_empty():
+		return safety_err
 	
-	# 检查是否是路径黑名单
-	for blocked_pattern in PATH_BLACKLIST:
-		if check_path.find(blocked_pattern) != -1:
-			return "**Security Error**: Operation denied on path '%s'. Because this path is read-only, write operations are prohibited. " % blocked_pattern
+	# 第二道关卡：扩展名白名单
+	var config: ReadonlyZoneConfig = ReadonlyZoneConfig.get_config()
+	var extension: String = p_path.get_extension().to_lower()
+	if not config.is_extension_editable(extension):
+		return "Error: '.%s' is not an editable text extension. Supported: %s" % [
+			extension, config.get_editable_extensions_text()
+		]
 	
 	return ""

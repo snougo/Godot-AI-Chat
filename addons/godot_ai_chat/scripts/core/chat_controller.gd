@@ -42,7 +42,7 @@ func create_new_chat() -> void:
 	
 	if history:
 		_load_history_to_ui(history, _session_manager.current_session_path.get_file())
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "New Chat Created: " + _session_manager.current_session_path.get_file())
+		_chat_ui.set_idle_status_text("New Chat Created: " + _session_manager.current_session_path.get_file())
 	else:
 		_chat_ui.show_confirmation("Error: Failed to create chat session.")
 
@@ -62,7 +62,7 @@ func fork_current_chat() -> void:
 	var saved_history: ChatMessageHistory = _session_manager.fork_session(forked_history)
 	if saved_history:
 		_load_history_to_ui(saved_history, _session_manager.current_session_path.get_file())
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Forked: " + _session_manager.current_session_path.get_file())
+		_chat_ui.set_idle_status_text("Forked: " + _session_manager.current_session_path.get_file())
 	else:
 		_chat_ui.show_confirmation("Error: Failed to fork chat session.")
 
@@ -74,7 +74,7 @@ func load_chat(p_session_name: String) -> void:
 	
 	if history:
 		_load_history_to_ui(history, p_session_name)
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Loaded: " + p_session_name)
+		_chat_ui.set_idle_status_text("Loaded: " + p_session_name)
 	else:
 		_chat_ui.show_confirmation("Error: Failed to load session: " + p_session_name)
 
@@ -93,13 +93,13 @@ func delete_chat(p_session_name: String) -> void:
 		if loaded_history:
 			var loaded_name: String = _session_manager.current_session_path.get_file()
 			_load_history_to_ui(loaded_history, loaded_name)
-			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Moved to Trash: %s, loaded: %s" % [p_session_name, loaded_name])
+			_chat_ui.set_idle_status_text("Moved to Trash: %s, loaded: %s" % [p_session_name, loaded_name])
 		else:
 			_current_chat_window.clear_session()
-			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Moved to Trash: %s. No chats remaining." % p_session_name)
+			_chat_ui.set_idle_status_text("Moved to Trash: %s. No chats remaining." % p_session_name)
 			update_turn_info()
 	else:
-		_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Moved to Trash: " + p_session_name)
+		_chat_ui.set_idle_status_text("Moved to Trash: " + p_session_name)
 	
 	_chat_ui.update_session_selector()
 
@@ -159,7 +159,7 @@ func load_latest_on_init() -> void:
 		var history: ChatMessageHistory = _session_manager.load_latest_session()
 		if history:
 			_load_history_to_ui(history, _session_manager.current_session_path.get_file())
-			_chat_ui.update_ui_state(AIChatUI.UIState.IDLE, "Loaded: " + _session_manager.current_session_path.get_file())
+			_chat_ui.set_idle_status_text("Loaded: " + _session_manager.current_session_path.get_file())
 		else:
 			create_new_chat()
 

@@ -36,6 +36,11 @@ func _input(event: InputEvent) -> void:
 ## [param _at_position]: 拖拽位置 (未使用)
 ## [param data]: 拖拽数据
 func _can_drop_data(_at_position: Vector2, data: Variant) -> bool:
+	# 输入框不可编辑时拒绝投放：拖放走的是 Control 层机制，不经过 TextEdit.editable，
+	# 不拦截会让用户绕过 STOPPING / COMPRESSING / CONNECTING 状态的输入锁定
+	if not editable:
+		return false
+	
 	if typeof(data) != TYPE_DICTIONARY:
 		return false
 	

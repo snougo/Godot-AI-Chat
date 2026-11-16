@@ -39,5 +39,8 @@ static func get_config() -> MainAgentToolConfig:
 static func _get_default_tool_scripts() -> Array[String]:
 	return [
 		PluginPaths.TOOL_DIR + "file_tool/read_file_tool.gd",
-		PluginPaths.TOOL_DIR + "default_tool/list_folder_tool.gd",
+		PluginPaths.TOOL_DIR + "file_tool/get_readonly_zones_tool.gd",
+		PluginPaths.TOOL_DIR + "folder_tool/list_folder_tool.gd",
+		PluginPaths.TOOL_DIR + "search_tool/search_in_files_tool.gd",
+		PluginPaths.TOOL_DIR + "search_tool/search_web_tool.gd",
 	]

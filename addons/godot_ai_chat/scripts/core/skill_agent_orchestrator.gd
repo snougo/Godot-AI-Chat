@@ -40,6 +40,11 @@ const RETRY_MAX_DELAY_S: float = 60.0
 # 抖动比例：避免多个客户端在同一时刻集体重试，把限流窗口再次撞满
 const RETRY_JITTER_RATIO: float = 0.2
 
+# 取消时的统一返回文案
+# [为什么要点明「未回滚」] 取消发生在工具执行之后时，工具的副作用（写文件等）已经生效，
+# 主代理需要知道这一点，否则会误判为「什么都没发生」而重复执行
+const CANCELLED_RESULT_MESSAGE: String = "Skill Agent was cancelled by the user before completion. Its task may be partially completed. Any files it already wrote have NOT been rolled back; please verify the current state before retrying."
+
 
 # --- Public Vars ---
 
@@ -61,6 +66,11 @@ var _console_segment: String = ""
 # 控制台输出行缓冲：编辑器面板按整行刷新，故先缓冲再整行输出
 var _console_line_buffer: String = ""
 
+# 协作式取消标志：置位后由主循环在各检查点自行收尾并正常返回
+# [为什么不直接 queue_free] 节点被释放会让 run_task() 永不返回，
+# 主代理的 await tool_instance.execute() 将永久挂起，整个聊天循环卡死
+var _is_cancelled: bool = false
+
 # 活动实例登记表（供插件停用时统一释放）
 static var _active_instances: Array[AIChatSkillAgentOrchestrator] = []
 
@@ -81,6 +91,10 @@ func _ready() -> void:
 # --- Public Functions ---
 
 func run_task() -> String:
+	# 每次任务开始前复位取消标志：本类是 Node，实例理论上可能被复用；
+	# 与 Main Agent 的 is_cancelled 一样，粘滞标志必须在入口处清空
+	_is_cancelled = false
+	
 	# 优先使用技能级配置，若无则回退到全局配置
 	var skill_res: Resource = ToolRegistry.available_skills.get(skill_name)
 	if skill_res and skill_res.get("skill_agent_config") != null:
@@ -138,6 +152,12 @@ func run_task() -> String:
 	var step_notice_logged: bool = false
 	
 	while turns_taken < _config.max_chat_turns:
+		# [阶段2 · 取消检查点 1] 每轮开始前
+		if _is_cancelled:
+			AIChatLogger.warn("[Skill Agent] Cancelled by user before turn %d." % (turns_taken + 1))
+			_remove_skill_agent()
+			return CANCELLED_RESULT_MESSAGE
+		
 		turns_taken += 1
 		
 		# 轮次分隔：流式输出需要明确的上下文边界，否则多轮内容在控制台里首尾相连
@@ -166,6 +186,14 @@ func run_task() -> String:
 		# 统一流式请求（带重试）：请求体以 Dictionary 传入，序列化推迟到后台线程；
 		# 协议分派由 provider.parse_stream_chunk 决定；仅 429 / 5xx 走指数退避重试
 		var response: Dictionary = await _do_stream_request_with_retry(url, headers, body, provider, _config.network_timeout)
+		
+		# [阶段2 · 取消检查点 2] 请求返回后
+		# [为什么不能只看 response.has("error")] 取消路径返回的 error 文案与真实失败难以区分，
+		# 这里用标志位判定，保证取消得到明确的返回值
+		if _is_cancelled:
+			AIChatLogger.warn("[Skill Agent] Cancelled by user while awaiting response.")
+			_remove_skill_agent()
+			return CANCELLED_RESULT_MESSAGE
 		
 		if response.has("error"):
 			AIChatLogger.error("[Skill Agent] " + String(response.error))
@@ -207,6 +235,13 @@ func run_task() -> String:
 		
 		# 执行工具
 		for raw_call: Variant in clean_tool_calls:
+			# [阶段2 · 取消检查点 3] 每个工具执行前
+			# 已开始的 execute() 无法中断，但可以阻止后续工具继续执行
+			if _is_cancelled:
+				AIChatLogger.warn("[Skill Agent] Cancelled by user during tool execution.")
+				_remove_skill_agent()
+				return CANCELLED_RESULT_MESSAGE
+			
 			if not raw_call is Dictionary:
 				continue
 			var tc: Dictionary = raw_call
@@ -232,6 +267,13 @@ func run_task() -> String:
 			var t_result: String = ""
 			if tool_inst:
 				var res: ToolResult = await tool_inst.execute(t_args)
+				
+				# [阶段2 · 取消检查点 4] 工具返回后
+				# 副作用已发生，此处不再写入历史，直接以「已取消」收尾
+				if _is_cancelled:
+					AIChatLogger.warn("[Skill Agent] Cancelled by user after tool '%s' returned." % t_name)
+					_remove_skill_agent()
+					return CANCELLED_RESULT_MESSAGE
 				
 				# 先获取结果文本
 				t_result = res.get_data()
@@ -278,6 +320,26 @@ func run_task() -> String:
 	+ "Please re-invoke the Skill Agent to continue from where it left off."
 
 
+# 请求取消当前任务（协作式）
+# 仅置位标志，由 run_task() 在下列检查点自行收尾并正常返回：
+#   1. 每轮循环开头
+#   2. 每个工具执行前
+#   3. 工具 execute() 返回后
+#   4. 流式请求等待期间（主线程逐帧检测）
+#   5. 重试退避倒计时期间
+func request_cancel() -> void:
+	_is_cancelled = true
+
+
+# 请求取消所有活动实例（协作式，不会造成主代理 await 永久挂起）
+# [与 cancel_all() 的区别] cancel_all() 用于插件停用时的硬释放（queue_free）；
+# 运行中的取消必须走本方法，否则协程被中断会导致调用方永久阻塞。
+static func request_cancel_all() -> void:
+	for instance: AIChatSkillAgentOrchestrator in _active_instances:
+		if is_instance_valid(instance):
+			instance.request_cancel()
+
+
 # 释放全部活动 Skill Agent（插件停用时调用）
 static func cancel_all() -> void:
 	for instance: AIChatSkillAgentOrchestrator in _active_instances.duplicate():
@@ -298,6 +360,10 @@ func _do_stream_request_with_retry(p_url: String, p_headers: PackedStringArray, 
 	var response: Dictionary = await _do_stream_request(p_url, p_headers, p_body, p_provider, p_timeout_s)
 	
 	while response.has("error"):
+		# [阶段2 · 取消检查点 5] 取消后不再重试
+		if _is_cancelled:
+			break
+		
 		var status_code: int = int(response.get("status_code", 0))
 		# 重试预算用尽，或错误类型不可重试 → 直接返回最后一次结果
 		if attempt >= RETRY_MAX_ATTEMPTS or not RETRYABLE_STATUS_CODES.has(status_code):
@@ -339,7 +405,19 @@ func _wait_before_retry(p_seconds: float, p_attempt: int, p_status_code: int) ->
 	
 	var remaining: int = total
 	while remaining > 0:
+		# [取消检查点] 进入等待前
+		if _is_cancelled:
+			AIChatLogger.warn("[Skill Agent] Retry cancelled by user.")
+			return
+		
 		await get_tree().create_timer(1.0).timeout
+		
+		# [取消检查点] 等待唤醒后立即复查：
+		# 否则取消最多要等满 1 秒才被感知，且倒计时归零时会跳过本函数直接进入下一次请求
+		if _is_cancelled:
+			AIChatLogger.warn("[Skill Agent] Retry cancelled by user.")
+			return
+		
 		remaining -= 1
 		if remaining > 0:
 			AIChatLogger.warn("[Skill Agent] Retry countdown: %ds" % remaining)
@@ -357,6 +435,10 @@ func _wait_before_retry(p_seconds: float, p_attempt: int, p_status_code: int) ->
 # [return]: 成功 {"content", "reasoning_content", "tool_calls", "thinking_signature"}；
 #           失败 {"error", "status_code", "retry_after"}
 func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dictionary, p_provider: BaseLLMProvider, p_timeout_s: int) -> Dictionary:
+	# [阶段2] 已在取消状态：不必再发起请求
+	if _is_cancelled:
+		return {"error": "Cancelled by user.", "status_code": 0, "retry_after": -1.0}
+	
 	var request: StreamRequest = StreamRequest.new(
 		p_provider,
 		p_url,
@@ -375,6 +457,9 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dic
 	var state: Dictionary = {"is_finished": false, "error": ""}
 	
 	request.chunk_received.connect(func(p_chunk: Dictionary) -> void:
+		# 取消后丢弃残留 chunk，避免控制台继续输出
+		if _is_cancelled:
+			return
 		var delta: LLMStreamDelta = p_provider.parse_stream_chunk(p_chunk)
 		_console_print_delta(delta)
 		assembler.apply(delta)
@@ -393,6 +478,17 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dic
 	
 	# 等待请求结束（所有信号均已通过 call_deferred 投递回主线程）
 	while not bool(state["is_finished"]):
+		# [阶段2 · 取消检查点 7 —— 最关键的一处]
+		# StreamRequest.cancel() 只置停止标志，工作线程下一轮 poll 检测到后
+		# 直接 close() 并 return —— finished / failed 都不会发射，
+		# state.is_finished 永远不会变成 true。因此必须在这里主动检测并退出，
+		# 否则协程将永久挂起（主链路靠「引用置 null」作为第二退出条件规避此问题）。
+		if _is_cancelled:
+			request.cancel()
+			request.request_thread_cleanup()
+			_close_console_segment()
+			return {"error": "Cancelled by user.", "status_code": 0, "retry_after": -1.0}
+		
 		await get_tree().process_frame
 	
 	# 非阻塞回收线程池任务槽位，避免 WorkerThreadPool 槽位泄漏

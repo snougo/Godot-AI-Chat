@@ -1,12 +1,12 @@
 @tool
 extends BaseSceneTool
 
-## 当前编辑场景的树结构。外部实例与挂载脚本会标出来，避免"往实例内部加节点"这类白干。
+# 当前编辑场景的树结构。外部实例与挂载脚本会标出来，避免"往实例内部加节点"这类白干。
 
 
 func _init() -> void:
-	tool_name = "get_edited_scene"
-	tool_description = "Shows the hierarchy of the currently edited scene."
+	tool_name = "get_scene_tree"
+	tool_description = "Gets scene tree hierarchy of the currently opened scene in Editor."
 
 
 func get_parameters_schema() -> Dictionary:
@@ -18,12 +18,11 @@ func execute(_p_args: Dictionary) -> ToolResult:
 	if root == null:
 		return ToolResult.fail("No active scene in the editor. Open one with `open_file` first.")
 	
-	var output: String = "%s\nroot: %s (%s)\n```\n%s\n```\n%s" % [
+	var output: String = "%s\nroot: %s (%s)\n```\n%s\n```" % [
 		scene_label(root),
 		root.name,
 		root.get_class(),
 		get_scene_tree_string(root),
-		SAVE_HINT,
 	]
 	
 	return ToolResult.ok(output)
