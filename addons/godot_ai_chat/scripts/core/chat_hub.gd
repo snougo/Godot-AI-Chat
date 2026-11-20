@@ -100,8 +100,8 @@ func _run_chat_loop() -> void:
 	# 每次聊天循环开始前仅重载核心工具（不重扫技能），确保修改 main_agent_tool_config.tres 后立即生效
 	ToolRegistry.reload_core_tools_only()
 	
-	if not _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
-		_network_manager.new_stream_chunk_received.connect(_on_stream_chunk)
+	if not _network_manager.new_stream_delta_received.is_connected(_on_stream_delta):
+		_network_manager.new_stream_delta_received.connect(_on_stream_delta)
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	# 绑定本次循环使用的历史记录：后续回滚与用量落库都必须作用于它，
@@ -110,8 +110,8 @@ func _run_chat_loop() -> void:
 	
 	await _agent_orchestrator.run_chat_cycle(cycle_history, settings)
 	
-	if _network_manager.new_stream_chunk_received.is_connected(_on_stream_chunk):
-		_network_manager.new_stream_chunk_received.disconnect(_on_stream_chunk)
+	if _network_manager.new_stream_delta_received.is_connected(_on_stream_delta):
+		_network_manager.new_stream_delta_received.disconnect(_on_stream_delta)
 	
 	# 循环退出：未注入的排队输入一律回填输入框，绝不静默丢弃
 	var leftover: String = _agent_orchestrator.take_pending_input()
@@ -310,18 +310,27 @@ func _on_user_queue_input(p_text: String) -> void:
 	_chat_ui.clear_user_input()
 
 
-func _on_stream_chunk(p_chunk: Dictionary) -> void:
+#func _on_stream_chunk(p_chunk: Dictionary) -> void:
 	# 由状态机守卫统一裁决：
 	# WAITING_RESPONSE 会自动跃迁到 STREAMING；STOPPING 等状态下直接返回 false 丢弃残留 chunk
+	#if not _agent_orchestrator.notify_stream_chunk_received():
+	#	return
+	
+	# 必须使用发起本轮流式请求的那个 Provider 实例，而非可能已被重建的 current_provider
+	#var provider: BaseLLMProvider = _network_manager.streaming_provider
+	#if provider == null:
+	#	return
+	
+	#_current_chat_window.handle_stream_chunk(p_chunk, provider)
+
+
+func _on_stream_delta(p_delta: LLMStreamDelta) -> void:
+	# 由状态机守卫统一裁决：
+	# WAITING_RESPONSE 会自动跃迁到 STREAMING；STOPPING 等状态下直接返回 false 丢弃残留增量
 	if not _agent_orchestrator.notify_stream_chunk_received():
 		return
 	
-	# 必须使用发起本轮流式请求的那个 Provider 实例，而非可能已被重建的 current_provider
-	var provider: BaseLLMProvider = _network_manager.streaming_provider
-	if provider == null:
-		return
-	
-	_current_chat_window.handle_stream_chunk(p_chunk, provider)
+	_current_chat_window.handle_stream_delta(p_delta)
 
 
 # 每轮请求发起前：先结算上一轮（重置当前请求计数），再把累计用量落库

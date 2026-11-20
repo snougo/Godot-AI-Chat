@@ -423,21 +423,13 @@ func _wait_before_retry(p_seconds: float, p_attempt: int, p_status_code: int) ->
 			AIChatLogger.warn("[Skill Agent] Retry countdown: %ds" % remaining)
 
 
-# 统一的流式网络请求（与主链路共用 StreamRequest 实现）
-# 网络 IO 在后台线程完成，数据块经 call_deferred 回到主线程：
-# 协议解析委托 provider.parse_stream_chunk，数据落地委托 StreamMessageAssembler，
-# 控制台输出随数据块实时打印。
-# [param p_url]: 请求 URL
-# [param p_headers]: 请求头
-# [param p_body]: 请求体字典（序列化推迟到后台线程执行）
-# [param p_provider]: 发起本次请求的 Provider 实例（流内状态必须始终是同一实例）
-# [param p_timeout_s]: 网络超时（秒）
-# [return]: 成功 {"content", "reasoning_content", "tool_calls", "thinking_signature"}；
-#           失败 {"error", "status_code", "retry_after"}
+# 统一的流式网络请求（与主链路共用 StreamRequest 实现与主线程看门狗）
 func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dictionary, p_provider: BaseLLMProvider, p_timeout_s: int) -> Dictionary:
-	# [阶段2] 已在取消状态：不必再发起请求
 	if _is_cancelled:
 		return {"error": "Cancelled by user.", "status_code": 0, "retry_after": -1.0}
+	
+	# 重置 Provider 流内状态（槽位映射、用量累计等），必须在请求发出前完成
+	p_provider.reset_stream_state()
 	
 	var request: StreamRequest = StreamRequest.new(
 		p_provider,
@@ -450,44 +442,26 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dic
 	var assembler: StreamMessageAssembler = StreamMessageAssembler.new()
 	assembler.begin()
 	
-	# 重置 Provider 流内状态（槽位映射、用量累计等），必须在请求发出前完成
-	p_provider.reset_stream_state()
-	
-	# 结果容器：信号回调无法写回局部变量，故统一用 Dictionary 承载
-	var state: Dictionary = {"is_finished": false, "error": ""}
-	
-	request.chunk_received.connect(func(p_chunk: Dictionary) -> void:
-		# 取消后丢弃残留 chunk，避免控制台继续输出
+	request.delta_received.connect(func(p_delta: LLMStreamDelta) -> void:
 		if _is_cancelled:
 			return
-		var delta: LLMStreamDelta = p_provider.parse_stream_chunk(p_chunk)
-		_console_print_delta(delta)
-		assembler.apply(delta)
+		_console_print_delta(p_delta)
+		assembler.apply(p_delta)
 	)
-	
-	request.failed.connect(func(p_error: String) -> void:
-		state["error"] = p_error
-		state["is_finished"] = true
-	, CONNECT_ONE_SHOT)
-	
-	request.finished.connect(func() -> void:
-		state["is_finished"] = true
-	, CONNECT_ONE_SHOT)
 	
 	request.start()
 	
-	# 等待请求结束（所有信号均已通过 call_deferred 投递回主线程）
-	while not bool(state["is_finished"]):
-		# [阶段2 · 取消检查点 7 —— 最关键的一处]
-		# StreamRequest.cancel() 只置停止标志，工作线程下一轮 poll 检测到后
-		# 直接 close() 并 return —— finished / failed 都不会发射，
-		# state.is_finished 永远不会变成 true。因此必须在这里主动检测并退出，
-		# 否则协程将永久挂起（主链路靠「引用置 null」作为第二退出条件规避此问题）。
+	# 主线程每帧驱动看门狗并检查取消，直至请求进入唯一终态
+	while not request.is_settled():
 		if _is_cancelled:
 			request.cancel()
 			request.request_thread_cleanup()
 			_close_console_segment()
 			return {"error": "Cancelled by user.", "status_code": 0, "retry_after": -1.0}
+		
+		request.poll_watchdog()
+		if request.is_settled():
+			break
 		
 		await get_tree().process_frame
 	
@@ -497,7 +471,7 @@ func _do_stream_request(p_url: String, p_headers: PackedStringArray, p_body: Dic
 	# 收尾控制台流式段落，防止末尾输出未换行
 	_close_console_segment()
 	
-	var error_message: String = String(state["error"])
+	var error_message: String = request.get_error_message()
 	if not error_message.is_empty():
 		return {
 			"error": error_message,

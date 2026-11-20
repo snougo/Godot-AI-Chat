@@ -121,7 +121,12 @@ func parse_stream_chunk(p_raw_chunk: Dictionary) -> LLMStreamDelta:
 	if not raw_choice is Dictionary:
 		return result
 	
-	var raw_delta: Variant = (raw_choice as Dictionary).get("delta")
+	var choice_dict: Dictionary = raw_choice
+	var raw_finish_reason: Variant = choice_dict.get("finish_reason")
+	if raw_finish_reason is String and not (raw_finish_reason as String).is_empty():
+		result.is_stream_finished = true
+	
+	var raw_delta: Variant = choice_dict.get("delta")
 	if not raw_delta is Dictionary:
 		return result
 	

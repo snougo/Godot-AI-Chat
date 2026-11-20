@@ -92,3 +92,15 @@ static func make_tool_call_arguments_replace(p_key: String, p_full_arguments: St
 		FIELD_ARGUMENTS: "",
 		FIELD_ARGUMENTS_SNAPSHOT: p_full_arguments,
 	}
+
+
+## 本次增量是否包含实质性的业务产出（用于过滤网关 ping / 空 delta 心跳包）
+func has_meaningful_progress() -> bool:
+	return (
+		not content_delta.is_empty()
+		or not reasoning_delta.is_empty()
+		or not tool_call_deltas.is_empty()
+		or not metadata_updates.is_empty()
+		or not usage.is_empty()
+		or is_stream_finished
+	)

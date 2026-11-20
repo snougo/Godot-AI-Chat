@@ -125,7 +125,11 @@ func cancel_workflow() -> void:
 	if not is_running():
 		return
 	
-	transition_to(AgentState.STOPPING)
+	var stop_payload: String = "Stopping generation..."
+	if _state == AgentState.EXECUTING_TOOLS:
+		stop_payload = "Stopping... waiting for the running tool to return."
+	
+	transition_to(AgentState.STOPPING, stop_payload)
 	
 	if network_manager:
 		network_manager.cancel_stream()
@@ -192,15 +196,21 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 		# 发起网络请求
 		var response_result: Dictionary = await network_manager.request_chat_async(context)
 		
-		# 流式网络请求结束，立刻通知 UI 刷出缓冲区残留并停止打字机
-		# [注意] 此处会把半截 assistant 入库（即使随后判定取消），
-		# 由 _rollback_incomplete_turn() 负责清理，不要在此提前 return
-		current_chat_window.flush_stream_buffer()
-		
-		if is_stopping() or not response_result.success:
-			if not response_result.success and not is_stopping():
-				current_chat_window.append_error_message(String(response_result.error))
+		# 结局 1：用户主动点击了停止
+		# 直接丢弃未完成的流式块（不入库、不写盘），避免「假入库 -> 回滚 -> 全量重绘」阻塞主线程
+		if is_stopping():
+			current_chat_window.discard_streaming_message()
 			break
+		
+		# 结局 2：网络请求超时、断流或服务端报错
+		# 剥离流式块（保留 UI 已渲染的半截思考/正文供排查，但绝不写入 ChatMessageHistory 污染上下文）
+		if not response_result.success:
+			current_chat_window.detach_streaming_message()
+			current_chat_window.append_error_message(String(response_result.error))
+			break
+		
+		# 结局 3：流式请求正常完成，正式刷出缓冲并将完整消息入库
+		current_chat_window.flush_stream_buffer()
 		
 		var last_msg: ChatMessage = p_base_history.get_last_message()
 		if last_msg == null or last_msg.role != ChatMessage.ROLE_ASSISTANT:
@@ -234,8 +244,6 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 			break
 		
 		# 本轮工具返回的图片：先收集，等所有 tool 消息写完后统一注入。
-		# 若在此处直接写入历史，会插进 tool 消息序列中间，破坏
-		# 「tool_calls 之后必须紧跟同数量连续 tool 响应」的协议约束（400 格式错误）。
 		var pending_images: Array[Dictionary] = []
 		
 		for raw_call: Variant in last_msg.tool_calls:
@@ -246,7 +254,6 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 				continue
 			
 			var tc: Dictionary = raw_call
-			# 此时数组里的工具一定是干净、合法且有 ID 的，直接使用
 			var func_dict: Dictionary = tc.get("function", {})
 			var tool_name: String = String(func_dict.get("name", ""))
 			var raw_args: String = String(func_dict.get("arguments", "{}"))
@@ -290,7 +297,6 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 				image_mime if supports_inline else ""
 			)
 			
-			# 不支持 inline 图片的 Provider：仅收集，写入历史推迟到循环之后
 			if not supports_inline and not image_data.is_empty():
 				pending_images.append({
 					"data": image_data,
@@ -298,9 +304,6 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 					"tool_name": tool_name,
 				})
 		
-		# 所有 tool 消息已就位，此时注入 User 消息才是合法位置
-		# [阶段3 · Bug1] 取消流程下绝不能注入：注入的 user 会成为回滚的终点，
-		# 导致整轮历史（assistant + tool）无法清理，下次请求必然 400
 		if not is_stopping() and not pending_images.is_empty():
 			var images: Array = []
 			var tool_names: PackedStringArray = PackedStringArray()
@@ -311,7 +314,6 @@ func run_chat_cycle(p_base_history: ChatMessageHistory, p_settings: PluginSettin
 				"Image content from tool(s): " + ", ".join(tool_names),
 				images)
 		
-		# [阶段3] 同一合法位置消化用户中途排队的输入：tool 序列已闭合，此处插 user 不破坏协议
 		_inject_pending_user_input(p_base_history)
 
 

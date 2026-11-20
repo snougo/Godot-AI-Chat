@@ -4,21 +4,23 @@ extends RefCounted
 #
 # 负责底层的 HTTP 流式请求处理，支持 SSE 和 JSON List 协议，在后台线程中运行。
 #
-# [线程模型] 网络 IO 全部在 WorkerThreadPool 任务中完成；本类对外暴露的信号
-# 一律通过 call_deferred 投递回主线程，因此消费端无需关心线程安全问题。
-#
-# [资源回收] WorkerThreadPool 要求每个任务最终都被 wait_for_task_completion() 等待一次。
-# 直接等待会阻塞主线程，故本类采用「逐帧轮询 is_task_completed()，确认完成后再等待」的策略：
-# 轮询本身无阻塞，等待时任务已结束因而立即返回。
+# [线程模型与职责边界]
+# 1. 工作线程仅负责纯粹的 HTTP 字节接收与行/块切分（不含任何厂商协议字段逻辑），
+#    切出的 Dictionary 通过 call_deferred 投递到主线程 _deliver_chunk_on_main_thread()；
+# 2. 主线程入口统一调用 _provider.parse_stream_chunk() 产出 LLMStreamDelta，
+#    依据 delta.has_meaningful_progress() 推进 TimeoutTracker，并发射 delta_received；
+# 3. 终态由主线程 _is_settled 幂等守卫唯一裁决，彻底消除迟到信号串扰与心跳无限续命。
 
 
 # --- Signals ---
 
-# 当接收到一个完整的 JSON 数据块时触发
+# 当主线程解析出一个协议无关增量时触发（推荐使用）
+signal delta_received(delta: LLMStreamDelta)
+# 当接收到一个完整的原始 JSON 数据块时触发（向后兼容保留）
 signal chunk_received(chunk_data: Dictionary)
-# 请求正常结束时触发
+# 请求正常结束时触发（与 failed 互斥，至多触发一次）
 signal finished
-# 请求失败时触发
+# 请求失败或超时时触发（与 finished 互斥，至多触发一次）
 signal failed(error_message: String)
 
 
@@ -57,14 +59,22 @@ var _task_id: int = -1
 
 # 超时检测器
 var _timeout_tracker: TimeoutTracker
-var _has_emitted_first_chunk: bool = false
 
-# 双层缓冲机制：字节缓冲
+# [主线程独占] 唯一终态幂等守卫与流状态跟踪
+var _is_settled: bool = false
+var _is_cancelled: bool = false
+var _error_message: String = ""
+var _has_received_any_meaningful_delta: bool = false
+var _has_received_protocol_end: bool = false
+
+# 双层缓冲机制：字节缓冲（工作线程独占）
 var _incoming_byte_buffer: PackedByteArray = PackedByteArray()
-# 双层缓冲机制：文本缓冲
+# 双层缓冲机制：文本缓冲（工作线程独占）
 var _incoming_text_buffer: String = ""
-# SSE 状态跟踪：当前正在处理的事件类型
+# SSE 状态跟踪：当前正在处理的事件类型（工作线程独占）
 var _current_sse_event: String = ""
+# 传输层是否观察到流结束符（SSE 的 [DONE] 或 JSON_LIST 的闭合 ']'）（工作线程写入）
+var _worker_saw_transport_eof_marker: bool = false
 
 # 线程池任务回收状态
 var _cleanup_request_msec: int = 0
@@ -90,24 +100,70 @@ func _init(p_provider: BaseLLMProvider, p_url: String, p_headers: PackedStringAr
 # 开始执行流式请求（在线程池中运行）
 func start() -> void:
 	_stop_flag = false
-	_has_emitted_first_chunk = false
+	_is_settled = false
+	_is_cancelled = false
+	_error_message = ""
+	_has_received_any_meaningful_delta = false
+	_has_received_protocol_end = false
+	_worker_saw_transport_eof_marker = false
 	last_status_code = 0
 	last_retry_after_s = -1.0
+	
+	_timeout_tracker.start_main_thread_watchdog()
 	_task_id = WorkerThreadPool.add_task(self._thread_task, false, "Godot AI Chat Stream Request")
 	AIChatLogger.debug("StreamRequest: Task ID %d started" % _task_id)
 
 
-# 请求取消当前请求
-# 仅置位停止标志并唤醒工作线程，不在调用线程做任何等待。
-# 工作线程会在下一个轮询周期（约 10ms）自行关闭连接并退出。
+# 请求取消当前请求（主线程调用）
+# 立即锁定唯一终态并置位停止标志，主线程等待循环可在当前帧/下一帧立即退出，
+# 后台线程在下一个轮询周期（约 10ms）自行关闭连接并退出，迟到的 call_deferred 会被 _is_settled 拦截。
 func cancel() -> void:
-	# 使用 Mutex 保护跨线程访问
+	_is_cancelled = true
+	_is_settled = true
+	if _error_message.is_empty():
+		_error_message = "Cancelled by User"
+	
+	_stop_flag_lock.lock()
+	_stop_flag = true
+	_stop_flag_lock.unlock()
+
+
+# 主线程每帧调用的看门狗检查
+# 若业务层长时间无实质增量（即使网关仍在发心跳包）或总时长超限，主线程主动终止请求并发射 failed
+func poll_watchdog() -> void:
+	if _is_settled:
+		return
+	
+	var timeout_reason: String = _timeout_tracker.check_main_thread_watchdog()
+	if not timeout_reason.is_empty():
+		abort_with_error(timeout_reason)
+
+
+# 主线程主动以错误终态中止当前请求
+func abort_with_error(p_error_msg: String) -> void:
+	if _is_settled:
+		return
+	
 	_stop_flag_lock.lock()
 	_stop_flag = true
 	_stop_flag_lock.unlock()
 	
-	# 不再跨线程调用 _http_client.close()
-	# 由工作线程在下一轮 poll 检测到 _stop_flag 后自行 close，避免数据竞争
+	_settle_failure_on_main_thread(p_error_msg)
+
+
+# 当前请求是否已进入唯一终态（完成 / 失败 / 超时 / 已取消）
+func is_settled() -> bool:
+	return _is_settled
+
+
+# 当前请求是否被用户取消
+func is_cancelled() -> bool:
+	return _is_cancelled
+
+
+# 获取终态错误信息（成功时为空字符串）
+func get_error_message() -> String:
+	return _error_message
 
 
 # 请求回收线程池任务槽位（非阻塞）
@@ -126,6 +182,53 @@ func request_thread_cleanup() -> void:
 
 
 # --- Private Functions ---
+
+# [主线程] 接收工作线程投递的原始 JSON 数据块，转换为 LLMStreamDelta 并按实际业务产出续期超时
+func _deliver_chunk_on_main_thread(p_json: Dictionary) -> void:
+	if _is_settled:
+		return
+	
+	# 告知主线程已收到服务端响应数据（即便首个块是 message_start 等元数据，也续期一次首包等待）
+	if _provider != null:
+		var delta: LLMStreamDelta = _provider.parse_stream_chunk(p_json)
+		if delta.is_stream_finished:
+			_has_received_protocol_end = true
+		
+		if delta.has_meaningful_progress():
+			_has_received_any_meaningful_delta = true
+			_timeout_tracker.mark_progress()
+		
+		delta_received.emit(delta)
+	
+	chunk_received.emit(p_json)
+
+
+# [主线程] 处理工作线程的流自然结束汇报，校验流是否完整闭合
+func _on_worker_stream_eof_main_thread(p_saw_transport_eof: bool) -> void:
+	if _is_settled:
+		return
+	
+	var is_complete: bool = p_saw_transport_eof or _has_received_protocol_end
+	if not _has_received_any_meaningful_delta:
+		_settle_failure_on_main_thread("Stream closed by remote host before any model output was received.")
+		return
+	
+	if not is_complete:
+		_settle_failure_on_main_thread("Stream interrupted: Connection closed by remote host before generation finished.")
+		return
+	
+	_is_settled = true
+	finished.emit()
+
+
+# [主线程] 锁定失败终态并发射 failed 信号（幂等，至多生效一次）
+func _settle_failure_on_main_thread(p_msg: String) -> void:
+	if _is_settled:
+		return
+	_is_settled = true
+	_error_message = p_msg
+	failed.emit(p_msg)
+
 
 # 检查任务是否已结束；已结束则立即回收（此处的等待调用不会阻塞）
 # 未结束则安排到下一帧继续检查
@@ -204,7 +307,7 @@ func _thread_task() -> void:
 		client.close()
 		return
 	
-	# 等待连接（WAITING_FIRST_TOKEN 阶段）
+	# 等待连接
 	while client.get_status() == HTTPClient.STATUS_CONNECTING or client.get_status() == HTTPClient.STATUS_RESOLVING:
 		client.poll()
 		if _should_stop():
@@ -232,7 +335,7 @@ func _thread_task() -> void:
 		client.close()
 		return
 	
-	# 4. 等待响应（仍在 WAITING_FIRST_TOKEN 阶段）
+	# 4. 等待响应头
 	while client.get_status() == HTTPClient.STATUS_REQUESTING:
 		client.poll()
 		if _should_stop():
@@ -240,7 +343,7 @@ func _thread_task() -> void:
 			return
 		
 		if _timeout_tracker.check().timed_out:
-			_emit_failure("Request timeout: No response received within %d seconds" % [_timeout_tracker.get_current_timeout_ms() / 1000])
+			_emit_failure("Request timeout: No response headers received within %d seconds" % [_timeout_tracker.get_current_timeout_ms() / 1000])
 			client.close()
 			return
 		
@@ -279,7 +382,6 @@ func _thread_task() -> void:
 		
 		var error_text: String = error_body.get_string_from_utf8()
 		
-		#var json_err = JSON.parse_string(error_text)
 		var json_err: Variant = null
 		if error_text.strip_edges().begins_with("{"):
 			json_err = JSON.parse_string(error_text)
@@ -297,7 +399,7 @@ func _thread_task() -> void:
 		client.close()
 		return
 	
-	# 5. 流式读取循环
+	# 5. 流式读取循环（流内业务进展超时由主线程 poll_watchdog() 统一裁决并置位 _stop_flag）
 	var parser_type: BaseLLMProvider.StreamParserType = _provider.get_stream_parser_type()
 	
 	while client.get_status() == HTTPClient.STATUS_BODY:
@@ -307,9 +409,7 @@ func _thread_task() -> void:
 		
 		client.poll()
 		
-		if client.get_status() != HTTPClient.STATUS_BODY:
-			break
-		
+		var current_status: HTTPClient.Status = client.get_status()
 		var chunk: PackedByteArray = client.read_response_body_chunk()
 		
 		if chunk.size() > 0:
@@ -324,17 +424,38 @@ func _thread_task() -> void:
 					_process_sse_buffer()
 				elif parser_type == BaseLLMProvider.StreamParserType.JSON_LIST:
 					_process_json_list_buffer()
-		else:
-			# 没有收到数据，检查是否超时
-			if _timeout_tracker.check().timed_out:
-				_emit_failure("Connection timeout: No data received for %d seconds" % [_timeout_tracker.get_current_timeout_ms() / 1000])
-				client.close()
-				return
+		
+		if current_status != HTTPClient.STATUS_BODY:
+			break
 		
 		OS.delay_msec(10)
 	
+	if _should_stop():
+		client.close()
+		return
+	
+	# 处理流结束时可能残留在文本缓冲区的最后一行（部分服务端在最后一个事件后不补换行即关闭流）
+	if not _incoming_text_buffer.strip_edges().is_empty():
+		if parser_type == BaseLLMProvider.StreamParserType.SSE or parser_type == BaseLLMProvider.StreamParserType.LOCAL_SSE:
+			_incoming_text_buffer += "\n"
+			_process_sse_buffer()
+		elif parser_type == BaseLLMProvider.StreamParserType.JSON_LIST:
+			_process_json_list_buffer()
+	
+	var end_status: HTTPClient.Status = client.get_status()
 	client.close()
-	finished.emit.call_deferred()
+	
+	if end_status in [
+		HTTPClient.STATUS_CANT_CONNECT,
+		HTTPClient.STATUS_CANT_RESOLVE,
+		HTTPClient.STATUS_CONNECTION_ERROR,
+		HTTPClient.STATUS_TLS_HANDSHAKE_ERROR
+	]:
+		_emit_failure("Stream connection error (HTTPClient status: %d)." % end_status)
+		return
+	
+	# 交由主线程排在所有已投递的 _deliver_chunk_on_main_thread 之后统一校验流是否完整结束
+	_on_worker_stream_eof_main_thread.call_deferred(_worker_saw_transport_eof_marker)
 
 
 # 处理 SSE 协议缓冲区
@@ -348,10 +469,6 @@ func _process_sse_buffer() -> void:
 		_incoming_text_buffer = _incoming_text_buffer.substr(newline_pos + 1)
 		
 		if line.is_empty():
-			# 空行通常意味着一个 Event 块的结束，重置 event 状态
-			# 但有些实现可能不发空行，直接发下一个 event，所以这里只做清理
-			# _current_sse_event = ""
-			# 注意：Anthropic 的 event 和 data 是紧挨着的，不一定有空行分隔
 			continue
 		
 		# 捕获 Event 类型
@@ -362,7 +479,10 @@ func _process_sse_buffer() -> void:
 		elif line.begins_with("data:"):
 			var json_raw: String = line.substr(5).strip_edges()
 			
-			if json_raw == "[DONE]" or json_raw.is_empty():
+			if json_raw == "[DONE]":
+				_worker_saw_transport_eof_marker = true
+				continue
+			if json_raw.is_empty():
 				continue
 			
 			var json_val: Variant = JSON.parse_string(json_raw)
@@ -382,6 +502,8 @@ func _process_json_list_buffer() -> void:
 		var open_brace: int = _incoming_text_buffer.find("{", search_offset)
 		if open_brace == -1:
 			var stripped: String = _incoming_text_buffer.strip_edges()
+			if stripped.ends_with("]"):
+				_worker_saw_transport_eof_marker = true
 			if stripped == "]" or stripped == "," or stripped.is_empty():
 				_incoming_text_buffer = ""
 			break
@@ -428,19 +550,14 @@ func _process_json_list_buffer() -> void:
 			break
 
 
-# 延迟发射 JSON 数据信号
+# 投递 JSON 数据块到主线程（必转发，由主线程解析 LLMStreamDelta 后按内容决定是否续期超时）
 func _emit_chunk_data(p_json: Dictionary) -> void:
-	if not _has_emitted_first_chunk:
-		_has_emitted_first_chunk = true
-		_timeout_tracker.mark_first_token_received()
-	else:
-		_timeout_tracker.mark_data_received()
-	chunk_received.emit.call_deferred(p_json)
+	_deliver_chunk_on_main_thread.call_deferred(p_json)
 
 
-# 延迟发射失败信号
+# 延迟投递失败终态到主线程
 func _emit_failure(p_msg: String) -> void:
-	failed.emit.call_deferred(p_msg)
+	_settle_failure_on_main_thread.call_deferred(p_msg)
 
 
 # 线程安全地检查是否应该停止
@@ -452,8 +569,6 @@ func _should_stop() -> bool:
 
 
 # 解析服务端 Retry-After 头
-# [为什么只认纯数字] HTTP-date 形式（如 "Wed, 21 Oct 2015 07:28:00 GMT"）
-# 需要时区换算，收益远低于成本；解析失败一律回落到上层的指数退避。
 # [param p_client]: 已完成响应头的 HTTPClient
 # [return]: 建议等待秒数；未提供或无法解析时返回 -1
 func _parse_retry_after(p_client: HTTPClient) -> float:

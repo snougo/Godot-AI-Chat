@@ -131,40 +131,42 @@ func append_tool_message(p_tool_name: String, p_result_text: String, p_tool_call
 	chat_history.add_message(msg)
 
 
-# 处理单个流式数据块
-# [param p_raw_chunk]: 原始数据块
-# [param p_provider]: LLM 提供者实例，用于把数据块翻译为协议无关增量
-func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -> void:
+# 处理单个协议无关流式增量
+# [param p_delta]: 已由 StreamRequest 主线程入口通过 Provider 解析出的增量
+func handle_stream_delta(p_delta: LLMStreamDelta) -> void:
+	if p_delta == null:
+		return
+	
 	# 1. 确保存在正在渲染的流式块（全量重绘可能已释放旧块）
 	_ensure_streaming_block()
 	
-	# 2. 协议 → 增量（Provider 侧，不接触数据层）
-	var delta: LLMStreamDelta = p_provider.parse_stream_chunk(p_raw_chunk)
+	# 2. 增量 → 数据（装配器侧）
+	_assembler.apply(p_delta)
 	
-	# 3. 增量 → 数据（装配器侧）
-	_assembler.apply(delta)
+	# 3. 增量 → UI 动画
+	if not p_delta.content_delta.is_empty():
+		_streaming_block.append_chunk(p_delta.content_delta)
 	
-	# 4. 增量 → UI 动画
-	if not delta.content_delta.is_empty():
-		_streaming_block.append_chunk(delta.content_delta)
+	if not p_delta.reasoning_delta.is_empty():
+		_streaming_block.append_reasoning(p_delta.reasoning_delta)
 	
-	if not delta.reasoning_delta.is_empty():
-		_streaming_block.append_reasoning(delta.reasoning_delta)
-	
-	# 5. 工具调用视觉反馈
-	# [性能] 只在本次增量真的带来工具调用数据时才刷新。
-	# 旧实现在"当前消息有 tool_calls"时，每个 chunk 都会把所有工具调用面板重刷一遍 ——
-	# 纯文本 chunk 也会触发参数预览的截断/重排版，属于纯浪费。
-	# 新建面板、参数增长、重绘后补渲染三种情况都已覆盖，不会漏更新。
-	if not delta.tool_call_deltas.is_empty():
+	# 4. 工具调用视觉反馈
+	if not p_delta.tool_call_deltas.is_empty():
 		var streaming_msg: ChatMessage = _assembler.get_message()
 		if streaming_msg != null:
 			for tc: Dictionary in streaming_msg.tool_calls:
 				_streaming_block.show_tool_call(tc)
 	
-	# 6. Token 统计
-	if not delta.usage.is_empty():
-		update_token_usage(delta.usage)
+	# 5. Token 统计
+	if not p_delta.usage.is_empty():
+		update_token_usage(p_delta.usage)
+
+
+# 处理单个原始流式数据块（向后兼容包装）
+func handle_stream_chunk(p_raw_chunk: Dictionary, p_provider: BaseLLMProvider) -> void:
+	if p_provider == null:
+		return
+	handle_stream_delta(p_provider.parse_stream_chunk(p_raw_chunk))
 
 
 # 结束流式接收：刷出缓冲并将流式消息入库
@@ -195,7 +197,7 @@ func flush_stream_buffer() -> void:
 	_streaming_block = null
 
 
-# 丢弃正在接收中的流式消息
+# 丢弃正在接收中的流式消息（用于用户主动点击 Stop）
 # 既不落库，也不保留 UI 块。数据层面的回滚由 ChatMessageHistory.rollback_incomplete_turn() 负责。
 func discard_streaming_message() -> void:
 	_assembler.begin()
@@ -204,6 +206,23 @@ func discard_streaming_message() -> void:
 		_streaming_block.queue_free()
 	_streaming_block = null
 	
+	_stream_rendered_ids.clear()
+
+
+# 剥离正在接收中的流式消息（用于请求超时或网络异常中断）
+# 保留 UI 上已渲染出的半截内容供用户查看（若完全为空则移除空块），但清空装配器、绝不写入 ChatMessageHistory，
+# 避免半截残缺回复被持久化到存档并在下一轮请求中作为正式回答回传给 API。
+func detach_streaming_message() -> void:
+	var has_partial_content: bool = _assembler.has_content()
+	_assembler.begin()
+	
+	if is_instance_valid(_streaming_block):
+		if has_partial_content:
+			_streaming_block.finish_stream()
+		else:
+			_streaming_block.queue_free()
+	
+	_streaming_block = null
 	_stream_rendered_ids.clear()
 
 

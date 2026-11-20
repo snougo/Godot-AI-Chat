@@ -10,11 +10,12 @@ extends AiTool
 
 const FileContentReader := preload("res://addons/godot_ai_chat/scripts/helper/file_content_reader.gd")
 
-# 上下文类型与允许的扩展名映射
+# 文件格式支持
 const EXTENSION_MAP: Dictionary = {
 	"script":     ["gd", "gdshader", "glsl"],
 	"text":       ["md", "json", "cfg", "txt", "godot", "uid", "import"],
 	"resource":   ["tres", "res"],
+	"scene":      ["tscn", "scn"],
 	"image_meta": ["png", "jpg", "jpeg"]
 }
 
@@ -30,7 +31,7 @@ const LINE_WINDOW_FILE_TYPES: Dictionary = {
 
 func _init() -> void:
 	tool_name = "read_file"
-	tool_description = "Reads a file. Support: gd, gdshader, glsl, md, json, cfg, txt, godot, uid, import, tres, res, and image_meta(jpg/jpeg/png)."
+	tool_description = "Reads a file. Support: gd, gdshader, glsl, md, json, cfg, txt, godot, uid, import, tres, res, tscn, scn, and image_meta(jpg/jpeg/png)."
 
 
 # --- Public Functions ---
@@ -148,6 +149,8 @@ func _read_file_content(p_file_type: String, p_path: String, p_start_line: int, 
 			return _wrap_reader_result(FileContentReader.read_text_content(p_path, p_start_line, p_line_count))
 		"resource":
 			return _wrap_reader_result(FileContentReader.read_resource_content(p_path, p_start_line, p_line_count))
+		"scene":
+			return _wrap_reader_result(FileContentReader.read_scene_content(p_path))
 		"image_meta":
 			return _wrap_reader_result(FileContentReader.read_image_metadata(p_path))
 		_:

@@ -13,6 +13,7 @@ signal get_model_list_request_failed(error: String)
 
 # 保留流式数据信号供 UI 实时更新
 signal new_chat_request_sending
+signal new_stream_delta_received(delta: LLMStreamDelta)
 signal new_stream_chunk_received(chunk: Dictionary)
 
 
@@ -106,58 +107,51 @@ func request_chat_async(p_messages: Array[ChatMessage]) -> Dictionary:
 	
 	var settings: PluginSettingsConfig = ToolBox.get_plugin_settings()
 	streaming_provider = current_provider
-	current_stream_request = StreamRequest.new(current_provider, url, headers, body, TimeoutTracker.from_network_timeout(settings.network_timeout))
-	var local_request_ref: StreamRequest = current_stream_request
-	
-	var result: Dictionary = {"success": false, "error": ""}
-	var state: Dictionary = {"is_finished": false}
-	
-	current_stream_request.chunk_received.connect(_relay_stream_chunk)
-	
-	current_stream_request.failed.connect(func(err_msg: String):
-		result.error = err_msg
-		state.is_finished = true
-		_clear_current_stream_request()
-	, CONNECT_ONE_SHOT)
-	
-	current_stream_request.finished.connect(func():
-		result.success = true
-		state.is_finished = true
-		_clear_current_stream_request()
-	, CONNECT_ONE_SHOT)
 	
 	# 发起新请求前重置 Provider 的流内状态（槽位映射、用量累计等）
 	current_provider.reset_stream_state()
 	
-	new_chat_request_sending.emit()
-	current_stream_request.start()
+	current_stream_request = StreamRequest.new(
+		current_provider,
+		url,
+		headers,
+		body,
+		TimeoutTracker.from_network_timeout(settings.network_timeout)
+	)
+	var local_request_ref: StreamRequest = current_stream_request
 	
-	# 阻塞协程直到流式接收结束
-	while not state.is_finished and current_stream_request != null:
+	local_request_ref.delta_received.connect(_relay_stream_delta)
+	local_request_ref.chunk_received.connect(_relay_stream_chunk)
+	
+	new_chat_request_sending.emit()
+	local_request_ref.start()
+	
+	# 主线程每帧驱动超时看门狗，直到请求进入唯一终态（完成 / 失败 / 超时 / 被取消）
+	while not local_request_ref.is_settled():
+		local_request_ref.poll_watchdog()
+		if local_request_ref.is_settled():
+			break
 		await get_tree().process_frame
 	
-	if not state.is_finished and result.error.is_empty():
-		result.success = false
-		result.error = "Cancelled by User"
+	var error_msg: String = local_request_ref.get_error_message()
+	var result: Dictionary = {
+		"success": not local_request_ref.is_cancelled() and error_msg.is_empty(),
+		"error": error_msg
+	}
 	
-	# [Fix] 请求线程池任务回收（非阻塞），清理内部资源
-	if local_request_ref != null:
-		local_request_ref.request_thread_cleanup()
+	# 请求线程池任务回收（非阻塞），清理内部资源
+	local_request_ref.request_thread_cleanup()
 	
-	_clear_current_stream_request()
+	if current_stream_request == local_request_ref:
+		_clear_current_stream_request()
 	return result
 
 
 # 非流式异步请求（用于上下文压缩等场景）
-# [param p_messages]: 消息列表
-# [param p_config]: 压缩配置（必须完整有效，调用方需先 validate）
-# [return]: {"success": bool, "error": String, "error_kind": String, "content": String}
-# error_kind: "config" | "runtime"
 func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextCompressionConfig) -> Dictionary:
 	if p_config == null:
 		return {"success": false, "error": "Compression config is missing.", "error_kind": "config"}
 	
-	# 不再回退到主对话配置：缺项即失败，避免「以为在用摘要模型，实际悄悄换了主模型」
 	var config_error: String = p_config.validate()
 	if not config_error.is_empty():
 		return {"success": false, "error": config_error, "error_kind": "config"}
@@ -199,7 +193,6 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 			return
 		
 		if p_code != 200:
-			# 4xx 基本都指向配置问题（key 错误、模型名不存在、provider 不匹配、路径写错）
 			result.error_kind = "config" if (p_code >= 400 and p_code < 500) else "runtime"
 			var err_detail: String = ""
 			if not p_body.is_empty():
@@ -211,7 +204,6 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 		
 		var parsed: Dictionary = provider.parse_non_stream_response(p_body)
 		if parsed.has("error"):
-			# 200 但响应体报错：多为模型不存在 / 无权限 / 参数不被支持
 			result.error_kind = "config"
 			result.error = "API Error: " + str(parsed.get("error", "Unknown"))
 		else:
@@ -233,12 +225,10 @@ func request_non_stream_async(p_messages: Array[ChatMessage], p_config: ContextC
 
 
 # 取消当前流式请求
-# 非阻塞：置位停止标志后立即交由后台线程自行收尾，主线程不做任何等待。
+# 非阻塞：立即锁定 StreamRequest 的取消终态，置位停止标志后交由后台线程自行收尾。
 func cancel_stream() -> void:
 	if current_stream_request:
 		current_stream_request.cancel()
-		# [修复] 取消后请求线程池槽位回收。回收过程完全异步：
-		# cancel() 已置 stop flag 并关闭连接，任务通常在下一个 10ms 轮询周期退出。
 		current_stream_request.request_thread_cleanup()
 		_clear_current_stream_request()
 
@@ -253,8 +243,6 @@ func _update_provider_config() -> bool:
 	
 	current_provider = ProviderFactory.create_provider(settings.api_provider)
 	if current_provider != null:
-		# 告知 Provider 目标模型与端点：工具 schema 方言 / inline 图片等能力查询
-		# 发生在 build_request_body() 之前，无法通过请求参数传入
 		current_provider.set_active_model_name(current_model_name)
 		current_provider.set_active_base_url(api_base_url)
 	return current_provider != null
@@ -262,6 +250,8 @@ func _update_provider_config() -> bool:
 
 func _clear_current_stream_request() -> void:
 	if current_stream_request:
+		if current_stream_request.delta_received.is_connected(_relay_stream_delta):
+			current_stream_request.delta_received.disconnect(_relay_stream_delta)
 		if current_stream_request.chunk_received.is_connected(_relay_stream_chunk):
 			current_stream_request.chunk_received.disconnect(_relay_stream_chunk)
 		current_stream_request = null
@@ -282,6 +272,11 @@ func _on_model_list_completed(p_result: int, p_response_code: int, _p_headers: P
 		get_model_list_request_failed.emit("No models found or invalid response format")
 
 
-# 中继 StreamRequest 的流式数据块到 UI 信号
+# 中继 StreamRequest 已解析好的 LLMStreamDelta 到 UI 信号
+func _relay_stream_delta(p_delta: LLMStreamDelta) -> void:
+	new_stream_delta_received.emit(p_delta)
+
+
+# 中继 StreamRequest 的原始流式数据块（兼容保留）
 func _relay_stream_chunk(p_chunk: Dictionary) -> void:
 	new_stream_chunk_received.emit(p_chunk)
